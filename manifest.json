@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Job Tracker — трекер заявок",
-  "version": "1.7.1",
-  "description": "Запоминает вакансии, на которые ты подался, оценивает шансы по резюме и показывает дашборд заявок и офферов.",
+  "name": "Job Tracker",
+  "version": "2.0.0",
+  "description": "Records the jobs you apply for on UK job boards, scores how well each one fits your skills and tracks every application to an offer.",
   "permissions": [
     "storage",
     "unlimitedStorage",

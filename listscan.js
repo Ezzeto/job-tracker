@@ -1,4 +1,4 @@
-/* Job Tracker — оценка вакансий прямо в списке результатов поиска и фильтр по шансам */
+/* Job Tracker — fit scores inside search result lists, plus a filter by score */
 (function () {
   'use strict';
   if (window.__jtListLoaded || window.top !== window) return;
@@ -21,7 +21,7 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const color = n => n >= 70 ? '#23905a' : n >= 50 ? '#b47a12' : '#c0463b';
 
-  // ---------- Хранилище ----------
+  // ---------- Storage ----------
   async function loadState() {
     const got = await S.get(['listFilter', 'scoreCache']);
     cfg = { ...DEFAULTS, ...(got.listFilter || {}) };
@@ -48,7 +48,7 @@
     if (ch.profile) { profile = await S.getProfile(); cache.forEach(v => { if (v.job) v.res = score(v.job); }); scheduleScan(); }
   });
 
-  // ---------- Поиск карточек ----------
+  // ---------- Finding job cards ----------
   function idOf(el) {
     for (const a of site.idAttrs || []) { const v = el.getAttribute && el.getAttribute(a); if (v && /^[\w-]{5,}$/.test(v)) return v; }
     return null;
@@ -69,10 +69,10 @@
 
   function findCards() {
     const map = new Map();
-    // 1) Известные карточки сайта
+    // 1) Known card selectors for the site
     if (site.cardSel) {
       let els = [...document.querySelectorAll(site.cardSel)].filter(el => !(site.pane && el.closest(site.pane)) && sizeOk(el));
-      els = els.filter(el => !els.some(o => o !== el && el.contains(o))); // самые внутренние
+      els = els.filter(el => !els.some(o => o !== el && el.contains(o))); // innermost only
       for (const el of els) {
         const titleEl = site.cardTitle ? el.querySelector(site.cardTitle) : null;
         const id = cardIdFrom(el, titleEl);
@@ -82,7 +82,7 @@
       }
       if (map.size >= 3) return [...map.values()];
     }
-    // 2) Общий способ: поднимаемся от ссылки на вакансию, пока внутри только она
+    // 2) Generic fallback: climb from a job link while the block still holds only that job
     map.clear();
     const seeds = [];
     (site.idAttrs || []).forEach(a => document.querySelectorAll(`[${a}]`).forEach(el => { const id = idOf(el); if (id) seeds.push({ id, el, href: null }); }));
@@ -114,14 +114,14 @@
   const canonOf = c => site.canon ? site.canon(c.id) : (c.href ? S.cleanUrl(c.href) : null);
   const fetchOf = c => site.fetchUrl ? site.fetchUrl(c.id) : c.href;
 
-  // ---------- Оценка ----------
+  // ---------- Scoring ----------
   function score(job) {
     const an = A.analyze(job, profile);
     const c = an.chance;
     return {
       score: c.score, label: c.label, lowData: c.lowData,
-      outArea: c.reasons.some(r => /вне твоих зон|только местных/.test(r.text) && r.delta < 0),
-      senior: c.reasons.some(r => /senior \/ lead/.test(r.text)),
+      outArea: !!c.outArea,
+      senior: !!c.senior,
       missing: c.keyMissing && c.keyMissing.length ? c.keyMissing : c.missing.slice(0, 4),
       why: c.reasons.filter(r => r.delta !== null).slice(0, 6).map(r => `${r.text}: ${r.delta > 0 ? '+' : ''}${r.delta}`).join('\n'),
       salary: (an.salary && an.salary.text) || job.salaryText || '',
@@ -165,7 +165,7 @@
     }
   }
 
-  // ---------- Отрисовка ----------
+  // ---------- Rendering ----------
   let cards = [];
   function render() {
     if (!cfg.enabled) { cards.forEach(c => clearCard(c.el)); updatePanel(); return; }
@@ -207,7 +207,7 @@
     }
     const txt = `${approx ? '≈' : ''}${res.score}%` + (applied ? ' ✓' : '');
     const bg = applied ? '#1d3b53' : color(res.score);
-    const title = (approx ? 'Предварительно (по карточке). Точная оценка после загрузки описания.\n' : '') + (applied ? 'Уже в трекере\n' : '') + res.why + (res.missing && res.missing.length ? `\nНе хватает: ${res.missing.join(', ')}` : '');
+    const title = (approx ? 'Estimate from the card text. Open the job for the full score.\n' : '') + (applied ? 'Already in your tracker\n' : '') + res.why + (res.missing && res.missing.length ? `\nMissing: ${res.missing.join(', ')}` : '');
     if (b.dataset.t !== txt + bg) {
       b.dataset.t = txt + bg;
       b.textContent = txt;
@@ -223,7 +223,7 @@
     }
   }
 
-  // ---------- Панель фильтра ----------
+  // ---------- Filter panel ----------
   let host, shadow;
   function ensurePanel() {
     if (host && document.documentElement.contains(host)) return;
@@ -232,6 +232,7 @@
     shadow = host.attachShadow({ mode: 'open' });
     shadow.innerHTML = `<style>
       :host{all:initial}
+      [hidden]{display:none!important}
       .p{position:fixed;left:16px;bottom:16px;z-index:2147483644;width:268px;background:#fbfcfd;color:#1c2733;border:1px solid #cfd8e1;border-radius:10px;
         box-shadow:0 10px 28px rgba(20,40,60,.2);font:13px/1.4 "Segoe UI",system-ui,-apple-system,sans-serif}
       .h{display:flex;align-items:center;gap:8px;padding:9px 11px;background:#1d3b53;color:#fff;border-radius:9px 9px 0 0;cursor:pointer;user-select:none}
@@ -252,16 +253,16 @@
       :focus-visible{outline:2px solid #2f7fb5;outline-offset:1px}
     </style>
     <div class="p"><div class="c">
-      <div class="h" role="button" tabindex="0" aria-label="Фильтр по шансам"><b>Фильтр по шансам</b><small id="cnt"></small><span id="arr">▾</span></div>
+      <div class="h" role="button" tabindex="0" aria-label="Filter by fit"><b>Filter by fit</b><small id="cnt"></small><span id="arr">▾</span></div>
       <div class="b">
-        <div class="row">Минимум <input type="range" id="min" min="0" max="90" step="5" aria-label="Минимальные шансы"><output id="minv"></output></div>
-        <div class="seg" role="group" aria-label="Что делать с остальными"><button data-m="dim">Затемнять</button><button data-m="hide">Скрывать</button></div>
-        <label><input type="checkbox" id="hideApplied"> Скрыть, куда уже подал</label>
-        <label><input type="checkbox" id="hideOutArea"> Скрыть вне моих районов</label>
-        <label><input type="checkbox" id="hideSenior"> Скрыть senior / lead / 3rd line</label>
-        <label><input type="checkbox" id="fetch"> Точная оценка (загружать описания)</label>
-        <label><input type="checkbox" id="enabled"> Показывать оценки в списке</label>
-        <div class="lg"><span><i style="background:#23905a"></i>70+</span><span><i style="background:#b47a12"></i>50–69</span><span><i style="background:#c0463b"></i>&lt;50</span><span>≈ — примерно</span></div>
+        <div class="row">Minimum <input type="range" id="min" min="0" max="90" step="5" aria-label="Minimum fit score"><output id="minv"></output></div>
+        <div class="seg" role="group" aria-label="What to do with the rest"><button data-m="dim">Dim</button><button data-m="hide">Hide</button></div>
+        <label><input type="checkbox" id="hideApplied"> Hide jobs I applied to</label>
+        <label><input type="checkbox" id="hideOutArea"> Hide outside my areas</label>
+        <label><input type="checkbox" id="hideSenior"> Hide senior / lead / 3rd line</label>
+        <label id="fetchRow"><input type="checkbox" id="fetch"> Full score (load each description, slower)</label>
+        <label><input type="checkbox" id="enabled"> Show scores in results</label>
+        <div class="lg"><span><i style="background:#23905a"></i>70+</span><span><i style="background:#b47a12"></i>50–69</span><span><i style="background:#c0463b"></i>&lt;50</span><span>≈ estimate</span></div>
         <div class="note" id="status"></div>
       </div></div></div>`;
     document.documentElement.appendChild(host);
@@ -275,6 +276,7 @@
     shadow.querySelectorAll('.seg button').forEach(bt => bt.onclick = () => { cfg.mode = bt.dataset.m; saveCfg(); render(); });
     ['hideApplied', 'hideOutArea', 'hideSenior', 'fetch', 'enabled'].forEach(k => $(k).onchange = () => { cfg[k] = $(k).checked; saveCfg(); if (k === 'fetch' && cfg.fetch) cache.forEach(v => { v.failed = false; }); render(); });
     c.classList.toggle('collapsed', !!cfg.collapsed);
+    $('fetchRow').hidden = !site.fetchUrl; // nothing to load on sites without background fetching
   }
 
   function updatePanel(shown, rated) {
@@ -288,14 +290,14 @@
     ['hideApplied', 'hideOutArea', 'hideSenior', 'fetch', 'enabled'].forEach(k => { $(k).checked = !!cfg[k]; });
     if (shown != null) $('cnt').textContent = `${shown}/${cards.length}`;
     const pending = queue.length + active;
-    $('status').textContent = !cfg.enabled ? 'Оценки выключены.'
-      : Date.now() < pausedUntil ? 'Сайт ограничил загрузку — продолжу через несколько минут. Пока оценки примерные (≈).'
-      : cfg.fetch && failCount >= 3 && !rated ? 'Этот сайт не отдаёт описания для фоновой загрузки — оценки примерные (≈). Открой вакансию, чтобы увидеть точный процент.'
-      : cfg.fetch ? (pending ? `Загружаю описания: осталось ${pending}. Точно оценено ${rated || 0} из ${cards.length}.` : `Точно оценено ${rated || 0} из ${cards.length}. Наведи на процент — увидишь почему.`)
-      : 'Оценка по тексту карточки (≈). Включи точную оценку для точного процента.';
+    $('status').textContent = !cfg.enabled ? 'Scores are off.'
+      : Date.now() < pausedUntil ? 'The site is rate-limiting requests. Trying again in a few minutes; scores are estimates (≈) for now.'
+      : cfg.fetch && failCount >= 3 && !rated ? 'This site does not return descriptions in the background, so scores are estimates (≈). Open a job to see its full score.'
+      : cfg.fetch ? (pending ? `Loading descriptions: ${pending} left. Full score for ${rated || 0} of ${cards.length}.` : `Full score for ${rated || 0} of ${cards.length}. Hover a score to see why.`)
+      : !site.fetchUrl ? 'Scores come from the card text (≈). Open a job to see its full score.' : 'Scores come from the card text (≈). Turn on full score to load each description.';
   }
 
-  // ---------- Запуск и слежение за списком ----------
+  // ---------- Start and watch the list ----------
   let scanTimer = null;
   function scheduleScan(ms = 700) { clearTimeout(scanTimer); scanTimer = setTimeout(scan, ms); }
   function scan() {

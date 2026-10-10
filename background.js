@@ -1,5 +1,5 @@
-/* Job Tracker — фоновый сервис */
-importScripts('lib/analyzer.js', 'lib/store.js', 'lib/sync.js');
+/* Job Tracker — background service worker */
+importScripts('lib/analyzer.js', 'lib/store.js', 'lib/legacy.js', 'lib/sync.js');
 
 async function openDashboard(hash) {
   const url = chrome.runtime.getURL('dashboard.html') + (hash || '');
@@ -25,13 +25,18 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   if (!profile) await chrome.storage.local.set({ profile: JT_Analyzer.DEFAULT_PROFILE });
   if (reason === 'install') openDashboard('#settings');
   if (reason === 'update') {
-    // Укоротить старые длинные ссылки с рекламными параметрами
+    // Shorten old links with ad parameters and migrate data saved by the Russian-language versions
+    const p = await JT_Store.getProfile();
+    if (JT_Legacy.migrateProfile(p)) await JT_Store.saveProfile(p);
     const apps = await JT_Store.getApps();
     let n = 0;
     apps.forEach(a => {
-      if (!a.url) return;
-      const c = JT_Store.cleanUrl(a.url);
-      if (c !== a.url) { a.url = c; a.urlKey = JT_Store.normUrl(c); a.updatedAt = new Date().toISOString(); n++; }
+      let changed = JT_Legacy.migrateApp(a, JT_Analyzer, p);
+      if (a.url) {
+        const c = JT_Store.cleanUrl(a.url);
+        if (c !== a.url) { a.url = c; a.urlKey = JT_Store.normUrl(c); changed = true; }
+      }
+      if (changed) { a.updatedAt = new Date().toISOString(); n++; }
     });
     if (n) await JT_Store.saveApps(apps);
   }
@@ -39,7 +44,7 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
 });
 chrome.runtime.onStartup.addListener(() => { updateBadge(); autoSync(); });
 
-// Автосинхронизация: отправка через несколько секунд после изменений, полная — каждые 10 минут
+// Auto-sync: push a few seconds after a change, full sync every 10 minutes
 let pushTimer = null;
 async function autoSync(pushOnly) {
   const cfg = await JT_Sync.getCfg();

@@ -1,19 +1,19 @@
 <!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><title>Job Tracker</title><link rel="stylesheet" href="popup.css"></head>
+<html lang="en"><head><meta charset="utf-8"><title>Job Tracker</title><link rel="stylesheet" href="popup.css"></head>
 <body>
   <header><span class="logo" aria-hidden="true"></span><h1>Job Tracker</h1></header>
-  <section class="stats" aria-label="Статистика">
-    <div><b id="sToday">0</b><span>сегодня</span></div>
-    <div><b id="sWeek">0</b><span>за 7 дней</span></div>
-    <div><b id="sTotal">0</b><span>всего</span></div>
-    <div><b id="sInt">0</b><span>интервью</span></div>
+  <section class="stats" aria-label="Statistics">
+    <div><b id="sToday">0</b><span>today</span></div>
+    <div><b id="sWeek">0</b><span>last 7 days</span></div>
+    <div><b id="sTotal">0</b><span>total</span></div>
+    <div><b id="sInt">0</b><span>interviews</span></div>
   </section>
-  <button id="check" class="primary">Проверить шансы на этой странице</button>
-  <button id="add" class="secondary">Добавить вакансию в трекер</button>
+  <button id="check" class="primary">Check fit for this page</button>
+  <button id="add" class="secondary">Add this job to the tracker</button>
   <p id="msg" class="msg" role="status"></p>
-  <button id="dash" class="secondary">Открыть дашборд</button>
-  <label class="toggle"><input type="checkbox" id="auto"> Автоматически сохранять при нажатии «Apply»</label>
-  <h2>Последние заявки</h2>
+  <button id="dash" class="secondary">Open dashboard</button>
+  <label class="toggle"><input type="checkbox" id="auto"> Save automatically when I press Apply</label>
+  <h2>Recent applications</h2>
   <ul id="recent"></ul>
   <script src="lib/analyzer.js"></script>
   <script src="lib/store.js"></script>

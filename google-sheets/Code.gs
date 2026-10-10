@@ -1,9 +1,49 @@
 /**
- * Job Tracker — синхронизация с Google Таблицей.
- * Вставь этот код в «Расширения → Apps Script» внутри своей таблицы.
- * Токен создаётся при первом запуске setup() и хранится в свойствах скрипта.
+ * Job Tracker — Google Sheets sync.
+ * Paste this file into Extensions → Apps Script inside your own sheet, run setup() once,
+ * then deploy it as a web app. The extension talks to it with a token that setup()
+ * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
-// The sync token is generated on first setup() and kept in Script Properties, never in the code.
+
+const SCRIPT_VERSION = 8;
+const SHEET = 'Applications';
+const SUMMARY = 'Summary';
+const COLS = [
+  ['id', 'ID'], ['ticket', 'Ticket'], ['title', 'Job title'], ['company', 'Company'], ['location', 'Location'],
+  ['category', 'Role type'], ['workTypes', 'Work type'], ['salary', 'Salary'], ['platform', 'Source'],
+  ['appliedAt', 'Applied on'], ['status', 'Status'], ['chance', 'Fit %'], ['nextDate', 'Next step'],
+  ['notes', 'Notes'], ['missing', 'Missing skills'], ['tools', 'Tools'], ['details', 'Key details'],
+  ['url', 'Link'], ['updated', '_updated'], ['benefits', 'Benefits'], ['contacts', 'Contacts'], ['followup', 'Follow-up'],
+];
+const C = {}; COLS.forEach(([k], i) => { C[k] = i + 1; });
+// [status, status cell background, text colour, light tint for the whole row]
+const STATUSES = [
+  ['Applied', '#e3eaf2', '#3b4b5c', ''],
+  ['Screening', '#bfe1f6', '#0b5d8a', '#f1f8fd'],
+  ['Test task', '#c9d8fb', '#2a4fa0', '#f2f5fe'],
+  ['Interview 1', '#e1d4f7', '#4b2a8a', '#f7f3fd'],
+  ['Interview 2', '#d0baf1', '#4b2a8a', '#f5effc'],
+  ['Interview 3', '#bb9ee9', '#3a1d73', '#f2eafb'],
+  ['Offer', '#a8dfbd', '#0f5c32', '#ecf8f0'],
+  ['Offer accepted', '#1e8e3e', '#ffffff', '#e1f3e7'],
+  ['Offer declined', '#e6ebc8', '#5f6b2e', ''],
+  ['Rejected', '#f4c2bd', '#a52714', '#fdf0ef'],
+  ['No response', '#e8e8e8', '#757575', ''],
+  ['Withdrawn', '#ede4d3', '#7a6a4a', ''],
+];
+const MUTED = ['No response', 'Withdrawn', 'Offer declined'];
+
+// Sheets created by versions before 2.0 used Russian names and labels. setup() migrates them.
+const LEGACY_SHEET = 'Заявки', LEGACY_SUMMARY = 'Сводка';
+const LEGACY_STATUS = {
+  'Подано': 'Applied', 'Ответили / скрининг': 'Screening', 'Тестовое задание': 'Test task',
+  'Интервью 1': 'Interview 1', 'Интервью 2': 'Interview 2', 'Интервью 3': 'Interview 3',
+  'Оффер': 'Offer', 'Оффер принят': 'Offer accepted', 'Оффер отклонён мной': 'Offer declined',
+  'Отказ': 'Rejected', 'Нет ответа': 'No response', 'Отозвал заявку': 'Withdrawn',
+};
+const LEGACY_VALUE = { 'Другое': 'Other', 'Сайт компании': 'Company website', 'Рекрутер / агентство': 'Recruiter / agency' };
+
+// ---------- Token ----------
 function getToken_() {
   const props = PropertiesService.getScriptProperties();
   let t = props.getProperty('SYNC_TOKEN');
@@ -14,58 +54,63 @@ function checkToken_(t) {
   const saved = PropertiesService.getScriptProperties().getProperty('SYNC_TOKEN');
   return !!saved && t === saved;
 }
+/** Menu: shows the token to paste into the extension settings. */
+function showToken() {
+  const ui = SpreadsheetApp.getUi();
+  ui.alert('Job Tracker sync token', getToken_() + '\n\nPaste it into Job Tracker → Skills & settings → Google Sheet. Treat it like a password.', ui.ButtonSet.OK);
+}
+/** Menu: creates a new token. The old one stops working at once. */
+function resetToken() {
+  PropertiesService.getScriptProperties().deleteProperty('SYNC_TOKEN');
+  showToken();
+}
 
-const SCRIPT_VERSION = 7;
-const SHEET = 'Заявки';
-const SUMMARY = 'Сводка';
-const COLS = [
-  ['id', 'ID'], ['ticket', 'Тикет'], ['title', 'Вакансия'], ['company', 'Компания'], ['location', 'Локация'],
-  ['category', 'Направление'], ['workTypes', 'Тип работы'], ['salary', 'Зарплата'], ['platform', 'Платформа'],
-  ['appliedAt', 'Дата подачи'], ['status', 'Статус'], ['chance', 'Шансы %'], ['nextDate', 'Следующий шаг'],
-  ['notes', 'Заметки'], ['missing', 'Не хватает'], ['tools', 'Инструменты'], ['details', 'Важное из описания'],
-  ['url', 'Ссылка'], ['updated', '_updated'], ['benefits', 'Бонусы'], ['contacts', 'Контакты'], ['followup', 'Follow-up'],
-];
-const C = {}; COLS.forEach(([k], i) => { C[k] = i + 1; });
-// [статус, фон ячейки статуса, цвет текста, лёгкий оттенок всей строки]
-const STATUSES = [
-  ['Подано', '#e3eaf2', '#3b4b5c', ''],
-  ['Ответили / скрининг', '#bfe1f6', '#0b5d8a', '#f1f8fd'],
-  ['Тестовое задание', '#c9d8fb', '#2a4fa0', '#f2f5fe'],
-  ['Интервью 1', '#e1d4f7', '#4b2a8a', '#f7f3fd'],
-  ['Интервью 2', '#d0baf1', '#4b2a8a', '#f5effc'],
-  ['Интервью 3', '#bb9ee9', '#3a1d73', '#f2eafb'],
-  ['Оффер', '#a8dfbd', '#0f5c32', '#ecf8f0'],
-  ['Оффер принят', '#1e8e3e', '#ffffff', '#e1f3e7'],
-  ['Оффер отклонён мной', '#e6ebc8', '#5f6b2e', ''],
-  ['Отказ', '#f4c2bd', '#a52714', '#fdf0ef'],
-  ['Нет ответа', '#e8e8e8', '#757575', ''],
-  ['Отозвал заявку', '#ede4d3', '#7a6a4a', ''],
-];
-const MUTED = ['Нет ответа', 'Отозвал заявку', 'Оффер отклонён мной'];
-
-/** Меню «Job Tracker» в таблице — чтобы навести порядок одной кнопкой. */
+/** The Job Tracker menu in the sheet. */
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Job Tracker')
-    .addItem('Навести порядок в таблице', 'setup')
-    .addItem('Развернуть все колонки', 'expandAll')
-    .addItem('Свернуть подробности', 'collapseAll')
+    .addItem('Tidy up the sheet', 'setup')
+    .addItem('Show sync token', 'showToken')
+    .addItem('Create a new sync token', 'resetToken')
+    .addSeparator()
+    .addItem('Expand all columns', 'expandAll')
+    .addItem('Collapse details', 'collapseAll')
     .addToUi();
 }
 
-/** Запусти один раз вручную (или через меню Job Tracker): оформит таблицу и сводку. */
+/** Run once by hand (or from the Job Tracker menu): formats the sheet and builds the summary. */
 function setup() {
   const ss = SpreadsheetApp.getActive();
+  migrateLegacy_(ss);
   const sh = ss.getSheetByName(SHEET) || ss.insertSheet(SHEET, 0);
   formatSheet_(sh);
   buildSummary_(ss);
-  // Пустой лист по умолчанию только мешает
+  // The empty default sheet only gets in the way
   ss.getSheets().forEach(x => { if (/^(Лист|Sheet)\s?1$/.test(x.getName()) && x.getLastRow() === 0 && ss.getSheets().length > 2) ss.deleteSheet(x); });
-  return 'Готово';
+  getToken_();
+  Logger.log('Setup done. Get the sync token from the Job Tracker menu → Show sync token.');
+  return 'Done';
+}
+
+/** Renames a pre-2.0 sheet and translates its status, role type and source values. */
+function migrateLegacy_(ss) {
+  const old = ss.getSheetByName(LEGACY_SHEET);
+  if (!old || ss.getSheetByName(SHEET)) return;
+  old.setName(SHEET);
+  const last = old.getLastRow();
+  if (last >= 2) {
+    [[C.status, LEGACY_STATUS], [C.category, LEGACY_VALUE], [C.platform, LEGACY_VALUE]].forEach(([col, map]) => {
+      const r = old.getRange(2, col, last - 1, 1);
+      r.clearDataValidations();
+      r.setValues(r.getValues().map(([v]) => [map[String(v).trim()] || v]));
+    });
+  }
+  const sm = ss.getSheetByName(LEGACY_SUMMARY);
+  if (sm) ss.deleteSheet(sm);
 }
 
 const ROW_H = 30;
-// Колонки, которые свёрнуты по умолчанию и раскрываются кнопкой «+» над таблицей.
-// Весь длинный текст спрятан, а коротко он виден во всплывающей заметке на названии вакансии.
+// Column groups collapsed by default; the "+" above the sheet expands them.
+// Long text stays hidden; a short version shows in the note on the job title.
 const GROUPS = [['location', 'workTypes'], ['notes', 'details'], ['benefits', 'contacts']];
 
 function formatSheet_(sh) {
@@ -74,7 +119,7 @@ function formatSheet_(sh) {
   if (sh.getMaxRows() < maxRows) sh.insertRowsAfter(sh.getMaxRows(), maxRows - sh.getMaxRows());
   const body = sh.getRange(2, 1, maxRows - 1, n);
 
-  // Заголовок
+  // Header
   sh.getRange(1, 1, 1, n).setValues([COLS.map(c => c[1])])
     .setFontWeight('bold').setBackground('#17324a').setFontColor('#ffffff')
     .setVerticalAlignment('middle').setWrap(true);
@@ -83,7 +128,7 @@ function formatSheet_(sh) {
   sh.setFrozenColumns(C.title);
   sh.hideColumns(C.id); sh.hideColumns(C.updated);
 
-  // Тексты не растягивают строки: длинное обрезается, полностью видно при нажатии на ячейку
+  // Text never stretches a row: long values are clipped and show in full when you click the cell
   body.setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP).setVerticalAlignment('middle').setFontSize(10);
   const last = sh.getLastRow();
   if (last >= 2) sh.setRowHeightsForced(2, last - 1, ROW_H);
@@ -92,29 +137,29 @@ function formatSheet_(sh) {
     platform: 95, appliedAt: 92, status: 165, chance: 64, nextDate: 100, notes: 260, missing: 170, tools: 200, details: 260, url: 80, benefits: 260, contacts: 260, followup: 110 };
   Object.keys(widths).forEach(k => sh.setColumnWidth(C[k], widths[k]));
   ['ticket', 'appliedAt', 'chance', 'nextDate', 'url'].forEach(k => sh.getRange(2, C[k], maxRows - 1, 1).setHorizontalAlignment('center'));
-  sh.getRange(2, C.appliedAt, maxRows - 1, 1).setNumberFormat('dd.mm.yyyy');
-  sh.getRange(2, C.nextDate, maxRows - 1, 1).setNumberFormat('dd.mm.yyyy')
+  sh.getRange(2, C.appliedAt, maxRows - 1, 1).setNumberFormat('dd/mm/yyyy');
+  sh.getRange(2, C.nextDate, maxRows - 1, 1).setNumberFormat('dd/mm/yyyy')
     .setDataValidation(SpreadsheetApp.newDataValidation().requireDate().setAllowInvalid(true).build());
   sh.getRange(2, C.chance, maxRows - 1, 1).setNumberFormat('0');
   sh.getRange(2, C.title, maxRows - 1, 1).setFontWeight('bold');
 
-  // Статус — выпадающий список
+  // Status: drop-down list
   const statusRange = sh.getRange(2, C.status, maxRows - 1, 1);
   statusRange.setDataValidation(SpreadsheetApp.newDataValidation()
     .requireValueInList(STATUSES.map(s => s[0]), true).setAllowInvalid(false).build());
   statusRange.setFontWeight('bold').setHorizontalAlignment('center');
   sh.setConditionalFormatRules(colorRules_(sh, maxRows));
-  // Чередование строк и фильтр для поиска/сортировки
+  // Banded rows and a filter for searching and sorting
   sh.getBandings().forEach(b => b.remove());
   sh.getRange(1, 1, maxRows, n).applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false)
     .setHeaderRowColor('#17324a');
   if (sh.getFilter()) sh.getFilter().remove();
   sh.getRange(1, 1, maxRows, n).createFilter();
 
-  // Свёрнутые группы колонок (старые группы убираем, чтобы собрать заново)
+  // Collapsed column groups (old groups are removed and rebuilt)
   for (let c = 1; c <= n; c++) {
     const d = sh.getColumnGroupDepth(c);
-    if (d > 0) { try { sh.getColumnGroup(c, d).expand(); } catch (e) { /* уже раскрыта */ } }
+    if (d > 0) { try { sh.getColumnGroup(c, d).expand(); } catch (e) { /* already expanded */ } }
   }
   for (let c = 1; c <= n; c++) { while (sh.getColumnGroupDepth(c) > 0) sh.getRange(1, c).shiftColumnGroupDepth(-1); }
   sh.showColumns(C.ticket, n - C.ticket + 1);
@@ -125,11 +170,11 @@ function formatSheet_(sh) {
     if (g) g.collapse();
   });
 
-  // Короткие ссылки и подсказки для уже существующих строк
+  // Short links and notes for existing rows
   if (last >= 2) decorateRows_(sh, 2, last - 1);
 }
 
-/** Цвета: порядок важен — правила выше в списке главнее. */
+/** Colours. Order matters: rules higher in the list win. */
 function colorRules_(sh, maxRows) {
   const sep = detectSep_(sh);
   const col = k => sh.getRange(1, C[k]).getA1Notation().replace(/\d+/g, '');
@@ -139,23 +184,23 @@ function colorRules_(sh, maxRows) {
   const R = [];
   const rule = () => SpreadsheetApp.newConditionalFormatRule();
 
-  // 1. Ячейка статуса — яркий цвет стадии
+  // 1. Status cell: a strong colour per stage
   STATUSES.forEach(([label, bg, fg]) => R.push(rule().whenTextEqualTo(label).setBackground(bg).setFontColor(fg).setRanges([range('status')]).build()));
 
-  // 2. Шансы — плавная шкала: красный → жёлтый → зелёный
+  // 2. Fit: red → amber → green scale
   R.push(rule().setGradientMinpointWithValue('#f28b82', SpreadsheetApp.InterpolationType.NUMBER, '30')
     .setGradientMidpointWithValue('#fde68a', SpreadsheetApp.InterpolationType.NUMBER, '55')
     .setGradientMaxpointWithValue('#5bb974', SpreadsheetApp.InterpolationType.NUMBER, '80')
     .setRanges([range('chance')]).build());
 
-  // 3. Следующий шаг: просрочен — красный, сегодня-через 2 дня — оранжевый
+  // 3. Next step: overdue in red, today to two days ahead in orange
   R.push(rule().whenFormulaSatisfied(`=AND(${M}2<>""${sep}${M}2<TODAY())`).setBackground('#f4c2bd').setFontColor('#a52714').setBold(true).setRanges([range('nextDate')]).build());
   R.push(rule().whenFormulaSatisfied(`=AND(${M}2<>""${sep}${M}2<=TODAY()+2)`).setBackground('#fcd9a8').setFontColor('#8a4b00').setBold(true).setRanges([range('nextDate')]).build());
 
-  // 4. «Подано» больше 14 дней назад — пора follow-up
-  R.push(rule().whenFormulaSatisfied(`=AND(${K}2="Подано"${sep}${J}2<>""${sep}${J}2<TODAY()-14)`).setBackground('#fde68a').setFontColor('#7a5510').setRanges([range('appliedAt')]).build());
+  // 4. Applied more than 14 days ago: time to follow up
+  R.push(rule().whenFormulaSatisfied(`=AND(${K}2="Applied"${sep}${J}2<>""${sep}${J}2<TODAY()-14)`).setBackground('#fde68a').setFontColor('#7a5510').setRanges([range('appliedAt')]).build());
 
-  // 5. Вся строка — лёгкий оттенок стадии; закрытые заявки — серым текстом
+  // 5. Whole row: a light tint of the stage; closed applications in grey text
   STATUSES.forEach(([label, , , tint]) => {
     if (tint) R.push(rule().whenFormulaSatisfied(`=${K}2="${label}"`).setBackground(tint).setRanges([rows]).build());
   });
@@ -163,26 +208,26 @@ function colorRules_(sh, maxRows) {
   return R;
 }
 
-/** «Открыть» вместо длинной ссылки и всплывающая заметка с полным текстом «Важного». */
+/** "Open" instead of a long URL, plus notes with the full key details. */
 function decorateRows_(sh, start, count) {
   const urls = sh.getRange(start, C.url, count, 1);
   const uv = urls.getValues(), rt = urls.getRichTextValues();
   const newRt = uv.map((r, i) => {
     const link = (rt[i][0] && rt[i][0].getLinkUrl()) || (/^https?:/.test(String(r[0])) ? String(r[0]) : '');
-    return [link ? SpreadsheetApp.newRichTextValue().setText('Открыть').setLinkUrl(link).build()
+    return [link ? SpreadsheetApp.newRichTextValue().setText('Open').setLinkUrl(link).build()
       : SpreadsheetApp.newRichTextValue().setText(String(r[0] || '')).build()];
   });
   urls.setRichTextValues(newRt);
   const det = sh.getRange(start, C.details, count, 1);
   det.setNotes(det.getValues().map(r => [r[0] ? '• ' + String(r[0]).split(' • ').join('\n• ') : '']));
-  // Всплывающая сводка на названии вакансии: не хватает, заметки, бонусы
+  // Note on the job title: missing skills, notes, benefits
   const rows = sh.getRange(start, 1, count, COLS.length).getValues();
   sh.getRange(start, C.title, count, 1).setNotes(rows.map(r => {
     const miss = String(r[C.missing - 1] || ''), notes = String(r[C.notes - 1] || ''), ben = String(r[C.benefits - 1] || '');
     const parts = [];
-    if (miss) parts.push('Не хватает: ' + miss);
+    if (miss) parts.push('Missing: ' + miss);
     if (notes) parts.push(notes.length > 1500 ? notes.slice(0, 1500) + '…' : notes);
-    if (ben) parts.push('Что даёт компания:\n• ' + ben.split(' • ').join('\n• '));
+    if (ben) parts.push('Benefits:\n• ' + ben.split(' • ').join('\n• '));
     return [parts.join('\n\n')];
   }));
   const ben = sh.getRange(start, C.benefits, count, 1);
@@ -200,7 +245,7 @@ function collapseAll() {
   GROUPS.forEach(([a]) => { const g = sh.getColumnGroup(C[a], 1); if (g) g.collapse(); });
 }
 
-// В русской и других локалях аргументы формул разделяются «;», а не «,». Определяем автоматически.
+// Some locales separate formula arguments with ";" instead of ",". Detect which one this sheet uses.
 function detectSep_(sh) {
   const cell = sh.getRange('Z1');
   cell.setFormula('=SUM(1,2)');
@@ -217,46 +262,46 @@ function buildSummary_(ss) {
   const R = `'${SHEET}'!`;
   const cnt = label => `COUNTIF(${R}K2:K${s}"${label}")`;
   const inList = labels => labels.map(cnt).join('+');
-  const responded = ['Ответили / скрининг', 'Тестовое задание', 'Интервью 1', 'Интервью 2', 'Интервью 3', 'Оффер', 'Оффер принят', 'Оффер отклонён мной', 'Отказ'];
-  const interviews = ['Тестовое задание', 'Интервью 1', 'Интервью 2', 'Интервью 3', 'Оффер', 'Оффер принят', 'Оффер отклонён мной'];
-  const offers = ['Оффер', 'Оффер принят', 'Оффер отклонён мной'];
+  const responded = ['Screening', 'Test task', 'Interview 1', 'Interview 2', 'Interview 3', 'Offer', 'Offer accepted', 'Offer declined', 'Rejected'];
+  const interviews = ['Test task', 'Interview 1', 'Interview 2', 'Interview 3', 'Offer', 'Offer accepted', 'Offer declined'];
+  const offers = ['Offer', 'Offer accepted', 'Offer declined'];
   const rows = [
-    ['Сводка по заявкам', ''],
-    ['Всего подано', `=COUNTA(${R}A2:A)`],
-    ['За последние 7 дней', `=COUNTIF(${R}J2:J${s}">="&(TODAY()-7))`],
-    ['Ответили', `=${inList(responded)}`],
-    ['Интервью', `=${inList(interviews)}`],
-    ['Офферы', `=${inList(offers)}`],
-    ['Средние шансы, %', `=IFERROR(ROUND(AVERAGE(${R}L2:L))${s}"—")`],
+    ['Applications summary', ''],
+    ['Total applied', `=COUNTA(${R}A2:A)`],
+    ['Last 7 days', `=COUNTIF(${R}J2:J${s}">="&(TODAY()-7))`],
+    ['Responses', `=${inList(responded)}`],
+    ['Interviews', `=${inList(interviews)}`],
+    ['Offers', `=${inList(offers)}`],
+    ['Average fit, %', `=IFERROR(ROUND(AVERAGE(${R}L2:L))${s}"—")`],
     ['', ''],
-    ['По статусам', ''],
+    ['By status', ''],
   ].concat(STATUSES.map(([l]) => [l, `=${cnt(l)}`]));
   sm.getRange(1, 1, rows.length, 2).setValues(rows.map(r => [r[0], '']));
-  rows.forEach((r, i) => { if (r[1]) sm.getRange(i + 2 - 1, 2).setFormula(r[1]); });
+  rows.forEach((r, i) => { if (r[1]) sm.getRange(i + 1, 2).setFormula(r[1]); });
   sm.getRange('A1').setFontSize(14).setFontWeight('bold');
   sm.getRange('A9').setFontWeight('bold');
   sm.getRange('A2:A7').setFontWeight('bold');
-  sm.getRange('D1').setValue('По платформам').setFontWeight('bold');
+  sm.getRange('D1').setValue('By source').setFontWeight('bold');
   sm.getRange('D2').setFormula(`=IFERROR(QUERY(${R}I2:I${s}"select I, count(I) where I is not null group by I order by count(I) desc label count(I) ''"${s}0)${s}"")`);
   sm.setColumnWidth(1, 200); sm.setColumnWidth(4, 160);
   sm.getRange(1, 1, 1, 5).setBorder(false, false, true, false, false, false);
   STATUSES.forEach(([, bg, fg], i) => sm.getRange(10 + i, 1).setBackground(bg).setFontColor(fg).setFontWeight('bold'));
   const legend = [
-    ['Как читать цвета', ''],
-    ['Статус', 'Цвет ячейки показывает стадию: синий — ответили, фиолетовый — интервью, зелёный — оффер, красный — отказ, серый — закрыто'],
-    ['Строка', 'Лёгкий оттенок той же стадии; серый текст — заявка закрыта'],
-    ['Шансы %', 'Красный < 40, жёлтый ≈ 55, зелёный > 70'],
-    ['Следующий шаг', 'Оранжевый — сегодня или в ближайшие 2 дня, красный — просрочен'],
-    ['Дата подачи', 'Жёлтая — подано больше 14 дней назад без ответа, пора написать follow-up'],
+    ['How to read the colours', ''],
+    ['Status', 'The cell colour shows the stage: blue response, purple interview, green offer, red rejected, grey closed'],
+    ['Row', 'A light tint of the same stage; grey text means the application is closed'],
+    ['Fit %', 'Red below 40, amber around 55, green above 70'],
+    ['Next step', 'Orange today or within two days, red overdue'],
+    ['Applied on', 'Amber when applied more than 14 days ago with no reply: time to follow up'],
   ];
   sm.getRange(24, 1, legend.length, 2).setValues(legend);
   sm.getRange(24, 1).setFontWeight('bold');
   sm.getRange(25, 1, legend.length - 1, 1).setFontWeight('bold');
   sm.getRange(25, 2, legend.length - 1, 1).setFontColor('#5a6b7d');
-  sm.getRange('A31').setValue('Считается по текущему статусу. Статусы меняй в листе «Заявки» — расширение подхватит изменения.').setFontColor('#5a6b7d');
+  sm.getRange('A31').setValue(`Counts use the current status. Change statuses on the "${SHEET}" sheet and the extension picks them up.`).setFontColor('#5a6b7d');
 }
 
-/** Когда меняешь что-то в таблице (например, с телефона), отмечаем время изменения строки. */
+/** When you edit the sheet (on your phone, say), record when the row changed. */
 function onEdit(e) {
   const sh = e.range.getSheet();
   if (sh.getName() !== SHEET) return;
@@ -281,14 +326,14 @@ function ensureSheet_() {
 function toIsoDate_(v, tz) {
   if (v instanceof Date) return Utilities.formatDate(v, tz, 'yyyy-MM-dd');
   if (!v) return '';
-  const m = String(v).match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  const m = String(v).match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
   return m ? `${m[3]}-${('0' + m[2]).slice(-2)}-${('0' + m[1]).slice(-2)}` : String(v);
 }
 
-/** GET: отдаёт строки таблицы расширению. */
+/** GET: returns the sheet rows to the extension. */
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  if (!checkToken_(p.token)) return json_({ ok: false, error: 'Неверный токен' });
+  if (!checkToken_(p.token)) return json_({ ok: false, error: 'Wrong token' });
   const ss = SpreadsheetApp.getActive();
   const sh = ensureSheet_();
   if (p.action === 'ping') return json_({ ok: true, version: SCRIPT_VERSION, name: ss.getName(), rows: Math.max(0, sh.getLastRow() - 1) });
@@ -304,7 +349,7 @@ function doGet(e) {
     const out = [];
     values.forEach((row, i) => {
       if (!row[C.title - 1] && !row[C.company - 1] && !row[C.id - 1]) return;
-      if (!row[C.id - 1]) { // строку добавили вручную в таблице
+      if (!row[C.id - 1]) { // a row added by hand in the sheet
         row[C.id - 1] = 's' + Date.now().toString(36) + i;
         row[C.updated - 1] = Date.now();
         sh.getRange(i + 2, C.id).setValue(row[C.id - 1]);
@@ -321,11 +366,11 @@ function doGet(e) {
   } finally { lock.releaseLock(); }
 }
 
-/** POST: расширение присылает новые/изменённые заявки и удалённые ID. */
+/** POST: the extension sends new or changed applications and the IDs it deleted. */
 function doPost(e) {
   let body;
-  try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: 'Плохой JSON' }); }
-  if (!checkToken_(body.token)) return json_({ ok: false, error: 'Неверный токен' });
+  try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: 'Invalid JSON' }); }
+  if (!checkToken_(body.token)) return json_({ ok: false, error: 'Wrong token' });
   const sh = ensureSheet_();
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {

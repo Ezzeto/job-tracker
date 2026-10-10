@@ -1,4 +1,4 @@
-/* Job Tracker — контент-скрипт: ловит «Apply», собирает данные вакансии, показывает панель. */
+/* Job Tracker — content script: catches Apply clicks, reads the job and shows the side panel. */
 (function () {
   'use strict';
   if (window.__jtLoaded) return;
@@ -9,11 +9,11 @@
 
   const E = globalThis.JT_Extract;
 
-  // ---------- Извлечение данных ----------
+  // ---------- Reading the job ----------
   const txt = el => (el ? (el.innerText || el.textContent || '').trim() : '');
   const visible = el => { const r = el.getBoundingClientRect(); return r.width > 50 && r.height > 50 && getComputedStyle(el).visibility !== 'hidden'; };
 
-  // Открытая вакансия: правая панель (LinkedIn, Indeed), боковое окно (Reed) или блок вокруг кнопки
+  // The open job: right-hand pane (LinkedIn, Indeed), side drawer (Reed) or the block around the button
   const isBadHead = t => !t || t.length < 3 || t.length > 140 || E.BAD_TITLE.test(t);
   function scopeFromDescription(site) {
     if (!site.desc) return null;
@@ -47,7 +47,7 @@
     return null;
   }
 
-  // Ссылка на вакансию рядом с нажатой кнопкой (карточка в списке) или в открытой панели
+  // Job link next to the pressed button (a card in the list) or in the open pane
   function findJobLink(originEl, scope, site) {
     if (!site.cardLink) return null;
     const ok = h => site.cardLink.test(h);
@@ -74,7 +74,7 @@
 
   const fetchCache = new Map();
 
-  // Карточка выделенной вакансии в списке — самый надёжный источник названия, компании и города
+  // The highlighted card in the list is the most reliable source of title, company and town
   function fixFromCard(job, site) {
     const bad = t => !t || t.length < 3 || E.BAD_TITLE.test(t);
     const m = location.href.match(/[?&](?:vjk|jk)=([a-f0-9]{8,})/i);
@@ -92,14 +92,14 @@
     if (id) job.url = S.cleanUrl(`${location.origin}/viewjob?jk=${id}`);
   }
 
-  // LinkedIn часто меняет вёрстку. Если название не нашлось или это заголовок блока
-  // («About the job»), берём данные из заголовка вкладки или из публичной версии вакансии.
+  // LinkedIn changes its markup often. If the title is missing or is a section heading
+  // ('About the job'), fall back to the tab title or the public version of this one job.
   async function fixLinkedIn(job) {
     const bad = t => !t || t.length < 3 || E.BAD_TITLE.test(t);
     const m = location.href.match(/currentJobId=(\d+)/) || location.href.match(/\/jobs\/view\/(\d+)/);
     const id = m && m[1];
     if (bad(job.title)) {
-      // 1) Активная карточка в списке слева
+      // 1) The active card in the left-hand list
       if (id) {
         const card = document.querySelector(`[data-occludable-job-id="${id}"], [data-job-id="${id}"]`);
         const a = card && card.querySelector('a[href*="/jobs/view/"]');
@@ -108,12 +108,12 @@
       }
     }
     if (bad(job.title)) {
-      // 2) Заголовок вкладки: «(3) Название | Компания | LinkedIn»
+      // 2) Tab title: '(3) Title | Company | LinkedIn'
       const parts = document.title.replace(/^\(\d+\)\s*/, '').split(/\s+\|\s+/);
       if (parts.length >= 3 && !bad(parts[0])) { job.title = parts[0]; if (!job.company) job.company = parts[1]; }
     }
     if ((bad(job.title) || !job.company || !job.description || job.description.length < 200) && id) {
-      // 3) Публичная версия вакансии
+      // 3) Public version of the job the user is viewing (one request, same origin)
       try {
         const key = 'li:' + id;
         if (!fetchCache.has(key)) fetchCache.set(key, E.fetchAndParse(`https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${id}`, `https://www.linkedin.com/jobs/view/${id}/`));
@@ -123,12 +123,12 @@
         if (!job.location && g.location) job.location = g.location;
         if ((job.description || '').length < 200 && g.description) job.description = g.description;
         if (!job.salaryText && g.salaryText) job.salaryText = g.salaryText;
-      } catch (e) { /* нет сети — оставляем как есть */ }
+      } catch (e) { /* offline: keep what we have */ }
     }
     if (bad(job.title)) job.title = '';
     if (id) job.url = `https://www.linkedin.com/jobs/view/${id}/`;
   }
-  // Возвращает данные вакансии или null, если на странице нет одной открытой вакансии
+  // Returns the job, or null when the page has no single open job
   async function extractJob(originEl) {
     const site = E.siteFor(location.hostname);
     const scope = findScope(originEl, site);
@@ -142,7 +142,7 @@
       }
       if (!scope) return null;
     }
-    // Indeed иногда показывает вакансию во встроенном окне (iframe) того же сайта
+    // Indeed sometimes shows the job inside a same-site iframe
     if (site.frame && window.top === window && (!scope || !(scope.innerText || '').trim() || (scope.innerText || '').length < 300)) {
       const fr = [...document.querySelectorAll(site.frame)].find(f => { try { return f.contentDocument && f.contentDocument.body; } catch (e) { return false; } });
       if (fr) {
@@ -156,7 +156,7 @@
     if (site.name === 'linkedin') await fixLinkedIn(job);
     if (site.name === 'indeed') fixFromCard(job, site);
     if (!job.description || job.description.length < 200) {
-      // Последний шанс: самый большой текстовый блок
+      // Last resort: the largest block of text
       let best = '', len = 0;
       document.querySelectorAll('main section, main div, article, [class*="description"], [id*="description"]').forEach(el => {
         const t = el.innerText || '';
@@ -183,7 +183,7 @@
     };
   }
 
-  // ---------- Панель (Shadow DOM) ----------
+  // ---------- Panel (Shadow DOM) ----------
   let host = null, shadow = null;
   const CSS = `
   :host{all:initial}
@@ -264,25 +264,25 @@
     const box = document.createElement('div');
     box.className = 'jt';
     box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-label', 'Заявка сохранена в трекере');
+    box.setAttribute('aria-label', 'Application saved to Job Tracker');
     box.innerHTML = `
-      <div class="hd"><span class="tk">${esc(app.ticket)}</span><b>${isNew ? 'Заявка сохранена' : 'Заявка в трекере'}</b><button class="x" title="Закрыть" aria-label="Закрыть">×</button></div>
+      <div class="hd"><span class="tk">${esc(app.ticket)}</span><b>${isNew ? 'Application saved' : 'Already in your tracker'}</b><button class="x" title="Close" aria-label="Close">×</button></div>
       <div class="bd">
-        <div class="score"><span class="n" style="color:${scoreColor(c.score)}">${c.score}%</span><div><b>Шансы: ${esc(c.label)}</b><div class="note" style="margin:0">по сравнению с твоим резюме</div></div></div>
+        <div class="score"><span class="n" style="color:${scoreColor(c.score)}">${c.score}%</span><div><b>Fit: ${esc(c.label)}</b><div class="note" style="margin:0">against your skills profile</div></div></div>
         <div class="tools">${c.matched.map(t => `<span class="t s">${esc(t)}</span>`).join('')}${c.basic.map(t => `<span class="t b">${esc(t)}</span>`).join('')}${c.missing.map(t => `<span class="t m">${esc(t)}</span>`).join('')}</div>
-        <label>Вакансия</label><input id="title" value="${esc(app.title)}">
-        <div class="row"><div><label>Компания</label><input id="company" value="${esc(app.company)}"></div>
-          <div><label>Локация</label><input id="location" value="${esc(app.location)}"></div></div>
-        <div class="row"><div><label>Платформа</label><select id="platform">${opt(platforms, app.platform)}</select></div>
-          <div><label>Статус</label><select id="status">${stOpt}</select></div></div>
-        <label>Направление</label><select id="category">${opt(A.CATEGORY_NAMES, app.category)}</select>
-        <label>Тип работы</label><div class="chips" id="wt">${A.WORK_TYPES.map(w => `<span class="chip ${app.workTypes.includes(w) ? 'on' : ''}" data-v="${esc(w)}" role="checkbox" tabindex="0" aria-checked="${app.workTypes.includes(w)}">${esc(w)}</span>`).join('')}</div>
-        <label>Зарплата</label><input id="salaryText" value="${esc(app.salaryText)}" placeholder="Не указана — впиши, если узнаешь">
-        ${(app.benefits || []).length ? `<label>Что даёт компания</label><ul class="det">${app.benefits.slice(0, 8).map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}
-        <label>Заметки (главное из описания — можно дописать своё)</label><textarea id="notes" rows="6" placeholder="Контакт рекрутера, что подготовить…">${esc(app.notes)}</textarea>
-        <div class="note">Проверь поля: сайты меняют вёрстку, и что-то могло считаться неточно. Полное описание и важные детали — в дашборде.</div>
+        <label>Job title</label><input id="title" value="${esc(app.title)}">
+        <div class="row"><div><label>Company</label><input id="company" value="${esc(app.company)}"></div>
+          <div><label>Location</label><input id="location" value="${esc(app.location)}"></div></div>
+        <div class="row"><div><label>Source</label><select id="platform">${opt(platforms, app.platform)}</select></div>
+          <div><label>Status</label><select id="status">${stOpt}</select></div></div>
+        <label>Role type</label><select id="category">${opt(A.CATEGORY_NAMES, app.category)}</select>
+        <label>Work type</label><div class="chips" id="wt">${A.WORK_TYPES.map(w => `<span class="chip ${app.workTypes.includes(w) ? 'on' : ''}" data-v="${esc(w)}" role="checkbox" tabindex="0" aria-checked="${app.workTypes.includes(w)}">${esc(w)}</span>`).join('')}</div>
+        <label>Salary</label><input id="salaryText" value="${esc(app.salaryText)}" placeholder="Not listed. Add it if you find out">
+        ${(app.benefits || []).length ? `<label>Benefits</label><ul class="det">${app.benefits.slice(0, 8).map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}
+        <label>Notes (key points from the ad; add your own)</label><textarea id="notes" rows="6" placeholder="Recruiter contact, what to prepare…">${esc(app.notes)}</textarea>
+        <div class="note">Check the fields: job sites change their layout, so something may be off. The full description and key details are in the dashboard.</div>
       </div>
-      <div class="ft"><button class="p" id="save">Сохранить изменения</button><button class="s" id="undo">${isNew ? 'Отменить заявку' : 'Удалить'}</button></div>`;
+      <div class="ft"><button class="p" id="save">Save changes</button><button class="s" id="undo">${isNew ? 'Undo' : 'Delete'}</button></div>`;
     root.appendChild(box);
     const $ = id => box.querySelector('#' + id);
     box.querySelector('.x').onclick = () => box.remove();
@@ -301,19 +301,19 @@
         notes: $('notes').value,
       });
       box.remove();
-      toast('Сохранено', 'Открыть дашборд', openDashboard, 3000);
+      toast('Saved', 'Open dashboard', openDashboard, 3000);
     };
     $('undo').onclick = async () => {
       await S.deleteApp(app.id);
       box.remove();
-      toast('Заявка удалена из трекера', null, null, 2500);
+      toast('Removed from your tracker', null, null, 2500);
     };
   }
 
   function openDashboard() { chrome.runtime.sendMessage({ type: 'openDashboard' }); }
 
-  // ---------- Шансы до подачи ----------
-  const reasonsHtml = c => `<ul class="reasons">${(c.reasons || []).map(r => `<li><span>${esc(r.text)}</span><b style="color:${r.delta == null ? '#5a6b7d' : r.delta > 0 ? '#23905a' : r.delta < 0 ? '#c0463b' : '#5a6b7d'}">${r.delta == null ? 'база' : r.delta > 0 ? '+' + r.delta : r.delta === 0 ? 'совет' : r.delta}</b></li>`).join('')}</ul>`;
+  // ---------- Fit before applying ----------
+  const reasonsHtml = c => `<ul class="reasons">${(c.reasons || []).map(r => `<li><span>${esc(r.text)}</span><b style="color:${r.delta == null ? '#5a6b7d' : r.delta > 0 ? '#23905a' : r.delta < 0 ? '#c0463b' : '#5a6b7d'}">${r.delta == null ? 'base' : r.delta > 0 ? '+' + r.delta : r.delta === 0 ? 'tip' : r.delta}</b></li>`).join('')}</ul>`;
   const toolsHtml = c => `<div class="tools">${c.matched.map(t => `<span class="t s">${esc(t)}</span>`).join('')}${c.basic.map(t => `<span class="t b">${esc(t)}</span>`).join('')}${c.missing.map(t => `<span class="t m">${esc(t)}</span>`).join('')}</div>`;
 
   let previewSig = '', previewRec = null, previewHidden = false;
@@ -330,21 +330,21 @@
     const box = document.createElement('div');
     box.className = 'jt';
     box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-label', 'Шансы по этой вакансии');
+    box.setAttribute('aria-label', 'Fit for this job');
     box.innerHTML = `
-      <div class="hd">${existing ? `<span class="tk">${esc(existing.ticket)}</span>` : ''}<b>${existing ? 'Уже в трекере · ' + esc(A.statusLabel(existing.status)) : 'Шансы до подачи'}</b><button class="x" aria-label="Закрыть">×</button></div>
+      <div class="hd">${existing ? `<span class="tk">${esc(existing.ticket)}</span>` : ''}<b>${existing ? 'In your tracker · ' + esc(A.statusLabel(existing.status)) : 'Fit before you apply'}</b><button class="x" aria-label="Close">×</button></div>
       <div class="bd">
         <div style="font-weight:600;margin-bottom:6px">${esc(rec.title)}${rec.company ? ' — ' + esc(rec.company) : ''}</div>
-        <div class="score"><span class="n" style="color:${scoreColor(c.score)}">${c.score}%</span><div><b>Шансы: ${esc(c.label)}</b><div class="note" style="margin:0">${esc([rec.location, rec.salaryText].filter(Boolean).join(' · ') || 'по сравнению с твоим резюме')}</div></div></div>
+        <div class="score"><span class="n" style="color:${scoreColor(c.score)}">${c.score}%</span><div><b>Fit: ${esc(c.label)}</b><div class="note" style="margin:0">${esc([rec.location, rec.salaryText].filter(Boolean).join(' · ') || 'against your skills profile')}</div></div></div>
         ${reasonsHtml(c)}
-        <h4>Инструменты из вакансии</h4>
-        ${c.tools.length ? toolsHtml(c) : '<div class="note">Не найдены в описании.</div>'}
-        ${c.missing.length ? `<div class="note">Подготовиться: ${c.missing.map(esc).join(', ')}.</div>` : ''}
-        ${(rec.benefits || []).length ? `<h4>Что даёт компания</h4><ul class="det">${rec.benefits.slice(0, 6).map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
-        ${(rec.details || []).length ? `<h4>Важное из описания</h4><ul class="det">${rec.details.slice(0, 7).map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
-        <div class="note">Заявка сохранится автоматически, когда нажмёшь «Apply».</div>
+        <h4>Tools in this ad</h4>
+        ${c.tools.length ? toolsHtml(c) : '<div class="note">None found in the description.</div>'}
+        ${c.missing.length ? `<div class="note">Worth preparing: ${c.missing.map(esc).join(', ')}.</div>` : ''}
+        ${(rec.benefits || []).length ? `<h4>Benefits</h4><ul class="det">${rec.benefits.slice(0, 6).map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
+        ${(rec.details || []).length ? `<h4>Key details</h4><ul class="det">${rec.details.slice(0, 7).map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
+        <div class="note">The application is saved automatically when you press Apply.</div>
       </div>
-      <div class="ft"><button class="p" id="close">Понятно</button><button class="s" id="hide" style="color:#5a6b7d;border-color:#cfd8e1">Скрыть здесь</button></div>`;
+      <div class="ft"><button class="p" id="close">Got it</button><button class="s" id="hide" style="color:#5a6b7d;border-color:#cfd8e1">Hide on this page</button></div>`;
     root.appendChild(box);
     box.querySelector('.x').onclick = () => box.remove();
     box.querySelector('#close').onclick = () => box.remove();
@@ -354,7 +354,7 @@
   function removeBadge() { if (shadow) { const b = shadow.getElementById('root').querySelector('.badge'); if (b) b.remove(); } }
 
   async function refreshPreview(force) {
-    if (window.top !== window) return; // внутри встроенного окна значок не нужен — его покажет основная страница
+    if (window.top !== window) return; // no badge inside iframes: the top page shows it
     try {
       const profile = await S.getProfile();
       if (!force && (profile.showPreview === false || previewHidden)) { removeBadge(); return; }
@@ -372,8 +372,8 @@
       b.className = 'badge';
       b.setAttribute('role', 'button');
       b.setAttribute('tabindex', '0');
-      b.title = 'Подробнее о шансах';
-      b.innerHTML = `<span class="pc" style="background:${scoreColor(c.score)}">${c.score}%</span><span>${existing ? esc(A.statusLabel(existing.status)) : 'Шансы: ' + esc(c.label.toLowerCase())}</span><button class="hide" aria-label="Скрыть">×</button>`;
+      b.title = 'Why this score';
+      b.innerHTML = `<span class="pc" style="background:${scoreColor(c.score)}">${c.score}%</span><span>${existing ? esc(A.statusLabel(existing.status)) : 'Fit: ' + esc(c.label.toLowerCase())}</span><button class="hide" aria-label="Hide">×</button>`;
       b.onclick = e => { if (e.target.closest('.hide')) { previewHidden = true; b.remove(); return; } showPreviewPanel(previewRec, existing); };
       b.onkeydown = e => { if (e.key === 'Enter') showPreviewPanel(previewRec, existing); };
       root.appendChild(b);
@@ -383,7 +383,7 @@
     }
   }
 
-  // Следим за сменой вакансии (LinkedIn и Indeed меняют вакансию без перезагрузки страницы)
+  // Watch for job changes (LinkedIn and Indeed switch jobs without reloading the page)
   let lastUrl = location.href, previewTimer = null;
   const schedulePreview = (ms = 900) => { clearTimeout(previewTimer); previewTimer = setTimeout(() => refreshPreview(false), ms); };
   new MutationObserver(() => {
@@ -391,7 +391,7 @@
     else schedulePreview(1500);
   }).observe(document.documentElement, { childList: true, subtree: true });
   schedulePreview(1200);
-  // Встроенное окно вакансии (Indeed) меняет адрес без изменения основной страницы
+  // Indeed's job iframe changes its URL without changing the main page
   new MutationObserver(() => { previewSig = ''; schedulePreview(1500); })
     .observe(document.documentElement, { attributes: true, attributeFilter: ['src'], subtree: true });
   document.addEventListener('load', e => { if (e.target && e.target.tagName === 'IFRAME') { previewSig = ''; schedulePreview(800); } }, true);
@@ -402,11 +402,11 @@
     busy = true;
     try {
       const rec = await buildRecord(originEl);
-      if (!rec) { toast('Не получилось определить вакансию на этой странице', 'Добавить вручную', openDashboard, 6000); return; }
+      if (!rec) { toast('Couldn\'t find a job on this page', 'Add by hand', openDashboard, 6000); return; }
       const existing = await S.findByUrl(rec.url);
       if (existing) {
         if (source === 'manual') showPanel(existing, { isNew: false });
-        else toast(`Уже в трекере: ${existing.ticket} · ${A.statusLabel(existing.status)}`, 'Показать', () => showPanel(existing, { isNew: false }));
+        else toast(`Already in your tracker: ${existing.ticket} · ${A.statusLabel(existing.status)}`, 'Show', () => showPanel(existing, { isNew: false }));
         return;
       }
       const app = await S.addApp(rec);
@@ -414,20 +414,21 @@
       previewSig = '';
       setTimeout(() => refreshPreview(false), 500);
     } catch (e) {
-      if (String(e).includes('Extension context invalidated')) toast('Расширение обновилось — перезагрузи страницу');
+      if (String(e).includes('Extension context invalidated')) toast('Job Tracker was updated. Reload the page.');
       else console.warn('[Job Tracker]', e);
     } finally {
       setTimeout(() => { busy = false; }, 1500);
     }
   }
 
-  // ---------- Перехват кнопки «Apply» ----------
+  // ---------- Catching the Apply button ----------
+  // The Russian and Ukrainian phrases match job sites shown in those languages.
   const APPLY_RE = /^(easy apply|apply|apply now|quick apply|apply on (the )?company (site|website)|apply on employer site|continue to apply|continue applying|apply externally|apply for (this )?job|apply with (indeed|cv)|submit application|send application|подать заявку|откликнуться|податися|податись)\b/i;
   const NOT_RE = /(filter|applied|already|save|alert|show results|sign in|clear)/i;
 
   const APPLY_ATTR = '.jobs-apply-button, [data-live-test-job-apply-button], [data-control-name*="apply" i], [id*="applyButton" i], [id^="jobsearch-ApplyButton"], [data-testid*="apply-button" i], [data-testid*="applyButton" i], [data-qa*="apply" i], [data-at*="apply-button" i], [class*="apply-button" i], [class*="applyButton" i]';
 
-  // LinkedIn после возврата с сайта компании спрашивает «Did you apply?» — «Yes» тоже считаем подачей
+  // After you return from a company site, LinkedIn asks 'Did you apply?'. 'Yes' counts as applying too
   function isDidApplyYes(el) {
     const inner = ((el.innerText || '') + ' ' + (el.getAttribute('aria-label') || '')).trim();
     if (!/^(yes|да|так)\b/i.test(inner)) return false;
@@ -467,7 +468,7 @@
     try { auto = (await S.getProfile()).autoDetect !== false; } catch (err) { return; }
     if (auto) captureApplication('click', el);
   }
-  // pointerdown срабатывает раньше, чем сайт успеет открыть новую вкладку или сменить страницу
+  // pointerdown fires before the site opens a new tab or navigates away
   window.addEventListener('pointerdown', e => { if (e.button === 0 || e.button === 1) onPress(e); }, true);
   window.addEventListener('click', onPress, true);
   window.addEventListener('auxclick', onPress, true);
@@ -478,7 +479,7 @@
     if (msg && msg.type === 'ping') reply({ ok: true });
     if (msg && msg.type === 'preview') {
       previewHidden = false;
-      refreshPreview(true).then(r => { if (r === null) toast('Не вижу описания вакансии на этой странице'); });
+      refreshPreview(true).then(r => { if (r === null) toast('No job description found on this page'); });
       reply({ ok: true });
     }
   });

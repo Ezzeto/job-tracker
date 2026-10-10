@@ -16,7 +16,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 input[type=range],input[type=checkbox]{accent-color:var(--blue)}
 [hidden]{display:none!important}
 
-/* Навигация */
+/* Navigation */
 .side{width:220px;flex:none;background:var(--navy);color:#cfdbe6;padding:18px 12px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh}
 .brand{display:flex;align-items:center;gap:10px;color:#fff;font-weight:650;font-size:16px;padding:4px 10px 18px}
 .logo{width:22px;height:22px;border-radius:6px;background:#2f5877;box-shadow:inset 0 -7px 0 #4d9bd4}
@@ -44,7 +44,7 @@ main{flex:1;min-width:0;padding:24px 28px 60px;max-width:1680px}
 .btn.small{padding:4px 10px;font-size:12.5px}
 .btn.file{display:inline-flex;align-items:center}
 
-/* Воронка — главный элемент обзора */
+/* Funnel: the main element of the overview */
 .pipeline{display:grid;grid-template-columns:repeat(4,1fr);background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:12px}
 .stage{padding:18px 20px 16px;position:relative;border-right:1px solid var(--line)}
 .stage:last-child{border-right:0}
@@ -57,7 +57,7 @@ main{flex:1;min-width:0;padding:24px 28px 60px;max-width:1680px}
 .kpis{display:flex;flex-wrap:wrap;gap:8px 22px;margin:0 2px 16px;color:var(--muted);font-size:13px}
 .kpis b{color:var(--ink);font-variant-numeric:tabular-nums}
 
-/* Мини-графики */
+/* Small charts */
 .hbar{display:grid;grid-template-columns:130px 1fr 70px;align-items:center;gap:10px;margin:6px 0;font-size:13px}
 .hbar .track{height:14px;background:var(--soft);border-radius:3px;overflow:hidden;display:flex}
 .hbar .track i{height:100%}
@@ -74,7 +74,7 @@ svg text{font-family:var(--font)}
 .att .what span{font-size:12.5px;color:var(--muted)}
 .empty{color:var(--muted);font-size:13px}
 
-/* Таблица заявок */
+/* Applications table */
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .toolbar input,.toolbar select{border:1px solid var(--line);border-radius:6px;padding:7px 10px;background:#fff;width:auto}
 .toolbar input{flex:1;min-width:220px}
@@ -97,7 +97,7 @@ table.apps{width:100%;border-collapse:collapse;font-size:13.5px}
 .c-good{background:var(--good-soft);color:#1d6b40}.c-mid{background:var(--mid-soft);color:#7a5510}.c-bad{background:var(--bad-soft);color:#8f2f26}
 .empty-state{background:var(--panel);border:1px dashed var(--line);border-radius:var(--r);padding:28px;text-align:center;color:var(--muted)}
 
-/* Карточка заявки */
+/* Application drawer */
 .scrim{position:fixed;inset:0;background:rgba(15,30,45,.35);z-index:20}
 .drawer{position:fixed;top:0;right:0;bottom:0;width:min(640px,100vw);background:var(--bg);z-index:21;overflow-y:auto;box-shadow:-10px 0 30px rgba(15,30,45,.2);display:flex;flex-direction:column}
 .dr-head{background:var(--navy);color:#fff;padding:16px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:2}
@@ -132,7 +132,7 @@ textarea{resize:vertical;min-height:60px}
 .msg{color:var(--muted);font-size:13px;margin:10px 0 0}
 .msg:empty{display:none}
 
-/* Google Таблица */
+/* Google Sheet */
 .sync-state{font-size:12.5px;color:var(--muted)}
 .sync-state.ok{color:#1d6b40}.sync-state.err{color:#8f2f26}
 .howto{margin-top:14px;font-size:13.5px}
@@ -155,7 +155,7 @@ textarea{resize:vertical;min-height:60px}
 a.btn{text-decoration:none;display:inline-flex;align-items:center;color:inherit}
 a.btn.primary{color:#fff}
 
-/* Навыки */
+/* Skills */
 .skill-group{margin-bottom:16px}
 .skill-group h3{font-size:13px;color:var(--muted);font-weight:600;margin:0 0 6px}
 .skills{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px 18px}
@@ -167,7 +167,7 @@ a.btn.primary{color:#fff}
 .seg button[aria-pressed=true].b{background:var(--mid-soft);color:#7a5510;font-weight:600}
 .seg button[aria-pressed=true].n{background:var(--bad-soft);color:#8f2f26;font-weight:600}
 
-/* Офферы */
+/* Offers */
 .offers-table-wrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow-x:auto;margin-bottom:16px}
 table.offers{border-collapse:collapse;width:100%;font-size:13.5px}
 .offers th,.offers td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:middle}

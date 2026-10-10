@@ -1,19 +1,19 @@
-/* Job Tracker — дашборд */
+/* Job Tracker — dashboard */
 (async function () {
   'use strict';
   const A = JT_Analyzer, S = JT_Store;
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const fmtDate = d => d ? new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   const money = n => (n == null || isNaN(n)) ? '—' : '£' + Math.round(n).toLocaleString('en-GB');
   const pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '—';
   const daysSince = d => Math.floor((Date.now() - new Date(d).getTime()) / 864e5);
   const chanceClass = n => n >= 70 ? 'c-good' : n >= 50 ? 'c-mid' : 'c-bad';
-  const PER = { year: '/год', hour: '/час', day: '/день', week: '/нед', month: '/мес' };
+  const PER = { year: '/yr', hour: '/hr', day: '/day', week: '/wk', month: '/mo' };
   const fmtSal = a => {
     const x = a.salary;
-    if (!x || !x.min) return a.salaryText ? esc(a.salaryText) : '<span style="color:#5a6b7d">не указана</span>';
+    if (!x || !x.min) return a.salaryText ? esc(a.salaryText) : '<span style="color:#5a6b7d">not listed</span>';
     const f = n => n >= 1000 ? '£' + (Math.round(n / 100) / 10) + 'k' : '£' + n;
     return `<span style="white-space:nowrap">${f(x.min)}${x.max && x.max !== x.min ? '–' + f(x.max).slice(1) : ''}${PER[x.period] || ''}</span>`;
   };
@@ -21,14 +21,14 @@
 
   let apps = await S.getApps();
   let profile = await S.getProfile();
-  let current = null; // карточка открыта
+  let current = null; // the open drawer
 
   chrome.storage.onChanged.addListener(async ch => {
     if (ch.apps) { apps = await S.getApps(); renderAll(); }
     if (ch.profile) { profile = await S.getProfile(); }
   });
 
-  // ---------- Навигация ----------
+  // ---------- Navigation ----------
   function route() {
     const h = location.hash.slice(1) || 'overview';
     let view = h.split('=')[0];
@@ -55,17 +55,17 @@
     ({ overview: renderOverview, apps: renderApps, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
   }
 
-  // ---------- ОБЗОР ----------
+  // ---------- OVERVIEW ----------
   function renderOverview() {
     const total = apps.length;
     const responded = apps.filter(a => S.everReached(a, A.RESPONDED)).length;
     const interviews = apps.filter(a => S.everReached(a, A.INTERVIEW)).length;
     const offers = apps.filter(a => S.everReached(a, A.OFFER)).length;
     const stages = [
-      { lbl: 'Подано', n: total, conv: total ? `за всё время` : 'нажми «Apply» на сайте', c: '#5a6b7d' },
-      { lbl: 'Ответили', n: responded, conv: `${pct(responded, total)} от поданных`, c: '#1f7fb0' },
-      { lbl: 'Интервью', n: interviews, conv: `${pct(interviews, responded)} от ответивших`, c: '#7a4fc0' },
-      { lbl: 'Офферы', n: offers, conv: `${pct(offers, interviews)} от интервью`, c: '#23905a' },
+      { lbl: 'Applied', n: total, conv: total ? 'all time' : 'press Apply on a job site', c: '#5a6b7d' },
+      { lbl: 'Responses', n: responded, conv: `${pct(responded, total)} of applications`, c: '#1f7fb0' },
+      { lbl: 'Interviews', n: interviews, conv: `${pct(interviews, responded)} of responses`, c: '#7a4fc0' },
+      { lbl: 'Offers', n: offers, conv: `${pct(offers, interviews)} of interviews`, c: '#23905a' },
     ];
     $('#pipeline').innerHTML = stages.map(s => `
       <div class="stage"><div class="lbl">${s.lbl}</div><div class="num">${s.n}</div>
@@ -78,8 +78,8 @@
     const week = apps.filter(a => daysSince(a.appliedAt) < 7).length;
     const withChance = apps.filter(a => a.chance);
     const avg = withChance.length ? Math.round(withChance.reduce((s, a) => s + a.chance.score, 0) / withChance.length) : null;
-    $('#kpis').innerHTML = `<span>В процессе: <b>${active}</b></span><span>Отказы: <b>${rejected}</b></span><span>Без ответа: <b>${noresp}</b></span>
-      <span>За 7 дней: <b>${week}</b></span><span>Средние шансы: <b>${avg == null ? '—' : avg + '%'}</b></span>`;
+    $('#kpis').innerHTML = `<span>In progress: <b>${active}</b></span><span>Rejected: <b>${rejected}</b></span><span>No response: <b>${noresp}</b></span>
+      <span>Last 7 days: <b>${week}</b></span><span>Average fit: <b>${avg == null ? '—' : avg + '%'}</b></span>`;
 
     renderWeekly();
     renderPlatforms();
@@ -100,44 +100,44 @@
     });
     const max = Math.ceil(Math.max(4, ...buckets.map(b => b.n)) / 2) * 2;
     const W = 560, H = 200, pad = 26, bw = (W - pad) / weeks;
-    let svg = `<svg viewBox="0 0 ${W} ${H + 24}" width="100%" role="img" aria-label="Заявки по неделям">`;
+    let svg = `<svg viewBox="0 0 ${W} ${H + 24}" width="100%" role="img" aria-label="Applications per week">`;
     [0, .5, 1].forEach(f => { const y = H - f * (H - 10); svg += `<line x1="${pad}" x2="${W}" y1="${y}" y2="${y}" stroke="#e3e9ef"/><text x="0" y="${y + 4}" font-size="11" fill="#5a6b7d">${Math.round(max * f)}</text>`; });
     buckets.forEach((b, i) => {
       const x = pad + i * bw + 6, w = bw - 12;
       const h = b.n / max * (H - 10), hr = b.r / max * (H - 10);
-      svg += `<rect x="${x}" y="${H - h}" width="${w}" height="${h}" rx="3" fill="#b9d3e8"><title>${b.n} подано</title></rect>`;
-      svg += `<rect x="${x}" y="${H - hr}" width="${w}" height="${hr}" rx="3" fill="#1f6fa8"><title>${b.r} с ответом</title></rect>`;
+      svg += `<rect x="${x}" y="${H - h}" width="${w}" height="${h}" rx="3" fill="#b9d3e8"><title>${b.n} applied</title></rect>`;
+      svg += `<rect x="${x}" y="${H - hr}" width="${w}" height="${hr}" rx="3" fill="#1f6fa8"><title>${b.r} with a response</title></rect>`;
       if (b.n) svg += `<text x="${x + w / 2}" y="${H - h - 5}" font-size="11" text-anchor="middle" fill="#1c2733">${b.n}</text>`;
-      svg += `<text x="${x + w / 2}" y="${H + 16}" font-size="10.5" text-anchor="middle" fill="#5a6b7d">${b.s.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}</text>`;
+      svg += `<text x="${x + w / 2}" y="${H + 16}" font-size="10.5" text-anchor="middle" fill="#5a6b7d">${b.s.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</text>`;
     });
     svg += '</svg>';
-    $('#weekly').innerHTML = svg + `<div class="legend"><span style="--c:#b9d3e8">Подано</span><span style="--c:#1f6fa8">Получили ответ</span></div>`;
+    $('#weekly').innerHTML = svg + `<div class="legend"><span style="--c:#b9d3e8">Applied</span><span style="--c:#1f6fa8">Got a response</span></div>`;
   }
 
   function renderPlatforms() {
     const map = {};
-    apps.forEach(a => { const p = a.platform || 'Другое'; map[p] = map[p] || { n: 0, r: 0 }; map[p].n++; if (S.everReached(a, A.RESPONDED)) map[p].r++; });
+    apps.forEach(a => { const p = a.platform || 'Other'; map[p] = map[p] || { n: 0, r: 0 }; map[p].n++; if (S.everReached(a, A.RESPONDED)) map[p].r++; });
     const rows = Object.entries(map).sort((a, b) => b[1].n - a[1].n);
-    if (!rows.length) { $('#platforms').innerHTML = '<p class="empty">Здесь появится, какие сайты чаще дают ответ.</p>'; return; }
+    if (!rows.length) { $('#platforms').innerHTML = '<p class="empty">This will show which sites lead to responses.</p>'; return; }
     const max = rows[0][1].n;
     $('#platforms').innerHTML = rows.map(([p, v]) => `
       <div class="hbar"><span class="name" title="${esc(p)}">${esc(p)}</span>
       <span class="track"><i style="width:${v.r / max * 100}%;background:#1f6fa8"></i><i style="width:${(v.n - v.r) / max * 100}%;background:#b9d3e8"></i></span>
       <span class="v">${v.n} · ${pct(v.r, v.n)}</span></div>`).join('') +
-      `<div class="legend"><span style="--c:#1f6fa8">С ответом</span><span style="--c:#b9d3e8">Без ответа</span><span style="--c:transparent">справа: всего · % ответа</span></div>`;
+      `<div class="legend"><span style="--c:#1f6fa8">Response</span><span style="--c:#b9d3e8">No response</span><span style="--c:transparent">right: total · response rate</span></div>`;
   }
 
   function renderToolsTop() {
     const cnt = {};
     apps.forEach(a => (a.tools || []).forEach(t => { cnt[t] = (cnt[t] || 0) + 1; }));
     const rows = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 12);
-    if (!rows.length) { $('#toolsTop').innerHTML = '<p class="empty">После первых заявок здесь будет список того, что стоит подтянуть к интервью.</p>'; return; }
+    if (!rows.length) { $('#toolsTop').innerHTML = '<p class="empty">After your first applications this lists the skills worth brushing up before interviews.</p>'; return; }
     const max = rows[0][1];
     const col = t => ({ strong: '#5fb487', basic: '#e0ae4a', none: '#d9776c' })[profile.skills[t] || 'none'];
     const miss = Object.entries(cnt).filter(([t]) => (profile.skills[t] || 'none') === 'none').sort((a, b) => b[1] - a[1]).slice(0, 4).map(([t]) => t);
     $('#toolsTop').innerHTML = rows.map(([t, n]) => `
-      <div class="hbar"><span class="name" title="${esc(t)}">${esc(t)}</span><span class="track"><i style="width:${n / max * 100}%;background:${col(t)}"></i></span><span class="v">${n} ${[2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'раза' : 'раз'}</span></div>`).join('') +
-      (miss.length ? `<p class="hint" style="margin:10px 0 0">Подтянуть в первую очередь: <b>${miss.map(esc).join(', ')}</b></p>` : '');
+      <div class="hbar"><span class="name" title="${esc(t)}">${esc(t)}</span><span class="track"><i style="width:${n / max * 100}%;background:${col(t)}"></i></span><span class="v">${n}×</span></div>`).join('') +
+      (miss.length ? `<p class="hint" style="margin:10px 0 0">Learn first: <b>${miss.map(esc).join(', ')}</b></p>` : '');
   }
 
   function renderAttention() {
@@ -145,39 +145,39 @@
     apps.forEach(a => {
       if (a.nextDate) {
         const d = Math.ceil((new Date(a.nextDate) - Date.now()) / 864e5);
-        if (d >= -1 && d <= 7) items.push({ a, prio: 0, text: d <= 0 ? 'Следующий шаг сегодня' : `Следующий шаг через ${d} дн. (${fmtDate(a.nextDate)})` });
+        if (d >= -1 && d <= 7) items.push({ a, prio: 0, text: d <= 0 ? 'Next step is today' : `Next step in ${d} day${d === 1 ? '' : 's'} (${fmtDate(a.nextDate)})` });
       }
       if (a.status === 'applied') {
         const d = daysSince(a.appliedAt);
         const fu = a.followUps || [];
         const dl = fu.length ? daysSince(fu[fu.length - 1].at) : null;
         const cnt = (a.contacts || []).filter(c => c.type !== 'name').length;
-        const ctext = cnt ? ` · контактов: ${cnt}` : '';
-        if ((fu.length >= 2 && dl >= 10) || d >= 35) items.push({ a, prio: 2, text: `${d} дн. без ответа${fu.length ? `, follow-up: ${fu.length}` : ''}`, action: 'noresponse' });
-        else if (fu.length === 0 && d >= 7) items.push({ a, prio: 1, text: `${d} дн. без ответа — пора follow-up${ctext}`, fu: true });
-        else if (fu.length === 1 && dl >= 7) items.push({ a, prio: 1, text: `Follow-up был ${dl} дн. назад — можно второй${ctext}`, fu: true });
+        const ctext = cnt ? ` · ${cnt} contact${cnt === 1 ? '' : 's'}` : '';
+        if ((fu.length >= 2 && dl >= 10) || d >= 35) items.push({ a, prio: 2, text: `${d} days without a reply${fu.length ? `, ${fu.length} follow-up${fu.length === 1 ? '' : 's'}` : ''}`, action: 'noresponse' });
+        else if (fu.length === 0 && d >= 7) items.push({ a, prio: 1, text: `${d} days without a reply: time to follow up${ctext}`, fu: true });
+        else if (fu.length === 1 && dl >= 7) items.push({ a, prio: 1, text: `Followed up ${dl} days ago: you can send a second one${ctext}`, fu: true });
       }
-      if (a.status === 'offer' && a.offer && a.offer.deadline) items.push({ a, prio: 0, text: `Ответить на оффер до ${fmtDate(a.offer.deadline)}` });
+      if (a.status === 'offer' && a.offer && a.offer.deadline) items.push({ a, prio: 0, text: `Reply to the offer by ${fmtDate(a.offer.deadline)}` });
     });
     items.sort((x, y) => x.prio - y.prio);
-    if (!items.length) { $('#attention').innerHTML = '<p class="empty">Всё под контролем. Здесь появятся напоминания о follow-up, интервью и сроках офферов.</p>'; return; }
+    if (!items.length) { $('#attention').innerHTML = '<p class="empty">Nothing urgent. Reminders about follow-ups, interviews and offer deadlines appear here.</p>'; return; }
     $('#attention').innerHTML = items.slice(0, 8).map((it, i) => `
-      <div class="att"><div class="what"><b>${esc(it.a.title || 'Без названия')}${it.a.company ? ' — ' + esc(it.a.company) : ''}</b><span>${esc(it.text)}</span></div>
-      <div class="btns">${it.action ? `<button class="btn small" data-nr="${it.a.id}">Отметить «Нет ответа»</button>` : ''}${it.fu ? `<button class="btn small primary" data-fu="${it.a.id}">Follow-up</button>` : ''}<button class="btn small" data-open="${it.a.id}">Открыть</button></div></div>`).join('');
+      <div class="att"><div class="what"><b>${esc(it.a.title || 'Untitled')}${it.a.company ? ' — ' + esc(it.a.company) : ''}</b><span>${esc(it.text)}</span></div>
+      <div class="btns">${it.action ? `<button class="btn small" data-nr="${it.a.id}">Mark as no response</button>` : ''}${it.fu ? `<button class="btn small primary" data-fu="${it.a.id}">Follow-up</button>` : ''}<button class="btn small" data-open="${it.a.id}">Open</button></div></div>`).join('');
     $$('#attention [data-open]').forEach(b => b.onclick = () => openDrawer(apps.find(a => a.id === b.dataset.open)));
     $$('#attention [data-fu]').forEach(b => b.onclick = () => openDrawer(apps.find(a => a.id === b.dataset.fu), { focusFollowUp: true }));
     $$('#attention [data-nr]').forEach(b => b.onclick = async () => { await S.updateApp(b.dataset.nr, { status: 'noresponse' }); });
   }
 
-  // ---------- ЗАЯВКИ ----------
+  // ---------- APPLICATIONS ----------
   function fillFilters() {
     const keep = id => $(id).value;
     const st = keep('#fStatus'), pl = keep('#fPlatform'), ca = keep('#fCategory');
-    $('#fStatus').innerHTML = '<option value="">Все статусы</option>' + A.STATUSES.map(s => `<option value="${s.id}">${esc(s.label)}</option>`).join('');
+    $('#fStatus').innerHTML = '<option value="">All statuses</option>' + A.STATUSES.map(s => `<option value="${s.id}">${esc(s.label)}</option>`).join('');
     const plats = [...new Set(apps.map(a => a.platform).filter(Boolean))].sort();
-    $('#fPlatform').innerHTML = '<option value="">Все платформы</option>' + plats.map(p => `<option>${esc(p)}</option>`).join('');
+    $('#fPlatform').innerHTML = '<option value="">All sources</option>' + plats.map(p => `<option>${esc(p)}</option>`).join('');
     const cats = [...new Set(apps.map(a => a.category).filter(Boolean))].sort();
-    $('#fCategory').innerHTML = '<option value="">Все направления</option>' + cats.map(p => `<option>${esc(p)}</option>`).join('');
+    $('#fCategory').innerHTML = '<option value="">All role types</option>' + cats.map(p => `<option>${esc(p)}</option>`).join('');
     $('#fStatus').value = st; $('#fPlatform').value = pl; $('#fCategory').value = ca;
   }
   ['#fSearch', '#fStatus', '#fPlatform', '#fCategory', '#fSort'].forEach(id => $(id).addEventListener('input', renderAppsRows));
@@ -196,7 +196,7 @@
 
     const empty = $('#appsEmpty');
     empty.hidden = list.length > 0;
-    empty.textContent = apps.length ? 'Ничего не найдено по этим фильтрам.' : 'Заявок пока нет. Открой вакансию на LinkedIn, Indeed, Reed, Totaljobs или CV-Library и нажми «Apply» — она появится здесь. Или добавь вручную кнопкой «Новая заявка».';
+    empty.textContent = apps.length ? 'Nothing matches these filters.' : 'No applications yet. Open a job on LinkedIn, Indeed, Reed, Totaljobs or CV-Library and press Apply, and it appears here. Or add one with New application.';
     $('.table-wrap').hidden = !list.length;
 
     const stOpts = cur => A.STATUSES.map(s => `<option value="${s.id}" ${s.id === cur ? 'selected' : ''}>${esc(s.label)}</option>`).join('');
@@ -205,8 +205,8 @@
       <tr data-id="${a.id}">
         <td><span class="ticket">${esc(a.ticket)}</span></td>
         <td>${a.chance ? `<span class="chance ${chanceClass(a.chance.score)}">${a.chance.score}%</span>` : '—'}</td>
-        <td class="job"><b title="${esc(a.title)}">${esc(a.title || 'Без названия')}</b><span title="${esc([a.company, a.location].filter(Boolean).join(' · '))}">${esc([a.company, a.location].filter(Boolean).join(' · '))}</span></td>
-        <td><select class="st-select" data-st="${a.id}" aria-label="Статус" style="background-image:radial-gradient(circle,${A.statusColor(a.status)} 60%,transparent 62%)">${stOpts(a.status)}</select></td>
+        <td class="job"><b title="${esc(a.title)}">${esc(a.title || 'Untitled')}</b><span title="${esc([a.company, a.location].filter(Boolean).join(' · '))}">${esc([a.company, a.location].filter(Boolean).join(' · '))}</span></td>
+        <td><select class="st-select" data-st="${a.id}" aria-label="Status" style="background-image:radial-gradient(circle,${A.statusColor(a.status)} 60%,transparent 62%)">${stOpts(a.status)}</select></td>
         <td class="nowrap">${fmtDate(a.appliedAt)}</td>
         <td>${fmtSal(a)}</td>
         <td class="c-plat">${esc(a.platform || '—')}</td>
@@ -217,25 +217,25 @@
     $$('#appsBody .st-select').forEach(s => { s.onclick = e => e.stopPropagation(); s.onchange = () => S.updateApp(s.dataset.st, { status: s.value }); });
   }
 
-  // ---------- КАРТОЧКА ----------
+  // ---------- DRAWER ----------
   function ring(score) {
     const r = 36, c = 2 * Math.PI * r, col = score >= 70 ? '#23905a' : score >= 50 ? '#b47a12' : '#c0463b';
-    return `<svg class="score-ring" viewBox="0 0 84 84" role="img" aria-label="Шансы ${score}%"><circle cx="42" cy="42" r="${r}" fill="none" stroke="#e3e9ef" stroke-width="8"/>
+    return `<svg class="score-ring" viewBox="0 0 84 84" role="img" aria-label="Fit ${score}%"><circle cx="42" cy="42" r="${r}" fill="none" stroke="#e3e9ef" stroke-width="8"/>
       <circle cx="42" cy="42" r="${r}" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${c * score / 100} ${c}" transform="rotate(-90 42 42)"/>
       <text x="42" y="48" text-anchor="middle" font-size="19" font-weight="700" fill="${col}">${score}%</text></svg>`;
   }
 
   function analysisHtml(a) {
-    if (!a.chance) return '<p class="empty">Вставь описание вакансии ниже и нажми «Пересчитать анализ».</p>';
+    if (!a.chance) return '<p class="empty">Paste the job description below and press Re-analyse.</p>';
     const c = a.chance;
-    return `<div class="score-card">${ring(c.score)}<div style="flex:1"><b>Шансы: ${esc(c.label)}</b>
-      <ul class="reasons">${c.reasons.map(r => `<li><span>${esc(r.text)}</span><span class="d" style="color:${r.delta == null ? '#5a6b7d' : r.delta > 0 ? '#23905a' : r.delta < 0 ? '#c0463b' : '#5a6b7d'}">${r.delta == null ? 'база' : r.delta > 0 ? '+' + r.delta : r.delta === 0 ? 'совет' : r.delta}</span></li>`).join('')}</ul></div></div>
+    return `<div class="score-card">${ring(c.score)}<div style="flex:1"><b>Fit: ${esc(c.label)}</b>
+      <ul class="reasons">${c.reasons.map(r => `<li><span>${esc(r.text)}</span><span class="d" style="color:${r.delta == null ? '#5a6b7d' : r.delta > 0 ? '#23905a' : r.delta < 0 ? '#c0463b' : '#5a6b7d'}">${r.delta == null ? 'base' : r.delta > 0 ? '+' + r.delta : r.delta === 0 ? 'tip' : r.delta}</span></li>`).join('')}</ul></div></div>
       <div class="tools">${c.matched.map(t => `<span class="t s">${esc(t)}</span>`).join('')}${c.basic.map(t => `<span class="t b">${esc(t)}</span>`).join('')}${c.missing.map(t => `<span class="t m">${esc(t)}</span>`).join('')}</div>
-      ${c.missing.length ? `<p class="hint" style="margin:8px 0 0">Подготовиться к интервью: ${c.missing.map(esc).join(', ')}.</p>` : ''}`;
+      ${c.missing.length ? `<p class="hint" style="margin:8px 0 0">Prepare for the interview: ${c.missing.map(esc).join(', ')}.</p>` : ''}`;
   }
 
   function benefitsHtml(a) {
-    return (a.benefits || []).length ? `<ul class="details">${a.benefits.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="empty">В описании не найдено. Можно дописать в заметки.</p>';
+    return (a.benefits || []).length ? `<ul class="details">${a.benefits.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="empty">None found in the description. You can add them to your notes.</p>';
   }
   // ---------- FOLLOW-UP ----------
   const TYPE_ICON = { email: '✉', phone: '☎', linkedin: 'in', name: '👤' };
@@ -252,37 +252,37 @@
     const sel = options[+box.dataset.to || 0] || options[0] || contacts.find(c => c.name) || null;
     const msg = F.build(a, channel, sel, profile);
     box.innerHTML = `
-      <div class="row-between"><h2>Follow-up</h2><span class="hint" style="margin:0">${agency ? 'Агентство' : 'Работодатель'} · отправлено: ${fu.length}${fu.length ? `, последний ${fmtDate(fu[fu.length - 1].at)}` : ''}</span></div>
-      <div class="fu-contacts">${contacts.length ? contacts.map((c, i) => `<span class="fu-c" title="${esc(c.source || '')}"><b>${TYPE_ICON[c.type] || '•'}</b> ${esc(c.name && c.type !== 'name' ? c.name + ' · ' : '')}${esc(c.type === 'linkedin' ? 'LinkedIn' : c.value)}<button data-rm="${i}" aria-label="Удалить контакт">×</button></span>`).join('') : '<p class="empty" style="margin:0">Контактов в вакансии не нашлось. Добавь вручную: имя рекрутера из объявления, почту агентства или ссылку на профиль в LinkedIn.</p>'}</div>
+      <div class="row-between"><h2>Follow-up</h2><span class="hint" style="margin:0">${agency ? 'Agency' : 'Employer'} · sent: ${fu.length}${fu.length ? `, last on ${fmtDate(fu[fu.length - 1].at)}` : ''}</span></div>
+      <div class="fu-contacts">${contacts.length ? contacts.map((c, i) => `<span class="fu-c" title="${esc(c.source || '')}"><b>${TYPE_ICON[c.type] || '•'}</b> ${esc(c.name && c.type !== 'name' ? c.name + ' · ' : '')}${esc(c.type === 'linkedin' ? 'LinkedIn' : c.value)}<button data-rm="${i}" aria-label="Remove contact">×</button></span>`).join('') : '<p class="empty" style="margin:0">No contacts found in the ad. Add one: the recruiter named in the ad, the agency email or a LinkedIn profile link.</p>'}</div>
       <div class="fu-add">
-        <select id="fuType" aria-label="Тип контакта"><option value="email">Email</option><option value="linkedin">LinkedIn</option><option value="phone">Телефон</option><option value="name">Только имя</option></select>
-        <input type="text" id="fuVal" placeholder="email, ссылка или телефон" aria-label="Контакт">
-        <input type="text" id="fuName" placeholder="Имя (необязательно)" aria-label="Имя">
-        <button class="btn small" id="fuAdd">Добавить</button>
+        <select id="fuType" aria-label="Contact type"><option value="email">Email</option><option value="linkedin">LinkedIn</option><option value="phone">Phone</option><option value="name">Name only</option></select>
+        <input type="text" id="fuVal" placeholder="email, link or phone" aria-label="Contact">
+        <input type="text" id="fuName" placeholder="Name (optional)" aria-label="Name">
+        <button class="btn small" id="fuAdd">Add</button>
       </div>
-      <div class="seg fu-seg" role="group" aria-label="Канал">
-        ${[['email', 'Email'], ['linkedin', 'LinkedIn'], ['call', 'Звонок']].map(([k, l]) => `<button data-ch="${k}" aria-pressed="${k === channel}">${l}</button>`).join('')}
+      <div class="seg fu-seg" role="group" aria-label="Channel">
+        ${[['email', 'Email'], ['linkedin', 'LinkedIn'], ['call', 'Call']].map(([k, l]) => `<button data-ch="${k}" aria-pressed="${k === channel}">${l}</button>`).join('')}
       </div>
-      ${options.length > 1 ? `<label>Кому<select id="fuTo">${options.map((c, i) => `<option value="${i}" ${c === sel ? 'selected' : ''}>${esc((c.name ? c.name + ' — ' : '') + (c.type === 'linkedin' ? 'LinkedIn' : c.value))}</option>`).join('')}</select></label>` : ''}
-      ${channel === 'email' ? `<label>Тема<input type="text" id="fuSubj" value="${esc(msg.subject)}"></label>` : ''}
-      <label>${channel === 'call' ? 'Что сказать по телефону' : 'Текст'}<textarea id="fuBody" rows="${channel === 'linkedin' ? 5 : 11}">${esc(msg.body)}</textarea></label>
+      ${options.length > 1 ? `<label>To<select id="fuTo">${options.map((c, i) => `<option value="${i}" ${c === sel ? 'selected' : ''}>${esc((c.name ? c.name + ' — ' : '') + (c.type === 'linkedin' ? 'LinkedIn' : c.value))}</option>`).join('')}</select></label>` : ''}
+      ${channel === 'email' ? `<label>Subject<input type="text" id="fuSubj" value="${esc(msg.subject)}"></label>` : ''}
+      <label>${channel === 'call' ? 'What to say on the phone' : 'Message'}<textarea id="fuBody" rows="${channel === 'linkedin' ? 5 : 11}">${esc(msg.body)}</textarea></label>
       ${channel === 'linkedin' ? '<p class="hint" style="margin:4px 0 0" id="fuLen"></p>' : ''}
       <div class="btns" style="margin-top:10px">
-        ${channel === 'email' ? `<button class="btn primary" id="fuSend">${profile.mailClient === 'outlook' ? 'Открыть в Outlook' : profile.mailClient === 'mailto' ? 'Открыть в почте' : 'Открыть в Gmail'}</button>` : ''}
-        ${channel === 'linkedin' ? `<button class="btn primary" id="fuLi">${sel ? 'Скопировать и открыть профиль' : 'Скопировать и найти рекрутера'}</button>` : ''}
-        ${channel === 'call' && sel ? `<a class="btn primary" href="tel:${esc(sel.value.replace(/\s/g, ''))}">Позвонить ${esc(sel.value)}</a>` : ''}
-        <button class="btn" id="fuCopy">Скопировать текст</button>
-        <button class="btn" id="fuDone">Отметить как отправленный</button>
+        ${channel === 'email' ? `<button class="btn primary" id="fuSend">${profile.mailClient === 'outlook' ? 'Open in Outlook' : profile.mailClient === 'mailto' ? 'Open in mail app' : 'Open in Gmail'}</button>` : ''}
+        ${channel === 'linkedin' ? `<button class="btn primary" id="fuLi">${sel ? 'Copy and open profile' : 'Copy and find a recruiter'}</button>` : ''}
+        ${channel === 'call' && sel ? `<a class="btn primary" href="tel:${esc(sel.value.replace(/\s/g, ''))}">Call ${esc(sel.value)}</a>` : ''}
+        <button class="btn" id="fuCopy">Copy text</button>
+        <button class="btn" id="fuDone">Mark as sent</button>
       </div>
       <p class="msg" id="fuMsg" role="status"></p>
-      ${fu.length ? `<ul class="timeline" style="margin-top:10px">${fu.map(f => `<li style="--c:#1f6fa8">Follow-up · ${esc({ email: 'Email', linkedin: 'LinkedIn', call: 'Звонок' }[f.channel] || f.channel)}${f.to ? ' · ' + esc(f.to) : ''}<span>${fmtDate(f.at)}</span></li>`).join('')}</ul>` : ''}`;
+      ${fu.length ? `<ul class="timeline" style="margin-top:10px">${fu.map(f => `<li style="--c:#1f6fa8">Follow-up · ${esc({ email: 'Email', linkedin: 'LinkedIn', call: 'Call' }[f.channel] || f.channel)}${f.to ? ' · ' + esc(f.to) : ''}<span>${fmtDate(f.at)}</span></li>`).join('')}</ul>` : ''}`;
 
     const saveContacts = async list => { a.contacts = list; await S.updateApp(a.id, { contacts: list }); apps = await S.getApps(); renderFollowUp(a); };
     box.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => saveContacts(contacts.filter((_, i) => i !== +b.dataset.rm)));
     $('#fuAdd').onclick = () => {
       const type = $('#fuType').value, value = $('#fuVal').value.trim(), name = $('#fuName').value.trim();
       if (!value && !name) return;
-      saveContacts(contacts.concat([{ type, value: value || name, name, source: 'добавлено вручную' }]));
+      saveContacts(contacts.concat([{ type, value: value || name, name, source: 'added manually' }]));
     };
     box.querySelectorAll('[data-ch]').forEach(b => b.onclick = () => { box.dataset.channel = b.dataset.ch; box.dataset.to = 0; renderFollowUp(a); });
     if ($('#fuTo')) $('#fuTo').onchange = () => { box.dataset.to = $('#fuTo').value; renderFollowUp(a); };
@@ -292,21 +292,21 @@
     const upd = () => {
       if (!$('#fuLen')) return;
       const n = body().length, lim = F.LI_LIMIT;
-      $('#fuLen').textContent = n > lim ? `${n} / ${lim} — для записки к приглашению нужно короче. Если вы уже в контактах, можно отправить как обычное сообщение.` : `${n} / ${lim} символов — помещается в записку к приглашению.`;
+      $('#fuLen').textContent = n > lim ? `${n} / ${lim}: too long for a connection note. If you are already connected, send it as a normal message.` : `${n} / ${lim} characters: fits in a connection note.`;
       $('#fuLen').style.color = n > lim ? '#8f2f26' : '';
     };
     $('#fuBody').oninput = upd; upd();
-    $('#fuCopy').onclick = async () => { await copy(); say('Текст скопирован.'); };
+    $('#fuCopy').onclick = async () => { await copy(); say('Copied.'); };
     if ($('#fuSend')) $('#fuSend').onclick = () => {
       const to = sel && sel.type === 'email' ? sel.value : '';
       const url = (F.links[profile.mailClient] || F.links.gmail)(to, subj(), body());
       window.open(url, '_blank');
-      say(to ? 'Письмо открыто — проверь и нажми «Отправить», затем отметь follow-up.' : 'Адреса нет — впиши получателя в письме. После отправки отметь follow-up.');
+      say(to ? 'Email opened. Check it, press Send, then mark it as sent here.' : 'No address yet: add the recipient in the email. After sending, mark it as sent here.');
     };
     if ($('#fuLi')) $('#fuLi').onclick = async () => {
       await copy();
       window.open(sel ? sel.value : F.links.linkedinSearch(a.company), '_blank');
-      say(sel ? 'Текст скопирован. На LinkedIn нажми «Connect» → «Add a note» или «Message» и вставь (Ctrl+V).' : 'Текст скопирован. Найди рекрутера компании в результатах поиска, добавь его в этот список и отправь сообщение.');
+      say(sel ? 'Copied. On LinkedIn press Connect → Add a note, or Message, and paste (Ctrl+V).' : 'Copied. Find the company\'s recruiter in the results, add them to this list and send the message.');
     };
     $('#fuDone').onclick = async () => {
       const list = (a.followUps || []).concat([{ at: new Date().toISOString(), channel, to: sel ? (sel.name || sel.value) : '' }]);
@@ -316,18 +316,18 @@
       apps = await S.getApps();
       if ($('#dNext') && list.length < 2) $('#dNext').value = next;
       renderFollowUp(a);
-      $('#fuMsg').textContent = list.length < 2 ? 'Отмечено. Напомню о втором follow-up через неделю.' : 'Отмечено. Если ответа не будет — отметь заявку «Нет ответа».';
+      $('#fuMsg').textContent = list.length < 2 ? 'Marked. You\'ll be reminded about a second follow-up in a week.' : 'Marked. If there is still no reply, set the status to No response.';
     };
   }
 
   function detailsHtml(a) {
-    return (a.details || []).length ? `<ul class="details">${a.details.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="empty">Пока ничего. Появится после анализа описания.</p>';
+    return (a.details || []).length ? `<ul class="details">${a.details.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="empty">Nothing yet. Appears once the description is analysed.</p>';
   }
 
   function openDrawer(app, opts = {}) {
     const isNew = !app;
     const a = app ? JSON.parse(JSON.stringify(app)) : {
-      title: '', company: '', location: '', url: '', platform: 'LinkedIn', category: 'IT Help Desk / Service Desk',
+      title: '', company: '', location: '', url: '', platform: 'LinkedIn', category: 'Other',
       workTypes: [], salaryText: '', status: 'applied', appliedAt: new Date().toISOString(), notes: '', nextDate: '', description: '', history: [], details: [], tools: [], chance: null,
     };
     current = a;
@@ -335,37 +335,37 @@
     const plats = S.PLATFORMS.includes(a.platform) || !a.platform ? S.PLATFORMS : [a.platform].concat(S.PLATFORMS);
     const d = $('#drawer');
     d.innerHTML = `
-      <div class="dr-head">${a.ticket ? `<span class="ticket">${esc(a.ticket)}</span>` : ''}<h2>${isNew ? 'Новая заявка' : esc(a.title || 'Без названия')}</h2><button class="x" aria-label="Закрыть">×</button></div>
+      <div class="dr-head">${a.ticket ? `<span class="ticket">${esc(a.ticket)}</span>` : ''}<h2>${isNew ? 'New application' : esc(a.title || 'Untitled')}</h2><button class="x" aria-label="Close">×</button></div>
       <div class="dr-body">
-        <div class="panel"><h2>Анализ по резюме</h2><div id="anBox">${analysisHtml(a)}</div></div>
+        <div class="panel"><h2>Fit against your skills</h2><div id="anBox">${analysisHtml(a)}</div></div>
         ${!isNew ? '<div class="panel" id="fuPanel"></div>' : ''}
-        <div class="panel"><h2>Вакансия</h2>
+        <div class="panel"><h2>Job</h2>
           <div class="form-grid">
-            <label class="full">Название<input type="text" id="dTitle" value="${esc(a.title)}"></label>
-            <label>Компания<input type="text" id="dCompany" value="${esc(a.company)}"></label>
-            <label>Локация<input type="text" id="dLocation" value="${esc(a.location)}"></label>
-            <label>Статус<select id="dStatus">${A.STATUSES.map(s => `<option value="${s.id}" ${s.id === a.status ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}</select></label>
-            <label>Платформа<select id="dPlatform">${opt(plats, a.platform)}</select></label>
-            <label>Направление<select id="dCategory">${opt(A.CATEGORY_NAMES, a.category)}</select></label>
-            <label>Зарплата<input type="text" id="dSalary" value="${esc(a.salaryText || (a.salary && a.salary.text) || '')}" placeholder="£26,000 - £28,000 per annum"></label>
-            <label>Дата подачи<input type="date" id="dApplied" value="${toDateInput(a.appliedAt)}"></label>
-            <label>Следующий шаг (дата)<input type="date" id="dNext" value="${esc(a.nextDate || '')}"></label>
-            <label class="full">Ссылка<input type="url" id="dUrl" value="${esc(a.url)}" placeholder="https://"></label>
-            <div class="full"><label>Тип работы</label><div class="chips" id="dWt">${A.WORK_TYPES.map(w => `<button type="button" class="chip" aria-pressed="${(a.workTypes || []).includes(w)}" data-v="${esc(w)}">${esc(w)}</button>`).join('')}</div></div>
-            <label class="full">Заметки<textarea id="dNotes" rows="8" placeholder="Контакт рекрутера, вопросы с интервью, что подготовить">${esc(a.notes)}</textarea></label>
+            <label class="full">Job title<input type="text" id="dTitle" value="${esc(a.title)}"></label>
+            <label>Company<input type="text" id="dCompany" value="${esc(a.company)}"></label>
+            <label>Location<input type="text" id="dLocation" value="${esc(a.location)}"></label>
+            <label>Status<select id="dStatus">${A.STATUSES.map(s => `<option value="${s.id}" ${s.id === a.status ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}</select></label>
+            <label>Source<select id="dPlatform">${opt(plats, a.platform)}</select></label>
+            <label>Role type<select id="dCategory">${opt(A.CATEGORY_NAMES, a.category)}</select></label>
+            <label>Salary<input type="text" id="dSalary" value="${esc(a.salaryText || (a.salary && a.salary.text) || '')}" placeholder="£26,000 - £28,000 per annum"></label>
+            <label>Applied on<input type="date" id="dApplied" value="${toDateInput(a.appliedAt)}"></label>
+            <label>Next step (date)<input type="date" id="dNext" value="${esc(a.nextDate || '')}"></label>
+            <label class="full">Link<input type="url" id="dUrl" value="${esc(a.url)}" placeholder="https://"></label>
+            <div class="full"><label>Work type</label><div class="chips" id="dWt">${A.WORK_TYPES.map(w => `<button type="button" class="chip" aria-pressed="${(a.workTypes || []).includes(w)}" data-v="${esc(w)}">${esc(w)}</button>`).join('')}</div></div>
+            <label class="full">Notes<textarea id="dNotes" rows="8" placeholder="Recruiter contact, interview questions, what to prepare">${esc(a.notes)}</textarea></label>
           </div>
-          ${a.url ? `<p style="margin:10px 0 0"><a href="${esc(a.url)}" target="_blank" rel="noopener">Открыть вакансию</a></p>` : ''}
+          ${a.url ? `<p style="margin:10px 0 0"><a href="${esc(a.url)}" target="_blank" rel="noopener">Open job ad</a></p>` : ''}
         </div>
-        <div class="panel"><h2>Что даёт компания</h2><div id="benBox">${benefitsHtml(a)}</div></div>
-        <div class="panel"><h2>Важное из описания</h2><div id="detBox">${detailsHtml(a)}</div></div>
-        <div class="panel"><div class="row-between"><h2>Описание вакансии</h2><button class="btn small" id="dReanalyze">Пересчитать анализ</button></div>
-          <textarea id="dDesc" rows="8" placeholder="Вставь сюда текст вакансии, если он не считался автоматически">${esc(a.description)}</textarea>
+        <div class="panel"><h2>Benefits</h2><div id="benBox">${benefitsHtml(a)}</div></div>
+        <div class="panel"><h2>Key details</h2><div id="detBox">${detailsHtml(a)}</div></div>
+        <div class="panel"><div class="row-between"><h2>Job description</h2><button class="btn small" id="dReanalyze">Re-analyse</button></div>
+          <textarea id="dDesc" rows="8" placeholder="Paste the job ad here if it was not captured automatically">${esc(a.description)}</textarea>
         </div>
-        ${!isNew ? `<div class="panel"><h2>История</h2><ul class="timeline">${(a.history || []).map(h => `<li style="--c:${A.statusColor(h.status)}">${esc(A.statusLabel(h.status))}<span>${fmtDate(h.at)}</span></li>`).join('')}</ul></div>` : ''}
+        ${!isNew ? `<div class="panel"><h2>History</h2><ul class="timeline">${(a.history || []).map(h => `<li style="--c:${A.statusColor(h.status)}">${esc(A.statusLabel(h.status))}<span>${fmtDate(h.at)}</span></li>`).join('')}</ul></div>` : ''}
       </div>
       <div class="dr-foot">
-        <div class="btns">${!isNew ? '<button class="btn danger" id="dDelete">Удалить</button>' : ''}${!isNew && S.everReached(a, A.OFFER) ? '<button class="btn" id="dOffer">Сравнить офферы</button>' : ''}</div>
-        <div class="btns"><button class="btn" id="dCancel">Закрыть</button><button class="btn primary" id="dSave">${isNew ? 'Добавить заявку' : 'Сохранить'}</button></div>
+        <div class="btns">${!isNew ? '<button class="btn danger" id="dDelete">Delete</button>' : ''}${!isNew && S.everReached(a, A.OFFER) ? '<button class="btn" id="dOffer">Compare offers</button>' : ''}</div>
+        <div class="btns"><button class="btn" id="dCancel">Close</button><button class="btn primary" id="dSave">${isNew ? 'Add application' : 'Save'}</button></div>
       </div>`;
     d.hidden = false; $('#scrim').hidden = false;
     if (!isNew) renderFollowUp(a);
@@ -401,7 +401,7 @@
       if (!$('#dNotes').value.trim() && an.notes) $('#dNotes').value = an.notes;
       if (!f.workTypes.length) $$('#dWt .chip').forEach(c => c.setAttribute('aria-pressed', an.workTypes.includes(c.dataset.v)));
       if (!f.salaryText && an.salary) $('#dSalary').value = an.salary.text;
-      if (an.category !== 'Другое') $('#dCategory').value = an.category;
+      if (an.category !== 'Other') $('#dCategory').value = an.category;
       a.analyzedDesc = f.description;
     };
 
@@ -425,43 +425,43 @@
       }
     };
     if ($('#dDelete')) $('#dDelete').onclick = async () => {
-      if (!confirm(`Удалить заявку ${a.ticket}? Это нельзя отменить.`)) return;
+      if (!confirm(`Delete ${a.ticket}? This can't be undone.`)) return;
       await S.deleteApp(a.id); close();
     };
     if ($('#dOffer')) $('#dOffer').onclick = () => { close(); location.hash = '#offers'; };
 
   }
 
-  // ---------- ОФФЕРЫ ----------
+  // ---------- OFFERS ----------
   const OFFER_FIELDS = [
-    { sec: 'Деньги' },
-    { k: 'salary', l: 'Зарплата, £/год (до налогов)', t: 'number', better: 'max' },
-    { k: 'pension', l: 'Пенсия от работодателя, %', t: 'number', better: 'max' },
-    { k: 'bonus', l: 'Бонусы, £/год', t: 'number', better: 'max' },
-    { sec: 'Время и дорога' },
-    { k: 'hours', l: 'Часов в неделю', t: 'number', better: 'min' },
-    { k: 'days', l: 'Дней в неделю', t: 'number', better: 'min' },
-    { k: 'mode', l: 'Формат', t: 'select', opts: ['Офис', 'Гибрид', 'Удалённо'] },
-    { k: 'officeDays', l: 'Дней в офисе в неделю', t: 'number', better: 'min' },
-    { k: 'commuteMin', l: 'Дорога в одну сторону, мин', t: 'number', better: 'min' },
-    { k: 'commuteCost', l: 'Дорога, £/месяц', t: 'number', better: 'min' },
-    { k: 'holiday', l: 'Отпуск, дней в году', t: 'number', better: 'max' },
-    { sec: 'Развитие и условия' },
-    { k: 'training', l: 'Обучение / сертификаты, £/год', t: 'number', better: 'max' },
-    { k: 'contract', l: 'Контракт', t: 'select', opts: ['Permanent', 'Fixed-term', 'Contract', 'Temporary'] },
-    { k: 'start', l: 'Дата выхода', t: 'date' },
-    { k: 'deadline', l: 'Ответить до', t: 'date' },
-    { k: 'benefits', l: 'Бонусы и льготы', t: 'textarea' },
-    { k: 'pros', l: 'Плюсы', t: 'textarea' },
-    { k: 'cons', l: 'Минусы', t: 'textarea' },
-    { k: 'gut', l: 'Ощущение от команды, 1–5', t: 'number', better: 'max' },
+    { sec: 'Money' },
+    { k: 'salary', l: 'Salary, £/year (before tax)', t: 'number', better: 'max' },
+    { k: 'pension', l: 'Employer pension, %', t: 'number', better: 'max' },
+    { k: 'bonus', l: 'Bonus, £/year', t: 'number', better: 'max' },
+    { sec: 'Time and commute' },
+    { k: 'hours', l: 'Hours per week', t: 'number', better: 'min' },
+    { k: 'days', l: 'Days per week', t: 'number', better: 'min' },
+    { k: 'mode', l: 'Working pattern', t: 'select', opts: ['Office', 'Hybrid', 'Remote'] },
+    { k: 'officeDays', l: 'Office days per week', t: 'number', better: 'min' },
+    { k: 'commuteMin', l: 'Commute one way, min', t: 'number', better: 'min' },
+    { k: 'commuteCost', l: 'Commute cost, £/month', t: 'number', better: 'min' },
+    { k: 'holiday', l: 'Annual leave, days', t: 'number', better: 'max' },
+    { sec: 'Growth and terms' },
+    { k: 'training', l: 'Training / certifications, £/year', t: 'number', better: 'max' },
+    { k: 'contract', l: 'Contract', t: 'select', opts: ['Permanent', 'Fixed-term', 'Contract', 'Temporary'] },
+    { k: 'start', l: 'Start date', t: 'date' },
+    { k: 'deadline', l: 'Reply by', t: 'date' },
+    { k: 'benefits', l: 'Benefits', t: 'textarea' },
+    { k: 'pros', l: 'Pros', t: 'textarea' },
+    { k: 'cons', l: 'Cons', t: 'textarea' },
+    { k: 'gut', l: 'Gut feeling about the team, 1–5', t: 'number', better: 'max' },
   ];
   const WEIGHTS_DEFAULT = { money: 5, balance: 4, flex: 3, growth: 3, gut: 3 };
-  const WEIGHT_LABELS = { money: 'Деньги', balance: 'Время и дорога', flex: 'Гибкость графика', growth: 'Обучение и рост', gut: 'Ощущение от компании' };
+  const WEIGHT_LABELS = { money: 'Money', balance: 'Time and commute', flex: 'Flexible hours', growth: 'Learning and growth', gut: 'Feeling about the company' };
 
   function offerCalc(o) {
     const salary = +o.salary || 0, hours = +o.hours || 37.5;
-    const officeDays = o.mode === 'Удалённо' ? 0 : (o.officeDays !== '' && o.officeDays != null ? +o.officeDays : (+o.days || 5));
+    const officeDays = o.mode === 'Remote' ? 0 : (o.officeDays !== '' && o.officeDays != null ? +o.officeDays : (+o.days || 5));
     const commuteH = (+o.commuteMin || 0) * 2 * officeDays / 60;
     const annualNet = salary + (+o.bonus || 0) + salary * (+o.pension || 0) / 100 - (+o.commuteCost || 0) * 12;
     return {
@@ -477,15 +477,15 @@
     const list = apps.filter(a => S.everReached(a, A.OFFER));
     const wrap = $('#offersWrap');
     if (!list.length) {
-      wrap.innerHTML = `<p class="empty-state">Офферов пока нет. Когда поставишь заявке статус «Оффер», она появится здесь, и можно будет сравнить условия по деньгам, времени на дорогу, гибкости и обучению.</p>`;
+      wrap.innerHTML = `<p class="empty-state">No offers yet. When you set an application to Offer it appears here, and you can compare pay, commute, flexibility and training side by side.</p>`;
       return;
     }
     const { offerWeights } = await S.get('offerWeights');
     const w = { ...WEIGHTS_DEFAULT, ...(offerWeights || {}) };
-    const offers = list.map(a => ({ a, o: { mode: 'Гибрид', contract: 'Permanent', hours: profile.hoursPerWeek || '', days: profile.daysPerWeek || '', salary: (a.salary && a.salary.annualMin) || '', benefits: (a.benefits || []).join('\n'), ...(a.offer || {}) } }));
+    const offers = list.map(a => ({ a, o: { mode: 'Hybrid', contract: 'Permanent', hours: profile.hoursPerWeek || '', days: profile.daysPerWeek || '', salary: (a.salary && a.salary.annualMin) || '', benefits: (a.benefits || []).join('\n'), ...(a.offer || {}) } }));
     const calcs = offers.map(x => offerCalc(x.o));
 
-    // нормализация 0..1
+    // normalise to 0..1
     const norm = (vals, better) => {
       const nums = vals.map(v => (v == null || isNaN(v)) ? null : v);
       const ok = nums.filter(v => v != null);
@@ -496,7 +496,7 @@
     const moneyN = norm(calcs.map(c => c.annualNet || null), 'max');
     const balN = norm(calcs.map((c, i) => c.weekTotal - (+offers[i].o.holiday || 0) * 0.15), 'min');
     const flexN = offers.map(({ o }) => {
-      let s = { 'Удалённо': 1, 'Гибрид': 0.6, 'Офис': 0.2 }[o.mode] ?? 0.5;
+      let s = { Remote: 1, Hybrid: 0.6, Office: 0.2 }[o.mode] ?? 0.5;
       if (+o.days && +o.days <= (profile.daysPerWeek || 5)) s += 0.3;
       else if (+o.days > (profile.daysPerWeek || 5)) s -= 0.3;
       return Math.max(0, Math.min(1, s));
@@ -534,22 +534,22 @@
       const b = bestOf(f);
       rows += `<tr><th>${f.l}</th>${offers.map(({ o }, i) => `<td class="${i === b ? 'best' : ''}">${cell(f, o, i)}</td>`).join('')}</tr>`;
     });
-    rows += `<tr class="sec"><th colspan="${offers.length + 1}">Расчёт</th></tr>`;
-    rows += calcRow('Ставка в час', calcs.map(c => c.hourly), 'max', v => '£' + v.toFixed(2));
-    rows += calcRow('В месяц минус дорога (до налогов)', calcs.map(c => c.monthly), 'max', money);
-    rows += calcRow('Часов в неделю с дорогой', calcs.map(c => c.weekTotal), 'min', v => v.toFixed(1));
-    rows += calcRow('Реальная ставка с учётом дороги', calcs.map(c => c.effHourly), 'max', v => '£' + v.toFixed(2));
-    rows += `<tr class="total"><th>Итог по твоим приоритетам</th>${scores.map((s, i) => `<td class="${i === bestIdx && offers.length > 1 ? 'best' : ''}">${s} / 100</td>`).join('')}</tr>`;
+    rows += `<tr class="sec"><th colspan="${offers.length + 1}">Calculated</th></tr>`;
+    rows += calcRow('Hourly rate', calcs.map(c => c.hourly), 'max', v => '£' + v.toFixed(2));
+    rows += calcRow('Monthly minus commute (before tax)', calcs.map(c => c.monthly), 'max', money);
+    rows += calcRow('Weekly hours including commute', calcs.map(c => c.weekTotal), 'min', v => v.toFixed(1));
+    rows += calcRow('Effective hourly rate with commute', calcs.map(c => c.effHourly), 'max', v => '£' + v.toFixed(2));
+    rows += `<tr class="total"><th>Score by your priorities</th>${scores.map((s, i) => `<td class="${i === bestIdx && offers.length > 1 ? 'best' : ''}">${s} / 100</td>`).join('')}</tr>`;
 
     wrap.innerHTML = `
-      <div class="panel"><h2>Что для тебя важнее</h2><p class="hint">Двигай ползунки: итог пересчитается. 0 — не важно, 10 — очень важно.</p>
+      <div class="panel"><h2>What matters to you</h2><p class="hint">Move the sliders and the score updates. 0 means not important, 10 very important.</p>
         <div class="weights">${Object.keys(WEIGHT_LABELS).map(k => `<label>${WEIGHT_LABELS[k]} <output id="wo-${k}">${w[k]}</output><input type="range" min="0" max="10" value="${w[k]}" data-w="${k}"></label>`).join('')}</div>
-        ${offers.length > 1 ? `<p class="winner" style="margin-top:14px">Сейчас лидирует: <b>${esc(offers[bestIdx].a.company || offers[bestIdx].a.title)}</b> — ${scores[bestIdx]} из 100.</p>` : '<p class="hint" style="margin:14px 0 0">Сравнение заработает, когда офферов станет два или больше. Пока можно заполнить условия.</p>'}
+        ${offers.length > 1 ? `<p class="winner" style="margin-top:14px">Leading now: <b>${esc(offers[bestIdx].a.company || offers[bestIdx].a.title)}</b>, ${scores[bestIdx]} out of 100.</p>` : '<p class="hint" style="margin:14px 0 0">The comparison starts once you have two or more offers. You can fill in the terms now.</p>'}
       </div>
       <div class="offers-table-wrap"><table class="offers">
-        <thead><tr><th>Условия</th>${offers.map(({ a }) => `<th>${esc(a.company || 'Компания')}<small>${esc(a.title)} · ${esc(A.statusLabel(a.status))}</small></th>`).join('')}</tr></thead>
+        <thead><tr><th>Terms</th>${offers.map(({ a }) => `<th>${esc(a.company || 'Company')}<small>${esc(a.title)} · ${esc(A.statusLabel(a.status))}</small></th>`).join('')}</tr></thead>
         <tbody>${rows}</tbody></table></div>
-      <p class="hint">Зелёным отмечено лучшее значение в строке. Расчёт до налогов и примерный: сравнивает варианты между собой, а не считает точную зарплату на руки.</p>`;
+      <p class="hint">Green marks the best value in each row. Figures are before tax and approximate: they compare the offers with each other, not your exact take-home pay.</p>`;
 
     $$('#offersWrap [data-k]').forEach(inp => inp.addEventListener('change', async () => {
       const i = +inp.dataset.i, k = inp.dataset.k;
@@ -565,16 +565,17 @@
     });
   }
 
-  // ---------- НАВЫКИ И НАСТРОЙКИ ----------
+  // ---------- SKILLS AND SETTINGS ----------
   function renderSettings() {
     $('#pDays').value = profile.daysPerWeek; $('#pHours').value = profile.hoursPerWeek;
-    $('#pLicence').checked = !!profile.hasDrivingLicence; $('#pLang').checked = !!profile.speaksUkrainianRussian;
+    $('#pLicence').checked = !!profile.hasDrivingLicence; $('#pLangs').value = (profile.languages || []).join(', ');
     $('#pAuto').checked = profile.autoDetect !== false;
     $('#pPreview').checked = profile.showPreview !== false;
     $('#pSched').checked = !!profile.penalizeSchedule;
     $('#pList').checked = profile.listScan !== false;
     $('#pSignName').value = profile.signName || ''; $('#pSignPhone').value = profile.signPhone || '';
     $('#pSignLi').value = profile.signLinkedIn || ''; $('#pMail').value = profile.mailClient || 'gmail';
+    $('#pPitch').value = profile.pitch || ''; $('#pHighlights').value = profile.highlights || '';
     $('#pAreas').value = (profile.areas || []).join(', ');
     const groups = {};
     A.TOOLS.forEach(t => { (groups[t.group] = groups[t.group] || []).push(t.name); });
@@ -582,9 +583,9 @@
       <div class="skill-group"><h3>${esc(g)}</h3><div class="skills">${names.map(n => {
         const lv = profile.skills[n] || 'none';
         return `<div class="skill"><span>${esc(n)}</span><span class="seg" role="group" aria-label="${esc(n)}">
-          <button class="s" data-sk="${esc(n)}" data-lv="strong" aria-pressed="${lv === 'strong'}">Уверенно</button>
-          <button class="b" data-sk="${esc(n)}" data-lv="basic" aria-pressed="${lv === 'basic'}">Базово</button>
-          <button class="n" data-sk="${esc(n)}" data-lv="none" aria-pressed="${lv === 'none'}">Нет</button></span></div>`;
+          <button class="s" data-sk="${esc(n)}" data-lv="strong" aria-pressed="${lv === 'strong'}">Confident</button>
+          <button class="b" data-sk="${esc(n)}" data-lv="basic" aria-pressed="${lv === 'basic'}">Basic</button>
+          <button class="n" data-sk="${esc(n)}" data-lv="none" aria-pressed="${lv === 'none'}">None</button></span></div>`;
       }).join('')}</div></div>`).join('');
     $$('#skillsGrid [data-sk]').forEach(b => b.onclick = async () => {
       profile.skills[b.dataset.sk] = b.dataset.lv;
@@ -594,19 +595,21 @@
   }
   const saveProfileFields = async () => {
     profile.daysPerWeek = +$('#pDays').value || 5; profile.hoursPerWeek = +$('#pHours').value || 37.5;
-    profile.hasDrivingLicence = $('#pLicence').checked; profile.speaksUkrainianRussian = $('#pLang').checked;
+    profile.hasDrivingLicence = $('#pLicence').checked;
+    profile.languages = $('#pLangs').value.split(',').map(x => x.trim()).filter(Boolean);
     profile.autoDetect = $('#pAuto').checked;
     profile.showPreview = $('#pPreview').checked;
     profile.penalizeSchedule = $('#pSched').checked;
     profile.listScan = $('#pList').checked;
     profile.signName = $('#pSignName').value.trim(); profile.signPhone = $('#pSignPhone').value.trim();
     profile.signLinkedIn = $('#pSignLi').value.trim(); profile.mailClient = $('#pMail').value;
+    profile.pitch = $('#pPitch').value.trim(); profile.highlights = $('#pHighlights').value.trim();
     profile.areas = $('#pAreas').value.split(',').map(x => x.trim()).filter(Boolean);
     await S.saveProfile(profile);
   };
-  ['#pDays', '#pHours', '#pLicence', '#pLang', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail'].forEach(id => $(id).addEventListener('change', saveProfileFields));
+  ['#pDays', '#pHours', '#pLicence', '#pLangs', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
   $('#resetSkills').onclick = async () => {
-    if (!confirm('Вернуть уровни навыков к значениям из резюме?')) return;
+    if (!confirm('Clear all skill levels?')) return;
     profile.skills = { ...A.DEFAULT_SKILLS }; await S.saveProfile(profile); renderSettings();
   };
   $('#recalcAll').onclick = async () => {
@@ -619,7 +622,7 @@
       a.chance = an.chance; a.tools = an.chance.tools;
       if (a.description) {
         a.details = an.details;
-        // Дозаполняем заметки и бонусы у старых заявок, не трогая то, что ты написал сам
+        // Fill in notes and benefits on older applications without touching anything you wrote
         if (!(a.benefits || []).length && an.benefits.length) { a.benefits = an.benefits; filled++; }
         if (!String(a.notes || '').trim() && an.notes) { a.notes = an.notes; filled++; }
         if (globalThis.JT_Extract) {
@@ -628,14 +631,14 @@
           if (merged.length > (a.contacts || []).length) { a.contacts = merged; filled++; }
         }
       }
-      a.updatedAt = now; // чтобы изменения ушли в Google Таблицу
+      a.updatedAt = now; // so the changes reach the Google Sheet
     });
     await S.saveApps(list);
-    $('#recalcAll').textContent = filled ? `Готово — шансы пересчитаны, дозаполнено полей: ${filled}` : 'Готово — шансы пересчитаны';
-    setTimeout(() => { $('#recalcAll').textContent = 'Пересчитать шансы для всех заявок'; }, 2500);
+    $('#recalcAll').textContent = filled ? `Done: fit recalculated, ${filled} field${filled === 1 ? '' : 's'} filled in` : 'Done: fit recalculated';
+    setTimeout(() => { $('#recalcAll').textContent = 'Recalculate fit for all applications'; }, 2500);
   };
 
-  // ---------- GOOGLE ТАБЛИЦА ----------
+  // ---------- GOOGLE SHEET ----------
   async function renderSheetCfg() {
     const cfg = await JT_Sync_cfg();
     $('#gsUrl').value = cfg.url || ''; $('#gsToken').value = cfg.token || ''; $('#gsAuto').checked = cfg.auto !== false;
@@ -645,8 +648,8 @@
   async function renderSyncState() {
     const { syncState } = await S.get('syncState');
     const el = $('#syncState');
-    if (!syncState) { el.textContent = 'Не подключено'; el.className = 'sync-state'; return; }
-    el.textContent = (syncState.ok ? 'Синхронизировано ' : 'Ошибка ') + new Date(syncState.at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + (syncState.ok ? '' : ': ' + syncState.msg);
+    if (!syncState) { el.textContent = 'Not connected'; el.className = 'sync-state'; return; }
+    el.textContent = (syncState.ok ? 'Synced ' : 'Error ') + new Date(syncState.at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + (syncState.ok ? '' : ': ' + syncState.msg);
     el.className = 'sync-state ' + (syncState.ok ? 'ok' : 'err');
   }
   const readCfg = () => ({ url: $('#gsUrl').value.trim(), token: $('#gsToken').value.trim(), auto: $('#gsAuto').checked });
@@ -654,13 +657,13 @@
   ['#gsUrl', '#gsToken', '#gsAuto'].forEach(id => $(id).addEventListener('change', () => S.set({ sheetCfg: readCfg() })));
   $('#gsTest').onclick = async () => {
     await S.set({ sheetCfg: readCfg() });
-    gsMsg('Проверяю…', true);
+    gsMsg('Checking…', true);
     const r = await chrome.runtime.sendMessage({ type: 'syncTest', cfg: readCfg() });
     gsMsg(r.ok ? r.msg : r.error, r.ok);
   };
   $('#gsSync').onclick = async () => {
     await S.set({ sheetCfg: readCfg() });
-    gsMsg('Синхронизирую…', true);
+    gsMsg('Syncing…', true);
     const r = await chrome.runtime.sendMessage({ type: 'syncNow' });
     gsMsg(r.ok ? r.msg : r.error, r.ok);
   };
@@ -668,7 +671,7 @@
   renderSheetCfg();
   (async () => { const c = await JT_Sync_cfg(); if (c.url && c.token && c.auto !== false) chrome.runtime.sendMessage({ type: 'syncNow' }); })();
 
-  // ---------- ДАННЫЕ ----------
+  // ---------- DATA ----------
   const download = (name, text, type) => {
     const url = URL.createObjectURL(new Blob([text], { type }));
     const a = document.createElement('a'); a.href = url; a.download = name; a.click();
@@ -680,11 +683,11 @@
     download(`job-tracker-${stamp()}.json`, JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), ...all }, null, 2), 'application/json');
   };
   $('#exportCsv').onclick = () => {
-    const cols = [['Тикет', a => a.ticket], ['Вакансия', a => a.title], ['Компания', a => a.company], ['Локация', a => a.location],
-      ['Направление', a => a.category], ['Тип', a => (a.workTypes || []).join(', ')], ['Зарплата', a => (a.salary && a.salary.text) || a.salaryText],
-      ['Платформа', a => a.platform], ['Дата подачи', a => fmtDate(a.appliedAt)], ['Статус', a => A.statusLabel(a.status)],
-      ['Шансы %', a => a.chance ? a.chance.score : ''], ['Инструменты', a => (a.tools || []).join(', ')],
-      ['Не хватает', a => a.chance ? a.chance.missing.join(', ') : ''], ['Бонусы', a => (a.benefits || []).join(' • ')], ['Заметки', a => a.notes], ['Ссылка', a => a.url]];
+    const cols = [['Ticket', a => a.ticket], ['Job title', a => a.title], ['Company', a => a.company], ['Location', a => a.location],
+      ['Role type', a => a.category], ['Work type', a => (a.workTypes || []).join(', ')], ['Salary', a => (a.salary && a.salary.text) || a.salaryText],
+      ['Source', a => a.platform], ['Applied on', a => fmtDate(a.appliedAt)], ['Status', a => A.statusLabel(a.status)],
+      ['Fit %', a => a.chance ? a.chance.score : ''], ['Tools', a => (a.tools || []).join(', ')],
+      ['Missing', a => a.chance ? a.chance.missing.join(', ') : ''], ['Benefits', a => (a.benefits || []).join(' • ')], ['Notes', a => a.notes], ['Link', a => a.url]];
     const cellv = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
     const csv = '\ufeff' + [cols.map(c => cellv(c[0])).join(',')].concat(apps.map(a => cols.map(c => cellv(c[1](a))).join(','))).join('\r\n');
     download(`job-tracker-${stamp()}.csv`, csv, 'text/csv;charset=utf-8');
@@ -693,21 +696,24 @@
     const f = e.target.files[0]; if (!f) return;
     try {
       const data = JSON.parse(await f.text());
-      if (!Array.isArray(data.apps)) throw new Error('нет списка заявок');
+      if (!Array.isArray(data.apps)) throw new Error('no list of applications');
       const cur = await S.getApps();
       const ids = new Set(cur.map(a => a.id));
-      const merged = cur.concat(data.apps.filter(a => a && a.id && !ids.has(a.id)));
+      const incoming = data.apps.filter(a => a && a.id && !ids.has(a.id));
+      if (data.profile) JT_Legacy.migrateProfile(data.profile); // backups from versions before 2.0
+      incoming.forEach(a => JT_Legacy.migrateApp(a, A, data.profile || profile));
+      const merged = cur.concat(incoming);
       await S.set({ apps: merged, counter: Math.max(data.counter || 0, (await S.get('counter')).counter || 0) });
       if (data.profile) await S.saveProfile(data.profile);
-      $('#dataMsg').textContent = `Загружено: добавлено ${merged.length - cur.length} заявок.`;
+      $('#dataMsg').textContent = `Restored: ${merged.length - cur.length} applications added.`;
     } catch (err) {
-      $('#dataMsg').textContent = 'Файл не подошёл: ' + err.message + '. Нужен JSON, скачанный кнопкой «Скачать копию».';
+      $('#dataMsg').textContent = 'This file can\'t be used: ' + err.message + '. Choose a JSON file saved with Download backup.';
     }
     e.target.value = '';
   };
   $('#wipe').onclick = async () => {
-    if (!confirm('Удалить все заявки и офферы? Сначала лучше скачать копию.')) return;
-    await S.saveApps([]); $('#dataMsg').textContent = 'Все заявки удалены.';
+    if (!confirm('Delete all applications and offers? Download a backup first.')) return;
+    await S.saveApps([]); $('#dataMsg').textContent = 'All applications deleted.';
   };
 
   route();

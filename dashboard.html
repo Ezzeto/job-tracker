@@ -1,149 +1,153 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Job Tracker — дашборд</title>
+  <title>Job Tracker — dashboard</title>
   <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
-  <nav class="side" aria-label="Разделы">
+  <nav class="side" aria-label="Sections">
     <div class="brand"><span class="logo" aria-hidden="true"></span><span>Job Tracker</span></div>
-    <a href="#overview" data-view="overview">Обзор</a>
-    <a href="#apps" data-view="apps">Заявки <span class="count" id="navCount"></span></a>
-    <a href="#offers" data-view="offers">Офферы <span class="count" id="navOffers"></span></a>
-    <a href="#settings" data-view="settings">Навыки и настройки</a>
-    <a href="#data" data-view="data">Данные</a>
-    <div class="side-foot">Все данные хранятся только в твоём браузере.</div>
+    <a href="#overview" data-view="overview">Overview</a>
+    <a href="#apps" data-view="apps">Applications <span class="count" id="navCount"></span></a>
+    <a href="#offers" data-view="offers">Offers <span class="count" id="navOffers"></span></a>
+    <a href="#settings" data-view="settings">Skills &amp; settings</a>
+    <a href="#data" data-view="data">Data</a>
+    <div class="side-foot">All data stays in this browser unless you connect a Google Sheet.</div>
   </nav>
 
   <main>
-    <!-- ОБЗОР -->
+    <!-- OVERVIEW -->
     <section id="view-overview" class="view" hidden>
-      <header class="top"><h1>Обзор</h1><button class="btn primary" data-new>Новая заявка</button></header>
+      <header class="top"><h1>Overview</h1><button class="btn primary" data-new>New application</button></header>
       <div class="pipeline" id="pipeline"></div>
       <div class="kpis" id="kpis"></div>
       <div class="grid2">
-        <div class="panel"><h2>Заявки по неделям</h2><div id="weekly"></div></div>
-        <div class="panel"><h2>Платформы и отклик</h2><div id="platforms"></div></div>
+        <div class="panel"><h2>Applications per week</h2><div id="weekly"></div></div>
+        <div class="panel"><h2>Sources and response rate</h2><div id="platforms"></div></div>
       </div>
       <div class="grid2">
-        <div class="panel"><h2>Что работодатели просят чаще всего</h2><p class="hint">Цвет — твой уровень: зелёный уверенно, жёлтый базово, красный нет.</p><div id="toolsTop"></div></div>
-        <div class="panel"><h2>Требуют внимания</h2><div id="attention"></div></div>
+        <div class="panel"><h2>What employers ask for most</h2><p class="hint">Colour shows your level: green confident, amber basic, red none.</p><div id="toolsTop"></div></div>
+        <div class="panel"><h2>Needs attention</h2><div id="attention"></div></div>
       </div>
     </section>
 
-    <!-- ЗАЯВКИ -->
+    <!-- APPLICATIONS -->
     <section id="view-apps" class="view" hidden>
-      <header class="top"><h1>Заявки</h1><button class="btn primary" data-new>Новая заявка</button></header>
+      <header class="top"><h1>Applications</h1><button class="btn primary" data-new>New application</button></header>
       <div class="toolbar">
-        <input type="search" id="fSearch" placeholder="Поиск по вакансии, компании, заметкам" aria-label="Поиск">
-        <select id="fStatus" aria-label="Статус"></select>
-        <select id="fPlatform" aria-label="Платформа"></select>
-        <select id="fCategory" aria-label="Направление"></select>
-        <select id="fSort" aria-label="Сортировка">
-          <option value="date">Сначала новые</option>
-          <option value="chance">По шансам</option>
-          <option value="salary">По зарплате</option>
+        <input type="search" id="fSearch" placeholder="Search title, company, notes" aria-label="Search">
+        <select id="fStatus" aria-label="Status"></select>
+        <select id="fPlatform" aria-label="Source"></select>
+        <select id="fCategory" aria-label="Role type"></select>
+        <select id="fSort" aria-label="Sort">
+          <option value="date">Newest first</option>
+          <option value="chance">By fit score</option>
+          <option value="salary">By salary</option>
         </select>
       </div>
       <div class="table-wrap">
         <table class="apps">
-          <thead><tr><th>Тикет</th><th>Шансы</th><th>Вакансия</th><th>Статус</th><th>Подано</th><th>Зарплата</th><th class="c-plat">Платформа</th><th class="c-type">Тип</th><th class="c-cat">Направление</th></tr></thead>
+          <thead><tr><th>Ticket</th><th>Fit</th><th>Job</th><th>Status</th><th>Applied</th><th>Salary</th><th class="c-plat">Source</th><th class="c-type">Type</th><th class="c-cat">Role type</th></tr></thead>
           <tbody id="appsBody"></tbody>
         </table>
       </div>
       <p class="empty-state" id="appsEmpty" hidden></p>
     </section>
 
-    <!-- ОФФЕРЫ -->
+    <!-- OFFERS -->
     <section id="view-offers" class="view" hidden>
-      <header class="top"><h1>Сравнение офферов</h1></header>
+      <header class="top"><h1>Compare offers</h1></header>
       <div id="offersWrap"></div>
     </section>
 
-    <!-- НАСТРОЙКИ -->
+    <!-- SETTINGS -->
     <section id="view-settings" class="view" hidden>
-      <header class="top"><h1>Навыки и настройки</h1></header>
+      <header class="top"><h1>Skills &amp; settings</h1></header>
       <div class="panel">
-        <h2>Как ты можешь работать</h2>
+        <h2>How you can work</h2>
         <div class="form-grid">
-          <label>Дней в неделю<input type="number" id="pDays" min="1" max="7"></label>
-          <label>Часов в неделю<input type="number" id="pHours" min="1" max="60"></label>
-          <label class="check"><input type="checkbox" id="pLicence"> Есть водительские права (UK)</label>
-          <label class="check"><input type="checkbox" id="pLang"> Украинский / русский — плюс для вакансий, где их просят</label>
-          <label class="check"><input type="checkbox" id="pAuto"> Автоматически сохранять при нажатии «Apply»</label>
-          <label class="check"><input type="checkbox" id="pSched"> Снижать шансы для full-time вакансий (если выключено — только подсказка)</label>
-          <label class="check"><input type="checkbox" id="pList"> Оценивать вакансии в списках поиска (значки % и фильтр)</label>
-          <label class="check"><input type="checkbox" id="pPreview"> Показывать шансы на странице вакансии до подачи</label>
-          <label class="full">Где готов работать — города и районы через запятую (для вакансий в других местах шансы снижаются)<textarea id="pAreas" rows="2"></textarea></label>
+          <label>Days per week<input type="number" id="pDays" min="1" max="7"></label>
+          <label>Hours per week<input type="number" id="pHours" min="1" max="60"></label>
+          <label class="check"><input type="checkbox" id="pLicence"> I have a full UK driving licence</label>
+          <label class="check"><input type="checkbox" id="pAuto"> Save automatically when I press Apply</label>
+          <label class="check"><input type="checkbox" id="pSched"> Lower the score for full-time roles (off: just show a tip)</label>
+          <label class="check"><input type="checkbox" id="pList"> Score jobs in search results (badges and filter)</label>
+          <label class="check"><input type="checkbox" id="pPreview"> Show the fit score on a job page before I apply</label>
+          <label class="full">Languages besides English, comma-separated (a bonus when an ad asks for one)<input type="text" id="pLangs" placeholder="Ukrainian, Polish"></label>
+          <label class="full">Where you can work: towns and areas, comma-separated (jobs elsewhere score lower; leave empty to skip)<textarea id="pAreas" rows="2" placeholder="London, Hertfordshire, Cambridge"></textarea></label>
         </div>
       </div>
       <div class="panel">
-        <h2>Follow-up: подпись и почта</h2>
+        <h2>Follow-ups: signature and email</h2>
         <div class="form-grid">
-          <label>Имя в подписи<input type="text" id="pSignName"></label>
-          <label>Телефон<input type="text" id="pSignPhone"></label>
+          <label>Name in signature<input type="text" id="pSignName"></label>
+          <label>Phone<input type="text" id="pSignPhone"></label>
           <label>LinkedIn<input type="text" id="pSignLi"></label>
-          <label>Чем открывать письма<select id="pMail"><option value="gmail">Gmail в браузере</option><option value="outlook">Outlook в браузере</option><option value="mailto">Почтовое приложение по умолчанию</option></select></label>
+          <label>Open emails in<select id="pMail"><option value="gmail">Gmail (browser)</option><option value="outlook">Outlook (browser)</option><option value="mailto">Default mail app</option></select></label>
+          <label class="full">Short pitch for LinkedIn notes<input type="text" id="pPitch" placeholder="Second-year Computing with AI student building Python and FastAPI projects"></label>
+          <label class="full">One or two sentences about you for emails and calls<textarea id="pHighlights" rows="2" placeholder="I build Python back ends with FastAPI and PostgreSQL, and bring seven years of hands-on IT support."></textarea></label>
         </div>
       </div>
       <div class="panel" id="sheetPanel">
-        <div class="row-between"><h2>Google Таблица</h2><span class="sync-state" id="syncState"></span></div>
-        <p class="hint">Заявки копируются в твою Google Таблицу, а изменения статуса, заметок и дат в таблице (например, с телефона) возвращаются сюда: сразу при открытии дашборда и каждые 10 минут.</p>
+        <div class="row-between"><h2>Google Sheet</h2><span class="sync-state" id="syncState"></span></div>
+        <p class="hint">Applications are copied to your own Google Sheet. Changes to status, notes and dates made in the sheet (on your phone, say) come back here when the dashboard opens and every 10 minutes.</p>
         <div class="form-grid">
-          <label class="full">Ссылка веб-приложения Apps Script<input type="url" id="gsUrl" placeholder="https://script.google.com/macros/s/…/exec"></label>
-          <label>Токен<input type="text" id="gsToken" placeholder="Тот же, что в скрипте (TOKEN)"></label>
-          <label class="check" style="align-self:end"><input type="checkbox" id="gsAuto"> Синхронизировать автоматически</label>
+          <label class="full">Apps Script web app URL<input type="url" id="gsUrl" placeholder="https://script.google.com/macros/s/…/exec"></label>
+          <label>Token<input type="text" id="gsToken" placeholder="From Job Tracker → Show sync token"></label>
+          <label class="check" style="align-self:end"><input type="checkbox" id="gsAuto"> Sync automatically</label>
         </div>
-        <div class="btns" style="margin-top:12px"><button class="btn" id="gsTest">Проверить подключение</button><button class="btn primary" id="gsSync">Синхронизировать сейчас</button></div>
+        <div class="btns" style="margin-top:12px"><button class="btn" id="gsTest">Test connection</button><button class="btn primary" id="gsSync">Sync now</button></div>
         <p class="msg" id="gsMsg" role="status"></p>
-        <details class="howto"><summary>Как подключить таблицу (5 минут)</summary>
+        <details class="howto"><summary>How to connect a sheet (5 minutes)</summary>
           <ol>
-            <li>Создай новую Google Таблицу на sheets.new.</li>
-            <li>В таблице: «Расширения» → «Apps Script». Удали всё в редакторе и вставь код из файла <b>google-sheets/Code.gs</b> из папки расширения. Сохрани.</li>
-            <li>Вверху выбери функцию <b>setup</b> и нажми «Выполнить». Google попросит доступ: «Дополнительно» → «Перейти к проекту» → «Разрешить». Это твой собственный скрипт.</li>
-            <li>«Развернуть» → «Новое развёртывание» → тип «Веб-приложение». Выполнять от имени: <b>Я</b>. У кого есть доступ: <b>Все</b>. Нажми «Развернуть» и скопируй ссылку, которая заканчивается на /exec.</li>
-            <li>Вставь ссылку сюда, впиши токен из первой строки скрипта (TOKEN), нажми «Проверить подключение», потом «Синхронизировать сейчас».</li>
+            <li>Create a new Google Sheet at sheets.new.</li>
+            <li>In the sheet: Extensions → Apps Script. Delete the code in the editor, paste the contents of <b>google-sheets/Code.gs</b> and save.</li>
+            <li>Choose the <b>setup</b> function and press Run. Google asks for access: Advanced → Go to project → Allow. It is your own script and only touches this sheet.</li>
+            <li>Back in the sheet, open the <b>Job Tracker</b> menu → <b>Show sync token</b> and copy the token.</li>
+            <li>Deploy → New deployment → type Web app. Execute as: <b>Me</b>. Who has access: <b>Anyone</b>. Press Deploy and copy the URL ending in /exec.</li>
+            <li>Paste the URL and token here, press Test connection, then Sync now.</li>
           </ol>
-          <p class="hint" style="margin:0">Удаляй заявки здесь, в расширении: строка, удалённая в таблице, вернётся при следующей синхронизации. Добавить заявку можно прямо в таблице — заполни «Вакансию» и «Компанию» в новой строке, и она появится в трекере.</p>
+          <p class="hint" style="margin:0">Delete applications here in the extension: a row deleted in the sheet comes back on the next sync. You can add an application in the sheet: fill in Job title and Company on an empty row and it appears in the tracker.</p>
         </details>
       </div>
       <div class="panel">
-        <div class="row-between"><h2>Мои навыки</h2>
-          <div class="btns"><button class="btn" id="resetSkills">Вернуть навыки из резюме</button><button class="btn primary" id="recalcAll">Пересчитать шансы для всех заявок</button></div></div>
-        <p class="hint">Шансы считаются по совпадению инструментов из вакансии с этим списком, плюс уровень позиции, требуемый опыт, права, допуск и график. Это ориентир, а не прогноз.</p>
+        <div class="row-between"><h2>My skills</h2>
+          <div class="btns"><button class="btn" id="resetSkills">Clear all skills</button><button class="btn primary" id="recalcAll">Recalculate fit for all applications</button></div></div>
+        <p class="hint">The fit score compares the tools named in a job ad with this list, then adjusts for seniority, years of experience, driving licence, clearance and hours. It is a guide, not a prediction.</p>
         <div id="skillsGrid"></div>
       </div>
     </section>
 
-    <!-- ДАННЫЕ -->
+    <!-- DATA -->
     <section id="view-data" class="view" hidden>
-      <header class="top"><h1>Данные</h1></header>
+      <header class="top"><h1>Data</h1></header>
       <div class="panel">
-        <h2>Резервная копия</h2>
-        <p class="hint">Данные живут только в этом браузере. Делай экспорт раз в неделю, чтобы ничего не потерять при переустановке.</p>
+        <h2>Backup</h2>
+        <p class="hint">Your data lives in this browser only. Export a copy every week so nothing is lost if you reinstall.</p>
         <div class="btns">
-          <button class="btn primary" id="exportJson">Скачать копию (JSON)</button>
-          <button class="btn" id="exportCsv">Скачать таблицу для Excel (CSV)</button>
-          <label class="btn file">Загрузить копию (JSON)<input type="file" id="importJson" accept=".json,application/json" hidden></label>
+          <button class="btn primary" id="exportJson">Download backup (JSON)</button>
+          <button class="btn" id="exportCsv">Download for Excel (CSV)</button>
+          <label class="btn file">Restore backup (JSON)<input type="file" id="importJson" accept=".json,application/json" hidden></label>
         </div>
         <p class="msg" id="dataMsg" role="status"></p>
       </div>
       <div class="panel danger">
-        <h2>Удалить всё</h2>
-        <p class="hint">Удалит все заявки и офферы. Навыки и настройки останутся.</p>
-        <button class="btn danger" id="wipe">Удалить все заявки</button>
+        <h2>Delete everything</h2>
+        <p class="hint">Deletes all applications and offers. Skills and settings are kept.</p>
+        <button class="btn danger" id="wipe">Delete all applications</button>
       </div>
     </section>
   </main>
 
-  <!-- Карточка заявки -->
+  <!-- Application drawer -->
   <div class="scrim" id="scrim" hidden></div>
-  <aside class="drawer" id="drawer" hidden aria-label="Карточка заявки" role="dialog"></aside>
+  <aside class="drawer" id="drawer" hidden aria-label="Application" role="dialog"></aside>
 
   <script src="lib/analyzer.js"></script>
   <script src="lib/store.js"></script>
+  <script src="lib/legacy.js"></script>
   <script src="lib/extract.js"></script>
   <script src="lib/followup.js"></script>
   <script src="dashboard.js"></script>
