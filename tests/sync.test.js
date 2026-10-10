@@ -90,3 +90,27 @@ test('a wrong token and an outdated script give clear errors', async () => {
   assert.equal(t.ok, false);
   assert.match(t.error, /out of date/);
 });
+
+test('a change in the same millisecond as the last sync is still sent', async () => {
+  const sheet = await setup();
+  const a = await S.addApp({ title: 'Intern', company: 'Acme' });
+  await Sync.syncNow();
+  // Force the worst case: the next edit gets exactly the same timestamp as the synced version
+  const [synced] = await S.getApps();
+  const realNow = Date.prototype.toISOString;
+  Date.prototype.toISOString = function () { return synced.updatedAt; };
+  try { await S.updateApp(a.id, { status: 'test' }); } finally { Date.prototype.toISOString = realNow; }
+  await Sync.syncNow();
+  assert.equal(sheet.rows.get(a.id).status, 'Test task');
+});
+
+test('applying an edit from the sheet does not echo it back', async () => {
+  const sheet = await setup();
+  const a = await S.addApp({ title: 'Intern', company: 'Acme' });
+  await Sync.syncNow();
+  sheet.edit(a.id, { status: 'Screening' });
+  const posts = () => sheet.calls.filter(c => c.method === 'POST').length;
+  const before = posts();
+  await Sync.syncNow();
+  assert.equal(posts(), before);
+});

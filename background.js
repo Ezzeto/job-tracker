@@ -36,7 +36,7 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
         const c = JT_Store.cleanUrl(a.url);
         if (c !== a.url) { a.url = c; a.urlKey = JT_Store.normUrl(c); changed = true; }
       }
-      if (changed) { a.updatedAt = new Date().toISOString(); n++; }
+      if (changed) { JT_Store.touch(a); n++; }
     });
     if (n) await JT_Store.saveApps(apps);
   }

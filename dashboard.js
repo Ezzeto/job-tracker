@@ -621,7 +621,6 @@
   };
   $('#recalcAll').onclick = async () => {
     const list = await S.getApps();
-    const now = new Date().toISOString();
     let filled = 0;
     list.forEach(a => {
       if (!a.description && !a.title) return;
@@ -638,7 +637,7 @@
           if (merged.length > (a.contacts || []).length) { a.contacts = merged; filled++; }
         }
       }
-      a.updatedAt = now; // so the changes reach the Google Sheet
+      S.touch(a); // so the changes reach the Google Sheet
     });
     await S.saveApps(list);
     $('#recalcAll').textContent = filled ? `Done: fit recalculated, ${filled} field${filled === 1 ? '' : 's'} filled in` : 'Done: fit recalculated';
