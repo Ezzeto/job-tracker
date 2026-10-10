@@ -8,7 +8,7 @@
   const site = E.siteFor(location.hostname);
   if (!site.cardLink) return;
 
-  const DEFAULTS = { enabled: true, fetch: true, min: 0, mode: 'dim', hideApplied: false, hideOutArea: false, hideSenior: false, collapsed: false };
+  const DEFAULTS = { enabled: true, fetch: false, min: 0, mode: 'dim', hideApplied: false, hideOutArea: false, hideSenior: false, collapsed: false };
   let cfg = { ...DEFAULTS };
   let profile = null;
   let appliedKeys = new Set();

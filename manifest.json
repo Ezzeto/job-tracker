@@ -12,8 +12,7 @@
   ],
   "host_permissions": [
     "https://script.google.com/*",
-    "https://script.googleusercontent.com/*",
-    "https://www.linkedin.com/jobs-guest/*"
+    "https://script.googleusercontent.com/*"
   ],
   "background": {
     "service_worker": "background.js"

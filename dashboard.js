@@ -710,39 +710,5 @@
     await S.saveApps([]); $('#dataMsg').textContent = 'Все заявки удалены.';
   };
 
-  // ---------- Починка названий LinkedIn («About the job» и т.п.) ----------
-  async function repairTitles() {
-    const E = globalThis.JT_Extract;
-    if (!E) return;
-    const bad = t => !t || t.length < 3 || E.BAD_TITLE.test(t);
-    const list = apps.filter(a => bad(a.title) && /linkedin\.com\/jobs\/view\/(\d+)/.test(a.url || '')).slice(0, 40);
-    if (!list.length) return;
-    let fixed = 0;
-    $('#repairMsg').textContent = `Исправляю названия вакансий LinkedIn: 0 из ${list.length}…`;
-    for (const a of list) {
-      const id = a.url.match(/linkedin\.com\/jobs\/view\/(\d+)/)[1];
-      try {
-        const g = await E.fetchAndParse(`https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${id}`, a.url);
-        if (bad(g.title)) continue;
-        const desc = (a.description || '').length >= 200 ? a.description : (g.description || a.description || '');
-        const an = A.analyze({ title: g.title, description: desc, location: a.location || g.location, workTypes: a.workTypes, category: '' }, profile);
-        const patch = { title: g.title, category: an.category, chance: an.chance, tools: an.chance.tools, details: an.details, description: desc };
-        if (!a.company || bad(a.company)) patch.company = g.company;
-        if (!a.location) patch.location = g.location;
-        if (!(a.benefits || []).length && an.benefits.length) patch.benefits = an.benefits;
-        if (!String(a.notes || '').trim() && an.notes) patch.notes = an.notes;
-        if (!a.salaryText && g.salaryText) { patch.salaryText = g.salaryText; patch.salary = A.parseSalary(g.salaryText); }
-        await S.updateApp(a.id, patch);
-        fixed++;
-      } catch (e) { /* пропускаем */ }
-      $('#repairMsg').textContent = `Исправляю названия вакансий LinkedIn: ${fixed} из ${list.length}…`;
-      await new Promise(r => setTimeout(r, 700));
-    }
-    apps = await S.getApps();
-    $('#repairMsg').textContent = fixed ? `Исправлено названий: ${fixed}.` : 'Не удалось получить названия — LinkedIn не ответил. Попробую при следующем открытии.';
-    setTimeout(() => { $('#repairMsg').textContent = ''; }, 8000);
-  }
-
   route();
-  repairTitles();
 })();
