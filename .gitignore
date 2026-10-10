@@ -1,0 +1,17 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Node (tests only)
+node_modules/
+
+# Local exports and backups — they contain your applications
+job-tracker-*.json
+job-tracker-*.csv
+
+# Packed builds
+*.zip
+*.crx
+*.pem

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Job Tracker — дашборд</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <nav class="side" aria-label="Разделы">
+    <div class="brand"><span class="logo" aria-hidden="true"></span><span>Job Tracker</span></div>
+    <a href="#overview" data-view="overview">Обзор</a>
+    <a href="#apps" data-view="apps">Заявки <span class="count" id="navCount"></span></a>
+    <a href="#offers" data-view="offers">Офферы <span class="count" id="navOffers"></span></a>
+    <a href="#settings" data-view="settings">Навыки и настройки</a>
+    <a href="#data" data-view="data">Данные</a>
+    <div class="side-foot">Все данные хранятся только в твоём браузере.</div>
+  </nav>
+
+  <main>
+    <!-- ОБЗОР -->
+    <section id="view-overview" class="view" hidden>
+      <header class="top"><h1>Обзор</h1><button class="btn primary" data-new>Новая заявка</button></header>
+      <div class="pipeline" id="pipeline"></div>
+      <div class="kpis" id="kpis"></div>
+      <div class="grid2">
+        <div class="panel"><h2>Заявки по неделям</h2><div id="weekly"></div></div>
+        <div class="panel"><h2>Платформы и отклик</h2><div id="platforms"></div></div>
+      </div>
+      <div class="grid2">
+        <div class="panel"><h2>Что работодатели просят чаще всего</h2><p class="hint">Цвет — твой уровень: зелёный уверенно, жёлтый базово, красный нет.</p><div id="toolsTop"></div></div>
+        <div class="panel"><h2>Требуют внимания</h2><div id="attention"></div></div>
+      </div>
+    </section>
+
+    <!-- ЗАЯВКИ -->
+    <section id="view-apps" class="view" hidden>
+      <header class="top"><h1>Заявки</h1><button class="btn primary" data-new>Новая заявка</button></header>
+      <div class="toolbar">
+        <input type="search" id="fSearch" placeholder="Поиск по вакансии, компании, заметкам" aria-label="Поиск">
+        <select id="fStatus" aria-label="Статус"></select>
+        <select id="fPlatform" aria-label="Платформа"></select>
+        <select id="fCategory" aria-label="Направление"></select>
+        <select id="fSort" aria-label="Сортировка">
+          <option value="date">Сначала новые</option>
+          <option value="chance">По шансам</option>
+          <option value="salary">По зарплате</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table class="apps">
+          <thead><tr><th>Тикет</th><th>Шансы</th><th>Вакансия</th><th>Статус</th><th>Подано</th><th>Зарплата</th><th class="c-plat">Платформа</th><th class="c-type">Тип</th><th class="c-cat">Направление</th></tr></thead>
+          <tbody id="appsBody"></tbody>
+        </table>
+      </div>
+      <p class="empty-state" id="appsEmpty" hidden></p>
+      <p class="msg" id="repairMsg" role="status"></p>
+    </section>
+
+    <!-- ОФФЕРЫ -->
+    <section id="view-offers" class="view" hidden>
+      <header class="top"><h1>Сравнение офферов</h1></header>
+      <div id="offersWrap"></div>
+    </section>
+
+    <!-- НАСТРОЙКИ -->
+    <section id="view-settings" class="view" hidden>
+      <header class="top"><h1>Навыки и настройки</h1></header>
+      <div class="panel">
+        <h2>Как ты можешь работать</h2>
+        <div class="form-grid">
+          <label>Дней в неделю<input type="number" id="pDays" min="1" max="7"></label>
+          <label>Часов в неделю<input type="number" id="pHours" min="1" max="60"></label>
+          <label class="check"><input type="checkbox" id="pLicence"> Есть водительские права (UK)</label>
+          <label class="check"><input type="checkbox" id="pLang"> Украинский / русский — плюс для вакансий, где их просят</label>
+          <label class="check"><input type="checkbox" id="pAuto"> Автоматически сохранять при нажатии «Apply»</label>
+          <label class="check"><input type="checkbox" id="pSched"> Снижать шансы для full-time вакансий (если выключено — только подсказка)</label>
+          <label class="check"><input type="checkbox" id="pList"> Оценивать вакансии в списках поиска (значки % и фильтр)</label>
+          <label class="check"><input type="checkbox" id="pPreview"> Показывать шансы на странице вакансии до подачи</label>
+          <label class="full">Где готов работать — города и районы через запятую (для вакансий в других местах шансы снижаются)<textarea id="pAreas" rows="2"></textarea></label>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Follow-up: подпись и почта</h2>
+        <div class="form-grid">
+          <label>Имя в подписи<input type="text" id="pSignName"></label>
+          <label>Телефон<input type="text" id="pSignPhone"></label>
+          <label>LinkedIn<input type="text" id="pSignLi"></label>
+          <label>Чем открывать письма<select id="pMail"><option value="gmail">Gmail в браузере</option><option value="outlook">Outlook в браузере</option><option value="mailto">Почтовое приложение по умолчанию</option></select></label>
+        </div>
+      </div>
+      <div class="panel" id="sheetPanel">
+        <div class="row-between"><h2>Google Таблица</h2><span class="sync-state" id="syncState"></span></div>
+        <p class="hint">Заявки копируются в твою Google Таблицу, а изменения статуса, заметок и дат в таблице (например, с телефона) возвращаются сюда: сразу при открытии дашборда и каждые 10 минут.</p>
+        <div class="form-grid">
+          <label class="full">Ссылка веб-приложения Apps Script<input type="url" id="gsUrl" placeholder="https://script.google.com/macros/s/…/exec"></label>
+          <label>Токен<input type="text" id="gsToken" placeholder="Тот же, что в скрипте (TOKEN)"></label>
+          <label class="check" style="align-self:end"><input type="checkbox" id="gsAuto"> Синхронизировать автоматически</label>
+        </div>
+        <div class="btns" style="margin-top:12px"><button class="btn" id="gsTest">Проверить подключение</button><button class="btn primary" id="gsSync">Синхронизировать сейчас</button></div>
+        <p class="msg" id="gsMsg" role="status"></p>
+        <details class="howto"><summary>Как подключить таблицу (5 минут)</summary>
+          <ol>
+            <li>Создай новую Google Таблицу на sheets.new.</li>
+            <li>В таблице: «Расширения» → «Apps Script». Удали всё в редакторе и вставь код из файла <b>google-sheets/Code.gs</b> из папки расширения. Сохрани.</li>
+            <li>Вверху выбери функцию <b>setup</b> и нажми «Выполнить». Google попросит доступ: «Дополнительно» → «Перейти к проекту» → «Разрешить». Это твой собственный скрипт.</li>
+            <li>«Развернуть» → «Новое развёртывание» → тип «Веб-приложение». Выполнять от имени: <b>Я</b>. У кого есть доступ: <b>Все</b>. Нажми «Развернуть» и скопируй ссылку, которая заканчивается на /exec.</li>
+            <li>Вставь ссылку сюда, впиши токен из первой строки скрипта (TOKEN), нажми «Проверить подключение», потом «Синхронизировать сейчас».</li>
+          </ol>
+          <p class="hint" style="margin:0">Удаляй заявки здесь, в расширении: строка, удалённая в таблице, вернётся при следующей синхронизации. Добавить заявку можно прямо в таблице — заполни «Вакансию» и «Компанию» в новой строке, и она появится в трекере.</p>
+        </details>
+      </div>
+      <div class="panel">
+        <div class="row-between"><h2>Мои навыки</h2>
+          <div class="btns"><button class="btn" id="resetSkills">Вернуть навыки из резюме</button><button class="btn primary" id="recalcAll">Пересчитать шансы для всех заявок</button></div></div>
+        <p class="hint">Шансы считаются по совпадению инструментов из вакансии с этим списком, плюс уровень позиции, требуемый опыт, права, допуск и график. Это ориентир, а не прогноз.</p>
+        <div id="skillsGrid"></div>
+      </div>
+    </section>
+
+    <!-- ДАННЫЕ -->
+    <section id="view-data" class="view" hidden>
+      <header class="top"><h1>Данные</h1></header>
+      <div class="panel">
+        <h2>Резервная копия</h2>
+        <p class="hint">Данные живут только в этом браузере. Делай экспорт раз в неделю, чтобы ничего не потерять при переустановке.</p>
+        <div class="btns">
+          <button class="btn primary" id="exportJson">Скачать копию (JSON)</button>
+          <button class="btn" id="exportCsv">Скачать таблицу для Excel (CSV)</button>
+          <label class="btn file">Загрузить копию (JSON)<input type="file" id="importJson" accept=".json,application/json" hidden></label>
+        </div>
+        <p class="msg" id="dataMsg" role="status"></p>
+      </div>
+      <div class="panel danger">
+        <h2>Удалить всё</h2>
+        <p class="hint">Удалит все заявки и офферы. Навыки и настройки останутся.</p>
+        <button class="btn danger" id="wipe">Удалить все заявки</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Карточка заявки -->
+  <div class="scrim" id="scrim" hidden></div>
+  <aside class="drawer" id="drawer" hidden aria-label="Карточка заявки" role="dialog"></aside>
+
+  <script src="lib/analyzer.js"></script>
+  <script src="lib/store.js"></script>
+  <script src="lib/extract.js"></script>
+  <script src="lib/followup.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

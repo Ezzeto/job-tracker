@@ -1,0 +1,76 @@
+{
+  "manifest_version": 3,
+  "name": "Job Tracker — трекер заявок",
+  "version": "1.7.1",
+  "description": "Запоминает вакансии, на которые ты подался, оценивает шансы по резюме и показывает дашборд заявок и офферов.",
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "activeTab",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://script.google.com/*",
+    "https://script.googleusercontent.com/*",
+    "https://www.linkedin.com/jobs-guest/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Job Tracker",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.indeed.com/*",
+        "*://*.indeed.co.uk/*"
+      ],
+      "js": [
+        "lib/analyzer.js",
+        "lib/store.js",
+        "lib/extract.js",
+        "content.js",
+        "listscan.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "*://*.linkedin.com/*",
+        "*://*.reed.co.uk/*",
+        "*://*.totaljobs.com/*",
+        "*://*.cv-library.co.uk/*",
+        "*://*.cwjobs.co.uk/*",
+        "*://*.glassdoor.co.uk/*",
+        "*://*.glassdoor.com/*",
+        "*://*.jobs.ac.uk/*",
+        "*://*.adzuna.co.uk/*",
+        "*://*.monster.co.uk/*",
+        "*://*.ziprecruiter.co.uk/*"
+      ],
+      "js": [
+        "lib/analyzer.js",
+        "lib/store.js",
+        "lib/extract.js",
+        "content.js",
+        "listscan.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
