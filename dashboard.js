@@ -577,6 +577,13 @@
     $('#pSignLi').value = profile.signLinkedIn || ''; $('#pMail').value = profile.mailClient || 'gmail';
     $('#pPitch').value = profile.pitch || ''; $('#pHighlights').value = profile.highlights || '';
     $('#pAreas').value = (profile.areas || []).join(', ');
+    const targets = profile.targetCategories || [];
+    $('#pTargets').innerHTML = A.CATEGORY_NAMES.filter(c => c !== 'Other').map(c => `<button type="button" class="chip" data-target="${esc(c)}" aria-pressed="${targets.includes(c)}">${esc(c)}</button>`).join('');
+    $$('#pTargets .chip').forEach(ch => ch.onclick = async () => {
+      ch.setAttribute('aria-pressed', ch.getAttribute('aria-pressed') !== 'true');
+      profile.targetCategories = $$('#pTargets .chip[aria-pressed=true]').map(x => x.dataset.target);
+      await S.saveProfile(profile);
+    });
     const groups = {};
     A.TOOLS.forEach(t => { (groups[t.group] = groups[t.group] || []).push(t.name); });
     $('#skillsGrid').innerHTML = Object.entries(groups).map(([g, names]) => `
