@@ -140,4 +140,4 @@ tests/                unit tests, helpers and the browser smoke test
 
 ## Licence
 
-[MIT](LICENSE)
+Copyright © 2026 Oleh Poratui. All rights reserved.
