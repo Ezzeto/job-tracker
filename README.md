@@ -103,7 +103,7 @@ Open **Internships** in the dashboard, paste the placement briefing into *Placem
 
 ### Upgrading from 2.0
 
-Replace the files and reload the extension; nothing is lost. For the sheet, paste the new `Code.gs` (adds the *Type* and *Placement rules* columns), run `setup`, then *Manage deployments → New version*.
+Replace the files and reload the extension; nothing is lost. For the sheet, paste the new `Code.gs` (adds the *Type* and *Placement rules* columns), run `setup`, then *Manage deployments → New version*. If the sheet still has the old Russian tabs next to the English ones, `setup` copies any rows that exist only in the old tab and removes the old tabs.
 
 ### Upgrading from 1.x
 

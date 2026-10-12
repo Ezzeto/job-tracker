@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 9; // 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 10; // 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -84,6 +84,7 @@ function setup() {
   migrateLegacy_(ss);
   const sh = ss.getSheetByName(SHEET) || ss.insertSheet(SHEET, 0);
   formatSheet_(sh);
+  fillType_(sh);
   buildSummary_(ss);
   // The empty default sheet only gets in the way
   ss.getSheets().forEach(x => { if (/^(Лист|Sheet)\s?1$/.test(x.getName()) && x.getLastRow() === 0 && ss.getSheets().length > 2) ss.deleteSheet(x); });
@@ -92,21 +93,80 @@ function setup() {
   return 'Done';
 }
 
-/** Renames a pre-2.0 sheet and translates its status, role type and source values. */
+/**
+ * Pre-2.0 sheets ("Заявки", "Сводка") used Russian labels.
+ * Only the old sheet: it is renamed and its values translated.
+ * Both old and new sheets: rows missing from the new sheet are copied over
+ * (translated), then the old sheets are removed so there is one set of tabs.
+ */
 function migrateLegacy_(ss) {
   const old = ss.getSheetByName(LEGACY_SHEET);
-  if (!old || ss.getSheetByName(SHEET)) return;
-  old.setName(SHEET);
-  const last = old.getLastRow();
-  if (last >= 2) {
-    [[C.status, LEGACY_STATUS], [C.category, LEGACY_VALUE], [C.platform, LEGACY_VALUE]].forEach(([col, map]) => {
-      const r = old.getRange(2, col, last - 1, 1);
-      r.clearDataValidations();
-      r.setValues(r.getValues().map(([v]) => [map[String(v).trim()] || v]));
-    });
+  const cur = ss.getSheetByName(SHEET);
+  if (old && !cur) {
+    old.setName(SHEET);
+    const last = old.getLastRow();
+    if (last >= 2) {
+      [[C.status, LEGACY_STATUS], [C.category, LEGACY_VALUE], [C.platform, LEGACY_VALUE]].forEach(([col, map]) => {
+        const r = old.getRange(2, col, last - 1, 1);
+        r.clearDataValidations();
+        r.setValues(r.getValues().map(([v]) => [map[String(v).trim()] || v]));
+      });
+    }
+  } else if (old && cur) {
+    mergeLegacyRows_(old, cur);
+    ss.deleteSheet(old);
   }
   const sm = ss.getSheetByName(LEGACY_SUMMARY);
   if (sm) ss.deleteSheet(sm);
+}
+
+function mergeLegacyRows_(old, cur) {
+  const oLast = old.getLastRow();
+  if (oLast < 2) return 0;
+  const n = Math.min(old.getLastColumn(), COLS.length);
+  const cLast = cur.getLastRow();
+  const have = new Set(cLast >= 2 ? cur.getRange(2, C.id, cLast - 1, 1).getValues().map(r => String(r[0])) : []);
+  const haveTicket = new Set(cLast >= 2 ? cur.getRange(2, C.ticket, cLast - 1, 1).getValues().map(r => String(r[0])) : []);
+  const vals = old.getRange(2, 1, oLast - 1, n).getValues();
+  const links = old.getRange(2, C.url, oLast - 1, 1).getRichTextValues();
+  const tz = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
+  const add = [];
+  vals.forEach((row, i) => {
+    const id = String(row[C.id - 1] || ''), ticket = String(row[C.ticket - 1] || '');
+    if (!id && !row[C.title - 1] && !row[C.company - 1]) return;
+    if ((id && have.has(id)) || (!id && ticket && haveTicket.has(ticket))) return;
+    const out = COLS.map((_, j) => j < n ? row[j] : '');
+    out[C.status - 1] = LEGACY_STATUS[String(out[C.status - 1]).trim()] || out[C.status - 1];
+    out[C.category - 1] = LEGACY_VALUE[String(out[C.category - 1]).trim()] || out[C.category - 1];
+    out[C.platform - 1] = LEGACY_VALUE[String(out[C.platform - 1]).trim()] || out[C.platform - 1];
+    ['appliedAt', 'nextDate'].forEach(k => {
+      const v = out[C[k] - 1];
+      if (v && !(v instanceof Date)) { const iso = toIsoDate_(v, tz); const [y, m, d] = iso.split('-').map(Number); if (y && m && d) out[C[k] - 1] = new Date(y, m - 1, d); }
+    });
+    const l = links[i][0] && links[i][0].getLinkUrl();
+    if (l) out[C.url - 1] = l;
+    if (!out[C.track - 1]) out[C.track - 1] = 'Job';
+    add.push(out);
+  });
+  if (add.length) {
+    const first = cur.getLastRow() + 1;
+    cur.getRange(first, 1, add.length, COLS.length).setValues(add);
+    decorateRows_(cur, first, add.length);
+  }
+  Logger.log(`Old sheet merged: ${add.length} rows copied, ${vals.length - add.length} were already there.`);
+  return add.length;
+}
+
+/** Rows from before 2.1 have no Type: they are jobs. Does not touch _updated. */
+function fillType_(sh) {
+  const last = sh.getLastRow();
+  if (last < 2) return;
+  const r = sh.getRange(2, C.track, last - 1, 1);
+  const ids = sh.getRange(2, C.id, last - 1, 1).getValues();
+  const v = r.getValues();
+  let changed = false;
+  v.forEach((x, i) => { if (!x[0] && ids[i][0]) { x[0] = 'Job'; changed = true; } });
+  if (changed) r.setValues(v);
 }
 
 const ROW_H = 30;
@@ -326,7 +386,9 @@ function json_(o) {
 
 function ensureSheet_() {
   const ss = SpreadsheetApp.getActive();
-  if (!ss.getSheetByName(SHEET)) setup();
+  const sh = ss.getSheetByName(SHEET);
+  // First call after an update: old Russian tabs left over, or new columns without a header
+  if (!sh || ss.getSheetByName(LEGACY_SHEET) || ss.getSheetByName(LEGACY_SUMMARY) || sh.getRange(1, COLS.length).getValue() !== COLS[COLS.length - 1][1]) setup();
   return ss.getSheetByName(SHEET);
 }
 
