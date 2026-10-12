@@ -15,3 +15,6 @@ job-tracker-*.csv
 *.zip
 *.crx
 *.pem
+
+# Python
+__pycache__/

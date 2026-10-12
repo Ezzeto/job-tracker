@@ -10,6 +10,12 @@
   $('sTotal').textContent = apps.length;
   $('sInt').textContent = apps.filter(a => S.everReached(a, A.INTERVIEW)).length;
   $('auto').checked = profile.autoDetect !== false;
+  const ints = apps.filter(a => a.track === 'intern');
+  const next = (((profile.intern || {}).placement || {}).deadlines || []).filter(d => d.date && new Date(d.date + 'T23:59:59') >= new Date()).sort((x, y) => x.date < y.date ? -1 : 1)[0];
+  if (ints.length || next) {
+    const left = next ? Math.ceil((new Date(next.date + 'T23:59:59') - Date.now()) / 864e5) : null;
+    $('plLine').textContent = `Internships: ${ints.length}` + (ints.length ? ` · fit your rules: ${ints.filter(a => a.placement && a.placement.verdict === 'ok').length}` : '') + (next ? ` · ${next.label}: ${left === 0 ? 'today' : 'in ' + left + ' day' + (left === 1 ? '' : 's')}` : '');
+  }
   $('auto').onchange = async () => { const p = await S.getProfile(); p.autoDetect = $('auto').checked; await S.saveProfile(p); };
 
   const ul = $('recent');
@@ -31,7 +37,7 @@
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !/^https?:/.test(tab.url || '')) { $('msg').textContent = 'Open a job page first.'; return; }
     try {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['lib/analyzer.js', 'lib/store.js', 'lib/extract.js', 'content.js'] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['lib/analyzer.js', 'lib/store.js', 'lib/extract.js', 'lib/cv.js', 'content.js'] });
       await chrome.tabs.sendMessage(tab.id, { type: 'preview' });
       window.close();
     } catch (e) { $('msg').textContent = 'Couldn\'t read this page.'; }
@@ -41,7 +47,7 @@
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !/^https?:/.test(tab.url || '')) { $('msg').textContent = 'Can\'t add from this page. Open a job page, or add the application in the dashboard.'; return; }
     try {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['lib/analyzer.js', 'lib/store.js', 'lib/extract.js', 'content.js'] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['lib/analyzer.js', 'lib/store.js', 'lib/extract.js', 'lib/cv.js', 'content.js'] });
       await chrome.tabs.sendMessage(tab.id, { type: 'manualAdd' });
       window.close();
     } catch (e) {

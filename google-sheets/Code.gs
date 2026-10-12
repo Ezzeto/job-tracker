@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 8;
+const SCRIPT_VERSION = 9; // 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -14,6 +14,7 @@ const COLS = [
   ['appliedAt', 'Applied on'], ['status', 'Status'], ['chance', 'Fit %'], ['nextDate', 'Next step'],
   ['notes', 'Notes'], ['missing', 'Missing skills'], ['tools', 'Tools'], ['details', 'Key details'],
   ['url', 'Link'], ['updated', '_updated'], ['benefits', 'Benefits'], ['contacts', 'Contacts'], ['followup', 'Follow-up'],
+  ['track', 'Type'], ['placement', 'Placement rules'],
 ];
 const C = {}; COLS.forEach(([k], i) => { C[k] = i + 1; });
 // [status, status cell background, text colour, light tint for the whole row]
@@ -134,7 +135,7 @@ function formatSheet_(sh) {
   if (last >= 2) sh.setRowHeightsForced(2, last - 1, ROW_H);
 
   const widths = { ticket: 82, title: 230, company: 150, location: 120, category: 150, workTypes: 140, salary: 120,
-    platform: 95, appliedAt: 92, status: 165, chance: 64, nextDate: 100, notes: 260, missing: 170, tools: 200, details: 260, url: 80, benefits: 260, contacts: 260, followup: 110 };
+    platform: 95, appliedAt: 92, status: 165, chance: 64, nextDate: 100, notes: 260, missing: 170, tools: 200, details: 260, url: 80, benefits: 260, contacts: 260, followup: 110, track: 95, placement: 110 };
   Object.keys(widths).forEach(k => sh.setColumnWidth(C[k], widths[k]));
   ['ticket', 'appliedAt', 'chance', 'nextDate', 'url'].forEach(k => sh.getRange(2, C[k], maxRows - 1, 1).setHorizontalAlignment('center'));
   sh.getRange(2, C.appliedAt, maxRows - 1, 1).setNumberFormat('dd/mm/yyyy');
@@ -199,6 +200,12 @@ function colorRules_(sh, maxRows) {
 
   // 4. Applied more than 14 days ago: time to follow up
   R.push(rule().whenFormulaSatisfied(`=AND(${K}2="Applied"${sep}${J}2<>""${sep}${J}2<TODAY()-14)`).setBackground('#fde68a').setFontColor('#7a5510').setRanges([range('appliedAt')]).build());
+
+  // 4b. Application type and placement rules
+  R.push(rule().whenTextEqualTo('Internship').setBackground('#efe6fb').setFontColor('#4b2a8a').setBold(true).setRanges([range('track')]).build());
+  R.push(rule().whenTextEqualTo('Fits').setBackground('#d3eedf').setFontColor('#0f5c32').setRanges([range('placement')]).build());
+  R.push(rule().whenTextEqualTo('Check').setBackground('#fbeccc').setFontColor('#7a5510').setRanges([range('placement')]).build());
+  R.push(rule().whenTextEqualTo('Breaks rules').setBackground('#f6d9d6').setFontColor('#8f2f26').setRanges([range('placement')]).build());
 
   // 5. Whole row: a light tint of the stage; closed applications in grey text
   STATUSES.forEach(([label, , , tint]) => {

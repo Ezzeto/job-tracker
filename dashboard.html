@@ -12,6 +12,8 @@
     <a href="#overview" data-view="overview">Overview</a>
     <a href="#apps" data-view="apps">Applications <span class="count" id="navCount"></span></a>
     <a href="#offers" data-view="offers">Offers <span class="count" id="navOffers"></span></a>
+    <a href="#intern" data-view="intern">Internships <span class="count" id="navIntern"></span></a>
+    <a href="#cv" data-view="cv">CV &amp; ATS</a>
     <a href="#settings" data-view="settings">Skills &amp; settings</a>
     <a href="#data" data-view="data">Data</a>
     <div class="side-foot">All data stays in this browser unless you connect a Google Sheet.</div>
@@ -20,7 +22,7 @@
   <main>
     <!-- OVERVIEW -->
     <section id="view-overview" class="view" hidden>
-      <header class="top"><h1>Overview</h1><button class="btn primary" data-new>New application</button></header>
+      <header class="top"><h1>Overview</h1><div class="btns"><div class="track-seg" id="ovTrack" role="group" aria-label="Application type"><button data-t="all">All</button><button data-t="job">Jobs</button><button data-t="intern">Internships</button></div><button class="btn primary" data-new>New application</button></div></header>
       <div class="pipeline" id="pipeline"></div>
       <div class="kpis" id="kpis"></div>
       <div class="grid2">
@@ -38,6 +40,7 @@
       <header class="top"><h1>Applications</h1><button class="btn primary" data-new>New application</button></header>
       <div class="toolbar">
         <input type="search" id="fSearch" placeholder="Search title, company, notes" aria-label="Search">
+        <select id="fTrack" aria-label="Type"><option value="">Jobs and internships</option><option value="job">Jobs only</option><option value="intern">Internships only</option></select>
         <select id="fStatus" aria-label="Status"></select>
         <select id="fPlatform" aria-label="Source"></select>
         <select id="fCategory" aria-label="Role type"></select>
@@ -57,6 +60,49 @@
     </section>
 
     <!-- OFFERS -->
+    <section id="view-intern" class="view" hidden>
+      <header class="top"><h1>Internships</h1><button class="btn primary" data-new-intern>New internship</button></header>
+      <div class="deadlines" id="plDeadlines"></div>
+      <div class="grid2">
+        <div class="panel"><h2>Your internships</h2><div id="plList"></div></div>
+        <div class="panel"><h2>Placement rules</h2>
+          <p class="hint">Paste your university's placement briefing or rules and the dates, length, hours, days and deadlines are filled in for you. Check them, then edit anything that is off.</p>
+          <textarea id="plPaste" rows="5" placeholder="e.g. Placement dates: 25 January – 28 May 2027. At least 12 weeks, 35–40 hrs/week, 4 days per week. 18 November – submit your placement…"></textarea>
+          <div class="btns" style="margin-top:8px"><button class="btn primary" id="plRead">Read the rules</button></div>
+          <p class="msg" id="plMsg" role="status"></p>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Rules used to check internships</h2>
+        <div class="form-grid pl-grid">
+          <label>Placement starts<input type="date" id="plStart"></label>
+          <label>Placement ends<input type="date" id="plEnd"></label>
+          <label>At least (weeks)<input type="number" id="plWeeks" min="0" max="60"></label>
+          <label>Hours a week, from<input type="number" id="plMinH" min="0" max="60"></label>
+          <label>Hours a week, to<input type="number" id="plMaxH" min="0" max="60"></label>
+          <label>Days a week<input type="number" id="plDays" min="0" max="5"></label>
+          <label class="check"><input type="checkbox" id="plOverseas"> Companies abroad: fully remote only</label>
+          <label class="check"><input type="checkbox" id="plPaid"> Paid placements recommended</label>
+        </div>
+        <h3 class="sub3">Deadlines</h3>
+        <div id="plDl"></div>
+        <button class="btn small" id="plDlAdd">Add a deadline</button>
+        <h3 class="sub3">Role types for internships</h3>
+        <div id="plTargets" class="targets"></div>
+        <h3 class="sub3">About you, for internship follow-ups</h3>
+        <div class="form-grid">
+          <label class="full">Short pitch for LinkedIn notes<input type="text" id="plPitch" placeholder="Second-year Computing with AI student"></label>
+          <label class="full">One or two sentences for emails and calls<textarea id="plHighlights" rows="2" placeholder="I build Python and machine learning projects and have run freelance IT support since 2018."></textarea></label>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-cv" class="view" hidden>
+      <header class="top"><h1>CV &amp; ATS</h1></header>
+      <p class="hint" style="margin:-6px 0 16px">Drop in your CV and skill levels are set for you: your skills section and work experience count as confident; working knowledge, basic, in progress and projects count as basic. Fit is recalculated for every application of that type, and the CV is checked the way an applicant tracking system reads it. The file is read in your browser and never uploaded.</p>
+      <div class="grid2" id="cvCards"></div>
+    </section>
+
     <section id="view-offers" class="view" hidden>
       <header class="top"><h1>Compare offers</h1></header>
       <div id="offersWrap"></div>
@@ -114,6 +160,7 @@
         </details>
       </div>
       <div class="panel">
+        <div class="track-seg" id="skTrack" role="group" aria-label="Skills profile" style="margin-bottom:10px"><button data-t="job">Jobs</button><button data-t="intern">Internships</button></div>
         <div class="row-between"><h2>My skills</h2>
           <div class="btns"><button class="btn" id="resetSkills">Clear all skills</button><button class="btn primary" id="recalcAll">Recalculate fit for all applications</button></div></div>
         <p class="hint">The fit score compares the tools named in a job ad with this list, then adjusts for seniority, years of experience, driving licence, clearance and hours. It is a guide, not a prediction.</p>
@@ -151,6 +198,9 @@
   <script src="lib/legacy.js"></script>
   <script src="lib/extract.js"></script>
   <script src="lib/followup.js"></script>
+  <script src="lib/cv.js"></script>
+  <script src="lib/vendor/mammoth.browser.min.js"></script>
+  <script type="module" src="lib/cvread.mjs"></script>
   <script src="dashboard.js"></script>
 </body>
 </html>

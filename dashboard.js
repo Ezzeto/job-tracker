@@ -19,6 +19,15 @@
   };
   const toDateInput = iso => iso ? new Date(iso).toISOString().slice(0, 10) : '';
 
+  const trackOf = a => a.track === 'intern' || a.track === 'job' ? a.track : (A.detectInternship(a.title, a.description) ? 'intern' : 'job');
+  const skillsFor = t => t === 'intern' ? profile.intern.skills : profile.skills;
+  let ovTrack = 'all', skTrack = 'job';
+  const PL_ICON = { ok: ['✓', 'var(--good)'], warn: ['!', 'var(--mid)'], fail: ['✕', 'var(--bad)'], unknown: ['?', 'var(--muted)'], info: ['i', 'var(--blue)'] };
+  const PL_HEAD = { ok: 'Fits your placement rules', warn: 'Placement rules: check with the employer', fail: 'Breaks your placement rules' };
+  const plBadge = pl => pl ? `<span class="apb ap-${pl.verdict}" title="${esc(PL_HEAD[pl.verdict])}">rules ${({ ok: '✓', warn: '?', fail: '✕' })[pl.verdict]}</span>` : '';
+  const daysTo = iso => Math.ceil((new Date(iso + 'T23:59:59') - Date.now()) / 864e5);
+  const longDate = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+
   let apps = await S.getApps();
   let profile = await S.getProfile();
   let current = null; // the open drawer
@@ -26,6 +35,7 @@
   chrome.storage.onChanged.addListener(async ch => {
     if (ch.apps) { apps = await S.getApps(); renderAll(); }
     if (ch.profile) { profile = await S.getProfile(); }
+    if (ch.cvs) { cvsCache = null; if (!$('#view-cv').hidden) renderCV(); }
   });
 
   // ---------- Navigation ----------
@@ -33,7 +43,7 @@
     const h = location.hash.slice(1) || 'overview';
     let view = h.split('=')[0];
     if (view === 'app') view = 'apps';
-    if (!['overview', 'apps', 'offers', 'settings', 'data'].includes(view)) view = 'overview';
+    if (!['overview', 'apps', 'offers', 'intern', 'cv', 'settings', 'data'].includes(view)) view = 'overview';
     $$('.view').forEach(v => { v.hidden = v.id !== 'view-' + view; });
     $$('.side a').forEach(a => a.classList.toggle('active', a.dataset.view === view));
     if (h.startsWith('app=')) { const a = apps.find(x => x.id === h.slice(4)); if (a) openDrawer(a); }
@@ -52,15 +62,19 @@
   function renderView(v) {
     $('#navCount').textContent = apps.length || '';
     $('#navOffers').textContent = apps.filter(a => S.everReached(a, A.OFFER)).length || '';
-    ({ overview: renderOverview, apps: renderApps, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
+    $('#navIntern').textContent = apps.filter(a => trackOf(a) === 'intern').length || '';
+    ({ intern: renderIntern, cv: renderCV, overview: renderOverview, apps: renderApps, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
   }
 
   // ---------- OVERVIEW ----------
+  const ovApps = () => ovTrack === 'all' ? apps : apps.filter(a => trackOf(a) === ovTrack);
+  $$('#ovTrack button').forEach(b => b.onclick = () => { ovTrack = b.dataset.t; renderOverview(); });
   function renderOverview() {
-    const total = apps.length;
-    const responded = apps.filter(a => S.everReached(a, A.RESPONDED)).length;
-    const interviews = apps.filter(a => S.everReached(a, A.INTERVIEW)).length;
-    const offers = apps.filter(a => S.everReached(a, A.OFFER)).length;
+    $$('#ovTrack button').forEach(b => b.setAttribute('aria-pressed', b.dataset.t === ovTrack));
+    const total = ovApps().length;
+    const responded = ovApps().filter(a => S.everReached(a, A.RESPONDED)).length;
+    const interviews = ovApps().filter(a => S.everReached(a, A.INTERVIEW)).length;
+    const offers = ovApps().filter(a => S.everReached(a, A.OFFER)).length;
     const stages = [
       { lbl: 'Applied', n: total, conv: total ? 'all time' : 'press Apply on a job site', c: '#5a6b7d' },
       { lbl: 'Responses', n: responded, conv: `${pct(responded, total)} of applications`, c: '#1f7fb0' },
@@ -72,11 +86,11 @@
       <div class="bar"><i style="width:${total ? Math.max(s.n ? 3 : 0, s.n / total * 100) : 0}%;background:${s.c}"></i></div>
       <div class="conv">${s.conv}</div></div>`).join('');
 
-    const rejected = apps.filter(a => a.status === 'rejected').length;
-    const noresp = apps.filter(a => a.status === 'noresponse').length;
-    const active = apps.filter(a => ['applied', 'screening', 'test', 'interview1', 'interview2', 'interview3', 'offer'].includes(a.status)).length;
-    const week = apps.filter(a => daysSince(a.appliedAt) < 7).length;
-    const withChance = apps.filter(a => a.chance);
+    const rejected = ovApps().filter(a => a.status === 'rejected').length;
+    const noresp = ovApps().filter(a => a.status === 'noresponse').length;
+    const active = ovApps().filter(a => ['applied', 'screening', 'test', 'interview1', 'interview2', 'interview3', 'offer'].includes(a.status)).length;
+    const week = ovApps().filter(a => daysSince(a.appliedAt) < 7).length;
+    const withChance = ovApps().filter(a => a.chance);
     const avg = withChance.length ? Math.round(withChance.reduce((s, a) => s + a.chance.score, 0) / withChance.length) : null;
     $('#kpis').innerHTML = `<span>In progress: <b>${active}</b></span><span>Rejected: <b>${rejected}</b></span><span>No response: <b>${noresp}</b></span>
       <span>Last 7 days: <b>${week}</b></span><span>Average fit: <b>${avg == null ? '—' : avg + '%'}</b></span>`;
@@ -93,7 +107,7 @@
     const start = monday(now);
     const buckets = [];
     for (let i = weeks - 1; i >= 0; i--) { const s = new Date(start); s.setDate(s.getDate() - i * 7); buckets.push({ s, n: 0, r: 0 }); }
-    apps.forEach(a => {
+    ovApps().forEach(a => {
       const m = monday(a.appliedAt).getTime();
       const b = buckets.find(x => x.s.getTime() === m);
       if (b) { b.n++; if (S.everReached(a, A.RESPONDED)) b.r++; }
@@ -116,7 +130,7 @@
 
   function renderPlatforms() {
     const map = {};
-    apps.forEach(a => { const p = a.platform || 'Other'; map[p] = map[p] || { n: 0, r: 0 }; map[p].n++; if (S.everReached(a, A.RESPONDED)) map[p].r++; });
+    ovApps().forEach(a => { const p = a.platform || 'Other'; map[p] = map[p] || { n: 0, r: 0 }; map[p].n++; if (S.everReached(a, A.RESPONDED)) map[p].r++; });
     const rows = Object.entries(map).sort((a, b) => b[1].n - a[1].n);
     if (!rows.length) { $('#platforms').innerHTML = '<p class="empty">This will show which sites lead to responses.</p>'; return; }
     const max = rows[0][1].n;
@@ -129,7 +143,7 @@
 
   function renderToolsTop() {
     const cnt = {};
-    apps.forEach(a => (a.tools || []).forEach(t => { cnt[t] = (cnt[t] || 0) + 1; }));
+    ovApps().forEach(a => (a.tools || []).forEach(t => { cnt[t] = (cnt[t] || 0) + 1; }));
     const rows = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 12);
     if (!rows.length) { $('#toolsTop').innerHTML = '<p class="empty">After your first applications this lists the skills worth brushing up before interviews.</p>'; return; }
     const max = rows[0][1];
@@ -142,7 +156,7 @@
 
   function renderAttention() {
     const items = [];
-    apps.forEach(a => {
+    ovApps().forEach(a => {
       if (a.nextDate) {
         const d = Math.ceil((new Date(a.nextDate) - Date.now()) / 864e5);
         if (d >= -1 && d <= 7) items.push({ a, prio: 0, text: d <= 0 ? 'Next step is today' : `Next step in ${d} day${d === 1 ? '' : 's'} (${fmtDate(a.nextDate)})` });
@@ -164,8 +178,8 @@
     $('#attention').innerHTML = items.slice(0, 8).map((it, i) => `
       <div class="att"><div class="what"><b>${esc(it.a.title || 'Untitled')}${it.a.company ? ' — ' + esc(it.a.company) : ''}</b><span>${esc(it.text)}</span></div>
       <div class="btns">${it.action ? `<button class="btn small" data-nr="${it.a.id}">Mark as no response</button>` : ''}${it.fu ? `<button class="btn small primary" data-fu="${it.a.id}">Follow-up</button>` : ''}<button class="btn small" data-open="${it.a.id}">Open</button></div></div>`).join('');
-    $$('#attention [data-open]').forEach(b => b.onclick = () => openDrawer(apps.find(a => a.id === b.dataset.open)));
-    $$('#attention [data-fu]').forEach(b => b.onclick = () => openDrawer(apps.find(a => a.id === b.dataset.fu), { focusFollowUp: true }));
+    $$('#attention [data-open]').forEach(b => b.onclick = () => openDrawer(ovApps().find(a => a.id === b.dataset.open)));
+    $$('#attention [data-fu]').forEach(b => b.onclick = () => openDrawer(ovApps().find(a => a.id === b.dataset.fu), { focusFollowUp: true }));
     $$('#attention [data-nr]').forEach(b => b.onclick = async () => { await S.updateApp(b.dataset.nr, { status: 'noresponse' }); });
   }
 
@@ -180,14 +194,15 @@
     $('#fCategory').innerHTML = '<option value="">All role types</option>' + cats.map(p => `<option>${esc(p)}</option>`).join('');
     $('#fStatus').value = st; $('#fPlatform').value = pl; $('#fCategory').value = ca;
   }
-  ['#fSearch', '#fStatus', '#fPlatform', '#fCategory', '#fSort'].forEach(id => $(id).addEventListener('input', renderAppsRows));
+  ['#fSearch', '#fTrack', '#fStatus', '#fPlatform', '#fCategory', '#fSort'].forEach(id => $(id).addEventListener('input', renderAppsRows));
 
   function renderApps() { fillFilters(); renderAppsRows(); }
 
   function renderAppsRows() {
     const qs = $('#fSearch').value.trim().toLowerCase();
     const st = $('#fStatus').value, pl = $('#fPlatform').value, ca = $('#fCategory').value, sort = $('#fSort').value;
-    let list = apps.filter(a =>
+    const tr = $('#fTrack').value;
+    let list = apps.filter(a => (!tr || trackOf(a) === tr) &&
       (!st || a.status === st) && (!pl || a.platform === pl) && (!ca || a.category === ca) &&
       (!qs || [a.title, a.company, a.location, a.notes, a.ticket].join(' ').toLowerCase().includes(qs)));
     if (sort === 'chance') list.sort((x, y) => ((y.chance || {}).score || 0) - ((x.chance || {}).score || 0));
@@ -204,8 +219,8 @@
     $('#appsBody').innerHTML = list.map(a => `
       <tr data-id="${a.id}">
         <td><span class="ticket">${esc(a.ticket)}</span></td>
-        <td>${a.chance ? `<span class="chance ${chanceClass(a.chance.score)}">${a.chance.score}%</span>` : '—'}</td>
-        <td class="job"><b title="${esc(a.title)}">${esc(a.title || 'Untitled')}</b><span title="${esc([a.company, a.location].filter(Boolean).join(' · '))}">${esc([a.company, a.location].filter(Boolean).join(' · '))}</span></td>
+        <td class="nowrap">${a.chance ? `<span class="chance ${chanceClass(a.chance.score)}">${a.chance.score}%</span>` : '—'}${trackOf(a) === 'intern' ? ' ' + plBadge(a.placement) : ''}</td>
+        <td class="job"><b title="${esc(a.title)}">${trackOf(a) === 'intern' ? '<span class="trk">Internship</span>' : ''}${esc(a.title || 'Untitled')}</b><span title="${esc([a.company, a.location].filter(Boolean).join(' · '))}">${esc([a.company, a.location].filter(Boolean).join(' · '))}</span></td>
         <td><select class="st-select" data-st="${a.id}" aria-label="Status" style="background-image:radial-gradient(circle,${A.statusColor(a.status)} 60%,transparent 62%)">${stOpts(a.status)}</select></td>
         <td class="nowrap">${fmtDate(a.appliedAt)}</td>
         <td>${fmtSal(a)}</td>
@@ -237,6 +252,44 @@
   function benefitsHtml(a) {
     return (a.benefits || []).length ? `<ul class="details">${a.benefits.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="empty">None found in the description. You can add them to your notes.</p>';
   }
+  // ---------- PLACEMENT RULES, ATS, CHECKLIST ----------
+  function placementPanelHtml(a) {
+    if (trackOf(a) !== 'intern') return '';
+    const pl = a.placement || A.checkPlacement(a, profile);
+    if (!pl) return `<h2>Placement rules</h2><p class="empty">Add your university's placement rules on the <a href="#intern">Internships</a> page and every internship is checked against them.</p>`;
+    return `<div class="row-between"><h2>Placement rules</h2><span class="apb ap-${pl.verdict}">${esc(PL_HEAD[pl.verdict])}</span></div>
+      <ul class="aplist">${pl.items.map(i => `<li><i style="color:${PL_ICON[i.state][1]}" aria-label="${i.state}">${PL_ICON[i.state][0]}</i><span><b>${esc(i.label)}</b><br>${esc(i.text)}</span></li>`).join('')}</ul>
+      ${pl.items.some(i => i.state === 'unknown' || i.state === 'warn') ? '<p class="hint" style="margin:8px 0 0">Ask the employer about anything unclear before the interview. If in doubt, send the ad to your placement team to check it would be approved.</p>' : ''}`;
+  }
+  let cvsCache = null;
+  async function getCvs() { if (!cvsCache) cvsCache = (await S.get('cvs')).cvs || {}; return cvsCache; }
+  async function renderAtsPanel(a) {
+    const box = $('#atsPanel'); if (!box) return;
+    const t = trackOf(a), cv = (await getCvs())[t];
+    box.hidden = false;
+    if (!cv || !cv.text) { box.innerHTML = `<h2>ATS check</h2><p class="empty">Add your ${t === 'intern' ? 'internship' : 'job'} CV on the <a href="#cv">CV &amp; ATS</a> page to see how an applicant tracking system would match it to this ad.</p>`; return; }
+    const m = JT_CV.jobMatch(cv.text, a, skillsFor(t));
+    if (!m) { box.hidden = true; return; }
+    const tagRow = (label, list, cls) => list.length ? `<div class="tools"><span class="hint" style="margin:0 6px 0 0">${label}</span>${list.map(x => `<span class="t ${cls}">${esc(x)}</span>`).join('')}</div>` : '';
+    box.innerHTML = `<div class="row-between"><h2>ATS match with your CV</h2><span class="chance ${chanceClass(m.score)}">${m.score}%</span></div>
+      <p class="hint" style="margin:0 0 8px">${esc(cv.name || 'Pasted text')}. An ATS looks for the ad's keywords in your CV.</p>
+      ${tagRow('In your CV:', m.inCV, 's')}${tagRow('You have these, but your CV doesn\'t say so:', m.addable, 'b')}${tagRow('Not in your CV or skills:', m.missing, 'm')}
+      ${m.titleWords.length && m.titleHit.length < m.titleWords.length ? `<p class="hint" style="margin:8px 0 0">Words from the job title missing from your CV: ${m.titleWords.filter(w => !m.titleHit.includes(w)).map(esc).join(', ')}. Use them in your summary if they are true.</p>` : ''}`;
+  }
+  const CHECK_ITEMS = [
+    ['letter', 'Official offer letter'], ['company', 'Letter: company name and address'], ['me', 'Letter: your name and contact details'],
+    ['role', 'Letter: job title, salary, on-site / hybrid / remote, benefits'], ['dates', 'Letter: start and end dates, working hours'],
+    ['manager', 'Line manager contact details (email and phone)'], ['jd', 'Detailed job description: specific duties and skills'],
+    ['days', 'Working days agreed with the employer'], ['submitted', 'Submitted to the university'], ['empRA', 'Employer completed their risk assessment'],
+    ['myRA', 'You completed your risk assessment'], ['approved', 'Approved: you can start'],
+  ];
+  function checklistHtml(a) {
+    const ck = a.placementChecklist || {}, done = CHECK_ITEMS.filter(([k]) => ck[k]).length;
+    const next = (profile.intern.placement.deadlines || []).filter(d => d.date && daysTo(d.date) >= 0).sort((x, y) => x.date < y.date ? -1 : 1)[0];
+    return `<div class="row-between"><h2>Placement paperwork</h2><span class="hint" style="margin:0">${done} of ${CHECK_ITEMS.length}${next ? ` · next: ${esc(next.label)}, ${longDate(next.date)}` : ''}</span></div>
+      <div class="checklist">${CHECK_ITEMS.map(([k, l]) => `<label class="check"><input type="checkbox" data-k="${k}" ${ck[k] ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>`;
+  }
+
   // ---------- FOLLOW-UP ----------
   const TYPE_ICON = { email: '✉', phone: '☎', linkedin: 'in', name: '👤' };
   function renderFollowUp(a) {
@@ -327,6 +380,7 @@
   function openDrawer(app, opts = {}) {
     const isNew = !app;
     const a = app ? JSON.parse(JSON.stringify(app)) : {
+      track: opts.track || 'job',
       title: '', company: '', location: '', url: '', platform: 'LinkedIn', category: 'Other',
       workTypes: [], salaryText: '', status: 'applied', appliedAt: new Date().toISOString(), notes: '', nextDate: '', description: '', history: [], details: [], tools: [], chance: null,
     };
@@ -338,10 +392,14 @@
       <div class="dr-head">${a.ticket ? `<span class="ticket">${esc(a.ticket)}</span>` : ''}<h2>${isNew ? 'New application' : esc(a.title || 'Untitled')}</h2><button class="x" aria-label="Close">×</button></div>
       <div class="dr-body">
         <div class="panel"><h2>Fit against your skills</h2><div id="anBox">${analysisHtml(a)}</div></div>
+        <div class="panel" id="plPanel"${trackOf(a) === 'intern' ? '' : ' hidden'}>${placementPanelHtml(a)}</div>
+        <div class="panel" id="atsPanel" hidden></div>
+        ${!isNew && trackOf(a) === 'intern' && S.everReached(a, A.OFFER) ? `<div class="panel" id="ckPanel">${checklistHtml(a)}</div>` : ''}
         ${!isNew ? '<div class="panel" id="fuPanel"></div>' : ''}
         <div class="panel"><h2>Job</h2>
           <div class="form-grid">
             <label class="full">Job title<input type="text" id="dTitle" value="${esc(a.title)}"></label>
+            <label>Application type<select id="dTrack"><option value="job" ${trackOf(a) === 'job' ? 'selected' : ''}>Job</option><option value="intern" ${trackOf(a) === 'intern' ? 'selected' : ''}>Internship / placement</option></select></label>
             <label>Company<input type="text" id="dCompany" value="${esc(a.company)}"></label>
             <label>Location<input type="text" id="dLocation" value="${esc(a.location)}"></label>
             <label>Status<select id="dStatus">${A.STATUSES.map(s => `<option value="${s.id}" ${s.id === a.status ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}</select></label>
@@ -368,6 +426,14 @@
         <div class="btns"><button class="btn" id="dCancel">Close</button><button class="btn primary" id="dSave">${isNew ? 'Add application' : 'Save'}</button></div>
       </div>`;
     d.hidden = false; $('#scrim').hidden = false;
+    renderAtsPanel(a);
+    $('#dTrack').onchange = () => $('#dReanalyze').click();
+    const bindChecklist = () => $$('#ckPanel input[type=checkbox]').forEach(cb => cb.onchange = async () => {
+      a.placementChecklist = { ...(a.placementChecklist || {}), [cb.dataset.k]: cb.checked };
+      await S.updateApp(a.id, { placementChecklist: a.placementChecklist }); apps = await S.getApps();
+      $('#ckPanel').innerHTML = checklistHtml(a); bindChecklist();
+    });
+    if ($('#ckPanel')) bindChecklist();
     if (!isNew) renderFollowUp(a);
     if (opts.focusFollowUp && $('#fuPanel')) { $('#fuPanel').scrollIntoView({ block: 'start' }); $('#fuBody') && $('#fuBody').focus(); }
     else $('#dTitle').focus();
@@ -382,7 +448,7 @@
       const applied = $('#dApplied').value;
       return {
         title: $('#dTitle').value.trim(), company: $('#dCompany').value.trim(), location: $('#dLocation').value.trim(),
-        status: $('#dStatus').value, platform: $('#dPlatform').value, category: $('#dCategory').value,
+        status: $('#dStatus').value, platform: $('#dPlatform').value, category: $('#dCategory').value, track: $('#dTrack').value,
         salaryText, salary: A.parseSalary(salaryText) || (salaryText ? { text: salaryText } : null),
         appliedAt: applied ? new Date(applied + 'T12:00:00').toISOString() : new Date().toISOString(),
         nextDate: $('#dNext').value, url: $('#dUrl').value.trim(),
@@ -393,8 +459,9 @@
 
     $('#dReanalyze').onclick = () => {
       const f = collect();
-      const an = A.analyze({ title: f.title, description: f.description, location: f.location, workTypes: [], category: '' }, profile);
-      Object.assign(a, { chance: an.chance, tools: an.chance.tools, details: an.details, benefits: an.benefits });
+      const an = A.analyze({ title: f.title, description: f.description, location: f.location, workTypes: [], category: '', track: f.track, salaryText: f.salaryText }, profile);
+      Object.assign(a, { chance: an.chance, tools: an.chance.tools, details: an.details, benefits: an.benefits, placement: an.placement, track: f.track, title: f.title, description: f.description });
+      $('#plPanel').hidden = f.track !== 'intern'; $('#plPanel').innerHTML = placementPanelHtml(a); renderAtsPanel(a);
       $('#anBox').innerHTML = analysisHtml(a);
       $('#detBox').innerHTML = detailsHtml(a);
       $('#benBox').innerHTML = benefitsHtml(a);
@@ -409,11 +476,12 @@
       const f = collect();
       let extra = {};
       const descChanged = f.description !== (a.analyzedDesc != null ? a.analyzedDesc : (app ? app.description : ''));
-      if (f.description && (descChanged || !a.chance)) {
-        const an = A.analyze({ title: f.title, description: f.description, location: f.location, workTypes: f.workTypes, category: f.category }, profile);
-        extra = { chance: an.chance, tools: an.chance.tools, details: an.details, benefits: an.benefits };
+      const trackChanged = !app || f.track !== app.track;
+      if ((f.description || f.title) && (descChanged || !a.chance || trackChanged)) {
+        const an = A.analyze({ title: f.title, description: f.description, location: f.location, workTypes: f.workTypes, category: f.category, track: f.track, salaryText: f.salaryText }, profile);
+        extra = { chance: an.chance, tools: an.chance.tools, details: an.details, benefits: an.benefits, placement: an.placement };
         if (!f.notes.trim() && an.notes) extra.notes = an.notes;
-      } else if (a.chance) extra = { chance: a.chance, tools: a.tools, details: a.details, benefits: a.benefits || [] };
+      } else if (a.chance) extra = { chance: a.chance, tools: a.tools, details: a.details, benefits: a.benefits || [], placement: a.placement || null };
       if (isNew) {
         const created = await S.addApp({ ...f, ...extra, history: [{ status: f.status, at: f.appliedAt }] });
         apps = await S.getApps();
@@ -584,18 +652,24 @@
       profile.targetCategories = $$('#pTargets .chip[aria-pressed=true]').map(x => x.dataset.target);
       await S.saveProfile(profile);
     });
+    $$('#skTrack button').forEach(b => { b.setAttribute('aria-pressed', b.dataset.t === skTrack); b.onclick = () => { skTrack = b.dataset.t; renderSettings(); }; });
+    const sk = skillsFor(skTrack);
     const groups = {};
     A.TOOLS.forEach(t => { (groups[t.group] = groups[t.group] || []).push(t.name); });
-    $('#skillsGrid').innerHTML = Object.entries(groups).map(([g, names]) => `
+    // For internships, put software and AI first
+    const order = skTrack === 'intern' ? ['Software development', 'Data and AI'] : [];
+    const names0 = Object.keys(groups);
+    const rank = g => order.includes(g) ? order.indexOf(g) : 100 + names0.indexOf(g);
+    $('#skillsGrid').innerHTML = Object.entries(groups).sort((x, y) => rank(x[0]) - rank(y[0])).map(([g, names]) => `
       <div class="skill-group"><h3>${esc(g)}</h3><div class="skills">${names.map(n => {
-        const lv = profile.skills[n] || 'none';
+        const lv = sk[n] || 'none';
         return `<div class="skill"><span>${esc(n)}</span><span class="seg" role="group" aria-label="${esc(n)}">
           <button class="s" data-sk="${esc(n)}" data-lv="strong" aria-pressed="${lv === 'strong'}">Confident</button>
           <button class="b" data-sk="${esc(n)}" data-lv="basic" aria-pressed="${lv === 'basic'}">Basic</button>
           <button class="n" data-sk="${esc(n)}" data-lv="none" aria-pressed="${lv === 'none'}">None</button></span></div>`;
       }).join('')}</div></div>`).join('');
     $$('#skillsGrid [data-sk]').forEach(b => b.onclick = async () => {
-      profile.skills[b.dataset.sk] = b.dataset.lv;
+      skillsFor(skTrack)[b.dataset.sk] = b.dataset.lv;
       $$(`#skillsGrid [data-sk="${CSS.escape(b.dataset.sk)}"]`).forEach(x => x.setAttribute('aria-pressed', x === b));
       await S.saveProfile(profile);
     });
@@ -616,16 +690,19 @@
   };
   ['#pDays', '#pHours', '#pLicence', '#pLangs', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
   $('#resetSkills').onclick = async () => {
-    if (!confirm('Clear all skill levels?')) return;
-    profile.skills = { ...A.DEFAULT_SKILLS }; await S.saveProfile(profile); renderSettings();
+    if (!confirm(`Clear all ${skTrack === 'intern' ? 'internship' : 'job'} skill levels?`)) return;
+    if (skTrack === 'intern') profile.intern.skills = {}; else profile.skills = { ...A.DEFAULT_SKILLS };
+    await S.saveProfile(profile); renderSettings();
   };
-  $('#recalcAll').onclick = async () => {
+  $('#recalcAll').onclick = () => recalcAll();
+  async function recalcAll(onlyTrack) {
     const list = await S.getApps();
     let filled = 0;
     list.forEach(a => {
       if (!a.description && !a.title) return;
-      const an = A.analyze({ title: a.title, description: a.description || '', location: a.location, workTypes: a.workTypes, category: a.category }, profile);
-      a.chance = an.chance; a.tools = an.chance.tools;
+      if (onlyTrack && trackOf(a) !== onlyTrack) return;
+      const an = A.analyze({ title: a.title, description: a.description || '', location: a.location, workTypes: a.workTypes, category: a.category, track: a.track, salaryText: a.salaryText }, profile);
+      a.chance = an.chance; a.tools = an.chance.tools; a.track = an.track; a.placement = an.placement;
       if (a.description) {
         a.details = an.details;
         // Fill in notes and benefits on older applications without touching anything you wrote
@@ -640,9 +717,147 @@
       S.touch(a); // so the changes reach the Google Sheet
     });
     await S.saveApps(list);
+    apps = await S.getApps();
+    if (onlyTrack) return;
     $('#recalcAll').textContent = filled ? `Done: fit recalculated, ${filled} field${filled === 1 ? '' : 's'} filled in` : 'Done: fit recalculated';
     setTimeout(() => { $('#recalcAll').textContent = 'Recalculate fit for all applications'; }, 2500);
+  }
+
+  // ---------- INTERNSHIPS ----------
+  $$('[data-new-intern]').forEach(b => b.onclick = () => openDrawer(null, { track: 'intern' }));
+  const savePlacement = async () => { await S.saveProfile(profile); await recalcAll('intern'); renderIntern(); };
+  function renderIntern() {
+    const pl = profile.intern.placement;
+    const dls = (pl.deadlines || []).filter(d => d.date).concat(pl.start ? [{ label: 'Placement starts', date: pl.start }] : []).sort((x, y) => x.date < y.date ? -1 : 1);
+    $('#plDeadlines').innerHTML = dls.length ? dls.slice(0, 4).map(d => {
+      const n = daysTo(d.date);
+      return `<div class="dl ${n < 0 ? 'past' : n <= 7 ? 'urgent' : n <= 21 ? 'soon' : ''}"><span class="dl-n">${n < 0 ? '✓' : n}</span><div><b>${esc(d.label)}</b><span>${longDate(d.date)} · ${n < 0 ? 'passed' : n === 0 ? 'today' : `in ${n} day${n === 1 ? '' : 's'}`}</span></div></div>`;
+    }).join('') : '';
+    $('#plDeadlines').hidden = !dls.length;
+
+    const list = apps.filter(a => trackOf(a) === 'intern').sort((x, y) => ((y.chance || {}).score || 0) - ((x.chance || {}).score || 0));
+    const offers = list.filter(a => S.everReached(a, A.OFFER)).length;
+    $('#plList').innerHTML = !list.length
+      ? '<p class="empty">No internships yet. Open an internship ad and the extension recognises it, checks it against your placement rules and saves it when you press Apply. In search results, tick "Internships only".</p>'
+      : `<p class="hint" style="margin:0 0 8px">${list.length} application${list.length === 1 ? '' : 's'} · fit your rules: ${list.filter(a => a.placement && a.placement.verdict === 'ok').length} · offers: ${offers}</p>` +
+        list.slice(0, 12).map(a => `<div class="att"><div class="what"><b>${esc(a.title || 'Untitled')}${a.company ? ' — ' + esc(a.company) : ''}</b><span>${esc(A.statusLabel(a.status))} · ${a.chance ? a.chance.score + '%' : '—'}${a.placement ? ' · ' + esc(PL_HEAD[a.placement.verdict]) : ''}</span></div><div class="btns">${plBadge(a.placement)}<button class="btn small" data-open="${a.id}">Open</button></div></div>`).join('');
+    $$('#plList [data-open]').forEach(b => b.onclick = () => openDrawer(apps.find(a => a.id === b.dataset.open)));
+
+    const F = { plStart: 'start', plEnd: 'end', plWeeks: 'minWeeks', plMinH: 'minHours', plMaxH: 'maxHours', plDays: 'daysPerWeek' };
+    Object.entries(F).forEach(([id, k]) => {
+      $('#' + id).value = pl[k] || '';
+      $('#' + id).onchange = () => { pl[k] = $('#' + id).type === 'number' ? (+$('#' + id).value || 0) : $('#' + id).value; savePlacement(); };
+    });
+    $('#plOverseas').checked = !!pl.overseasRemoteOnly; $('#plOverseas').onchange = () => { pl.overseasRemoteOnly = $('#plOverseas').checked; savePlacement(); };
+    $('#plPaid').checked = !!pl.paidPreferred; $('#plPaid').onchange = () => { pl.paidPreferred = $('#plPaid').checked; savePlacement(); };
+
+    $('#plDl').innerHTML = (pl.deadlines || []).map((d, i) => `<div class="dl-row"><input type="text" data-dl-l="${i}" value="${esc(d.label)}" aria-label="Deadline"><input type="date" data-dl-d="${i}" value="${esc(d.date)}" aria-label="Date"><button class="btn small" data-dl-x="${i}" aria-label="Remove">×</button></div>`).join('') || '<p class="empty" style="margin:0 0 8px">No deadlines yet.</p>';
+    $$('#plDl [data-dl-l]').forEach(x => x.onchange = () => { pl.deadlines[+x.dataset.dlL].label = x.value; savePlacement(); });
+    $$('#plDl [data-dl-d]').forEach(x => x.onchange = () => { pl.deadlines[+x.dataset.dlD].date = x.value; savePlacement(); });
+    $$('#plDl [data-dl-x]').forEach(x => x.onclick = () => { pl.deadlines.splice(+x.dataset.dlX, 1); savePlacement(); });
+    $('#plDlAdd').onclick = () => { pl.deadlines = (pl.deadlines || []).concat([{ label: 'New deadline', date: '' }]); S.saveProfile(profile).then(renderIntern); };
+
+    const ip = profile.intern;
+    $('#plTargets').innerHTML = A.CATEGORY_NAMES.filter(c => c !== 'Other').map(c => {
+      const st = (ip.priorityCategories || []).includes(c) ? 'priority' : (ip.targetCategories || []).includes(c) ? 'target' : 'no';
+      return `<div class="tg"><span>${esc(c)}</span><span class="seg">${[['priority', 'Priority'], ['target', 'Target'], ['no', 'Not a target']].map(([v, l]) => `<button data-c="${esc(c)}" data-v="${v}" aria-pressed="${st === v}">${l}</button>`).join('')}</span></div>`;
+    }).join('') + '<p class="hint" style="margin:6px 0 0;grid-column:1/-1">With nothing marked, every role type counts. Priority roles score highest.</p>';
+    $$('#plTargets button').forEach(b => b.onclick = () => {
+      const c = b.dataset.c, v = b.dataset.v;
+      ip.priorityCategories = (ip.priorityCategories || []).filter(x => x !== c);
+      ip.targetCategories = (ip.targetCategories || []).filter(x => x !== c);
+      if (v === 'priority') { ip.priorityCategories.push(c); ip.targetCategories.push(c); } else if (v === 'target') ip.targetCategories.push(c);
+      savePlacement();
+    });
+    $('#plPitch').value = ip.pitch || ''; $('#plHighlights').value = ip.highlights || '';
+    $('#plPitch').onchange = () => { ip.pitch = $('#plPitch').value.trim(); S.saveProfile(profile); };
+    $('#plHighlights').onchange = () => { ip.highlights = $('#plHighlights').value.trim(); S.saveProfile(profile); };
+  }
+  $('#plRead').onclick = async () => {
+    const found = A.parsePlacementRules($('#plPaste').value);
+    const keys = Object.keys(found);
+    if (!keys.length) { $('#plMsg').textContent = 'No dates, hours or deadlines found in that text. Fill in the fields below instead.'; $('#plMsg').className = 'msg err'; return; }
+    Object.assign(profile.intern.placement, found);
+    await savePlacement();
+    const parts = [found.start && `dates ${longDate(found.start)} – ${longDate(found.end)}`, found.minWeeks && `at least ${found.minWeeks} weeks`, found.minHours && `${found.minHours}–${found.maxHours} hours`, found.daysPerWeek && `${found.daysPerWeek} days a week`, found.deadlines && `${found.deadlines.length} deadline${found.deadlines.length === 1 ? '' : 's'}`].filter(Boolean);
+    $('#plMsg').textContent = `Found ${parts.join(', ')}. Internships have been re-checked.`; $('#plMsg').className = 'msg ok';
   };
+
+  // ---------- CV AND ATS ----------
+  const LVL = { strong: 'confident', basic: 'basic', none: 'none' };
+  function applyCvSkills(track, found) {
+    const target = track === 'intern' ? profile.intern : profile;
+    const before = { ...target.skills }, next = {};
+    A.TOOLS.forEach(t => { if (found[t.name]) next[t.name] = found[t.name]; });
+    target.skills = next;
+    const changes = A.TOOLS.map(t => t.name).filter(n => (before[n] || 'none') !== (next[n] || 'none')).map(n => ({ n, from: before[n] || 'none', to: next[n] || 'none' }));
+    return { before, changes };
+  }
+  async function renderCV() {
+    const cvs = await getCvs();
+    const card = (t, title, hint) => {
+      const cv = cvs[t];
+      const rep = cv && cv.text ? JT_CV.atsReport(cv.text, cv) : null;
+      const found = cv && cv.text ? JT_CV.skillsFromCV(cv.text) : null;
+      return `<div class="panel cv-card">
+        <div class="row-between"><h2>${title}</h2>${rep ? `<span class="chance ${chanceClass(rep.score)}" title="ATS check of the CV itself">ATS ${rep.score}%</span>` : ''}</div>
+        <p class="hint">${hint}</p>
+        <label class="drop" tabindex="0"><input type="file" accept=".pdf,.docx,.txt,.md" hidden data-file="${t}">
+          <b>${cv ? 'Replace CV' : 'Drop your CV here or click to choose'}</b><span>PDF, Word (.docx) or plain text</span></label>
+        <details class="paste"><summary>or paste the text</summary><textarea rows="6" data-paste="${t}" placeholder="Paste the full text of your CV"></textarea><button class="btn small" data-paste-go="${t}">Read the text</button></details>
+        <p class="msg" data-msg="${t}" role="status"></p>
+        ${cv ? `<p class="hint" style="margin:8px 0">Loaded: <b>${esc(cv.name || 'pasted text')}</b> · ${new Date(cv.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}${cv.pages ? ` · ${cv.pages} page${cv.pages > 1 ? 's' : ''}` : ''}</p>` : ''}
+        ${cv && cv.lastChanges ? `<div class="cv-changes"><b>Skills updated from your CV:</b> ${cv.lastChanges.length ? cv.lastChanges.slice(0, 18).map(c => `<span class="t ${c.to === 'strong' ? 's' : c.to === 'basic' ? 'b' : 'm'}" title="was: ${LVL[c.from]}">${esc(c.n)}: ${LVL[c.to]}</span>`).join(' ') + (cv.lastChanges.length > 18 ? ` and ${cv.lastChanges.length - 18} more` : '') : 'no changes'}
+          ${cv.prevSkills ? `<button class="btn small" data-undo="${t}">Undo</button>` : ''}</div>` : ''}
+        ${rep ? `<h3 class="sub3">ATS check of your CV</h3><ul class="aplist">${rep.checks.map(c => `<li><i style="color:${PL_ICON[c.state][1]}">${PL_ICON[c.state][0]}</i><span><b>${esc(c.label)}</b><br>${esc(c.text)}</span></li>`).join('')}</ul>` : ''}
+        ${found ? `<h3 class="sub3">${Object.keys(found.skills).length} skills found</h3><div class="tools">${Object.entries(found.skills).sort((x, y) => (y[1] === 'strong') - (x[1] === 'strong')).map(([n, l]) => `<span class="t ${l === 'strong' ? 's' : 'b'}" title="${esc(found.evidence[n] || '')}">${esc(n)}</span>`).join('')}</div>` : ''}
+        ${cv ? `<p style="margin:10px 0 0"><button class="btn small danger" data-del="${t}">Remove CV</button></p>` : ''}
+      </div>`;
+    };
+    $('#cvCards').innerHTML = card('job', 'CV for jobs', 'Used to score regular jobs.') + card('intern', 'CV for internships', 'Used to score internships and placements.');
+    const msg = (t, txt, ok) => { const el = $(`[data-msg="${t}"]`); if (el) { el.textContent = txt; el.className = 'msg ' + (ok ? 'ok' : 'err'); } };
+    async function importCv(t, data) {
+      const rep = JT_CV.atsReport(data.text, data), found = JT_CV.skillsFromCV(data.text);
+      if (!Object.keys(found.skills).length && rep.words < 80) { msg(t, 'Could not read any text from that file. If it is a scan, export the CV from Word as PDF or upload the .docx.', false); return; }
+      const { before, changes } = applyCvSkills(t, found.skills);
+      await S.saveProfile(profile);
+      const all = { ...(await getCvs()) };
+      all[t] = { name: data.name || '', kind: data.kind, pages: data.pages || 0, tables: !!data.tables, images: !!data.images, text: data.text, at: new Date().toISOString(), prevSkills: before, lastChanges: changes };
+      await S.set({ cvs: all }); cvsCache = all;
+      msg(t, 'Recalculating fit for your applications…', true);
+      await recalcAll(t);
+      await renderCV();
+      msg(t, `Done: ${Object.keys(found.skills).length} skills found, ${changes.length} changed. Fit recalculated.`, true);
+    }
+    $$('#cvCards [data-file]').forEach(inp => {
+      const t = inp.dataset.file, drop = inp.closest('.drop');
+      const go = async file => {
+        if (!file) return;
+        msg(t, 'Reading the file…', true);
+        try {
+          if (!globalThis.JT_ReadCV) await new Promise(r => addEventListener('jt-cvreader-ready', r, { once: true }));
+          await importCv(t, await JT_ReadCV(file));
+        } catch (e) { msg(t, 'Could not read the file: ' + (e.message || e), false); }
+      };
+      inp.onchange = () => go(inp.files[0]);
+      drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inp.click(); } };
+      drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+      drop.ondragleave = () => drop.classList.remove('over');
+      drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); go(e.dataTransfer.files[0]); };
+    });
+    $$('#cvCards [data-paste-go]').forEach(b => b.onclick = () => { const t = b.dataset.pasteGo, txt = $(`[data-paste="${t}"]`).value; if (txt.trim()) importCv(t, { text: txt, kind: 'txt', name: 'pasted text' }); });
+    $$('#cvCards [data-undo]').forEach(b => b.onclick = async () => {
+      const t = b.dataset.undo, all = { ...(await getCvs()) };
+      if (!all[t] || !all[t].prevSkills) return;
+      (t === 'intern' ? profile.intern : profile).skills = all[t].prevSkills;
+      all[t] = { ...all[t], prevSkills: null, lastChanges: null };
+      await S.saveProfile(profile); await S.set({ cvs: all }); cvsCache = all; await recalcAll(t); renderCV();
+    });
+    $$('#cvCards [data-del]').forEach(b => b.onclick = async () => {
+      if (!confirm('Remove this CV? Your skill levels stay as they are.')) return;
+      const all = { ...(await getCvs()) }; delete all[b.dataset.del]; await S.set({ cvs: all }); cvsCache = all; renderCV();
+    });
+  }
 
   // ---------- GOOGLE SHEET ----------
   async function renderSheetCfg() {

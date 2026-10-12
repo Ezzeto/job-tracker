@@ -14,6 +14,8 @@ I built it for my own job search in the UK, to keep track of applications spread
 - **Tracks the pipeline.** Twelve statuses from *Applied* to *Offer accepted*, a full history per application, a weekly chart, response rate per job board, and a list of what needs attention (follow-ups due, next steps, offer deadlines).
 - **Drafts follow-ups.** Email, LinkedIn note (kept under the 200-character limit) or a phone script, tailored to the job and to whether it was posted by an agency.
 - **Compares offers.** Salary, pension, hours, commute time and cost, holidays and training, weighted by sliders for what matters to you, including an effective hourly rate once the commute is counted.
+- **Handles internships separately.** Internships and placements get their own skills profile, target roles and score. Paste your university's placement briefing and the extension reads the rules (dates, minimum weeks, hours, days a week, remote-only for overseas companies, paid preferred, deadlines) and checks every internship against them: dates, length, hours, location, pay, relevance to the degree and whether the duties are graduate-level.
+- **Reads your CV and checks it like an ATS.** Drop a PDF or Word CV and skill levels are set from it (skills section and experience count as confident; working knowledge, in progress and projects as basic). The CV gets an ATS check (readable text, contact details, standard sections, length, action verbs, numbers, tables, images, template leftovers) and every job shows which of its keywords are in your CV, which you could add honestly, and which you lack. The file is parsed in the browser and never uploaded.
 - **Syncs with Google Sheets.** Applications are copied to a sheet you own; status or notes changed in the sheet (on your phone, say) come back to the extension.
 
 | Fit before you apply | Application drawer with follow-up |
@@ -91,6 +93,18 @@ Known limitations: conflict resolution compares the sheet's clock with the brows
 4. **Deploy → New deployment → Web app**, execute as *Me*, access *Anyone*, then copy the URL that ends in `/exec`.
 5. In the extension: **Skills & settings → Google Sheet**, paste the URL and token, press **Test connection**, then **Sync now**.
 
+### Internships and placement rules
+
+Open **Internships** in the dashboard, paste the placement briefing into *Placement rules* and press *Read the rules*, or fill the fields by hand. Mark which role types are a priority, a target or not a target. An application can be switched between *Job* and *Internship / placement* in its drawer or in the panel on the job page; the search-results panel can show internships only and hide those that break your rules.
+
+| Rule check | Score for internships |
+| --- | --- |
+| ✓ fits · ? not stated in the ad · ✕ breaks a rule · i something to agree with the employer | skills up to 50, role up to 25, level up to 20; a broken rule on dates, location or relevance costs 25, others 8 |
+
+### Upgrading from 2.0
+
+Replace the files and reload the extension; nothing is lost. For the sheet, paste the new `Code.gs` (adds the *Type* and *Placement rules* columns), run `setup`, then *Manage deployments → New version*.
+
 ### Upgrading from 1.x
 
 Version 2.0 switched the interface from Russian to English. Saved applications, settings and backups are migrated automatically when the extension updates (`lib/legacy.js`). For the sheet, paste the new `Code.gs`, run `setup` once (it renames the old sheet and translates its statuses), create a new deployment version and copy the token from the menu.
@@ -100,7 +114,7 @@ Version 2.0 switched the interface from Russian to English. Saved applications, 
 No build step and no runtime dependencies: the extension loads the files in this folder as they are.
 
 ```bash
-npm test          # 41 unit tests with node:test (Node 20+)
+npm test          # 54 unit tests with node:test (Node 20+)
 npm run check     # manifest references, script syntax, no committed token
 ```
 
@@ -111,6 +125,7 @@ The unit tests load the real `lib/` files with a fake `chrome.storage` (`tests/h
 ```bash
 pip install playwright && playwright install chromium
 python3 tests/e2e/smoke.py . docs/screenshots
+python3 tests/e2e/intern.py . path/to/cv.pdf   # placement rules, CV import, internship capture
 ```
 
 ### Project structure
@@ -127,6 +142,9 @@ lib/extract.js        per-site selectors, JSON-LD, contacts
 lib/store.js          storage, tickets, URL normalisation, revisions
 lib/sync.js           Google Sheets push / pull
 lib/followup.js       follow-up templates
+lib/cv.js             CV sections, skills from the CV, ATS check, keyword match
+lib/cvread.mjs        reads PDF (pdf.js) and Word (mammoth) files in the browser
+lib/vendor/           pdf.js 4.10 and mammoth, with their licences
 lib/legacy.js         migration from the Russian-language 1.x versions
 google-sheets/Code.gs Apps Script web app and sheet formatting
 tests/                unit tests, helpers and the browser smoke test
@@ -135,6 +153,7 @@ tests/                unit tests, helpers and the browser smoke test
 ## Roadmap
 
 - Move the analyser to TypeScript and split `dashboard.js` into modules.
+- Optional AI assistant: rewrite CV bullets for a specific ad and draft cover letters, with the user's own API key.
 - Replace keyword matching with semantic matching: a small Python (FastAPI) service that embeds the job ad and the CV, compared against the current scorer on a hand-labelled set of real ads.
 - Publish to the Chrome Web Store.
 

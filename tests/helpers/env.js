@@ -31,6 +31,7 @@ lib('legacy.js');
 lib('extract.js');
 lib('followup.js');
 lib('sync.js');
+lib('cv.js');
 
 module.exports = {
   A: globalThis.JT_Analyzer,
@@ -39,5 +40,6 @@ module.exports = {
   E: globalThis.JT_Extract,
   F: globalThis.JT_Follow,
   Sync: globalThis.JT_Sync,
+  CV: globalThis.JT_CV,
   resetStorage: storage.reset,
 };

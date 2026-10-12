@@ -8,7 +8,7 @@
   const site = E.siteFor(location.hostname);
   if (!site.cardLink) return;
 
-  const DEFAULTS = { enabled: true, fetch: false, min: 0, mode: 'dim', hideApplied: false, hideOutArea: false, hideSenior: false, collapsed: false };
+  const DEFAULTS = { enabled: true, fetch: false, min: 0, mode: 'dim', hideApplied: false, hideOutArea: false, hideSenior: false, onlyIntern: false, hidePlacementFail: false, collapsed: false };
   let cfg = { ...DEFAULTS };
   let profile = null;
   let appliedKeys = new Set();
@@ -27,7 +27,7 @@
     cfg = { ...DEFAULTS, ...(got.listFilter || {}) };
     profile = await S.getProfile();
     const now = Date.now();
-    Object.entries(got.scoreCache || {}).forEach(([k, v]) => { if (now - v.at < CACHE_DAYS * 864e5 && v.v === 2) cache.set(k, v); });
+    Object.entries(got.scoreCache || {}).forEach(([k, v]) => { if (now - v.at < CACHE_DAYS * 864e5 && v.v === 3) cache.set(k, v); });
     const apps = await S.getApps();
     appliedKeys = new Set(apps.map(a => a.urlKey).filter(Boolean));
   }
@@ -125,6 +125,8 @@
       missing: c.keyMissing && c.keyMissing.length ? c.keyMissing : c.missing.slice(0, 4),
       why: c.reasons.filter(r => r.delta !== null).slice(0, 6).map(r => `${r.text}: ${r.delta > 0 ? '+' : ''}${r.delta}`).join('\n'),
       salary: (an.salary && an.salary.text) || job.salaryText || '',
+      intern: an.track === 'intern', rules: an.placement ? an.placement.verdict : null,
+      rulesWhy: an.placement ? an.placement.items.filter(i => i.state === 'fail' || i.state === 'warn').map(i => `${i.state === 'fail' ? '✕' : '!'} ${i.text}`).join('\n') : '',
     };
   }
   function quickScore(card) {
@@ -151,7 +153,7 @@
       if (!job.description || job.description.length < 150) throw new Error('empty');
       entry.job = { title: job.title, description: job.description, location: job.location, salaryText: job.salaryText, extraText: job.extraText };
       entry.res = score(entry.job);
-      entry.full = true; entry.at = Date.now(); entry.v = 2;
+      entry.full = true; entry.at = Date.now(); entry.v = 3;
       saveCache();
     } catch (e) {
       if (e.status === 429 || e.status === 403 || e.status === 999) { pausedUntil = Date.now() + 5 * 60e3; queue.unshift(key); }
@@ -181,7 +183,8 @@
       const res = entry.res || entry.quick;
       const applied = appliedKeys.has(S.normUrl(key));
       if (entry.res) rated++;
-      const hide = (res.score < cfg.min) || (cfg.hideApplied && applied) || (cfg.hideOutArea && res.outArea) || (cfg.hideSenior && res.senior);
+      const hide = (res.score < cfg.min) || (cfg.hideApplied && applied) || (cfg.hideOutArea && res.outArea) || (cfg.hideSenior && res.senior)
+        || (cfg.onlyIntern && !res.intern) || (cfg.hidePlacementFail && res.intern && res.rules === 'fail');
       decorate(c, res, !entry.res, applied, hide);
       if (!hide) shown++;
     }
@@ -205,9 +208,9 @@
       else if (t) t.appendChild(b);
       else { if (getComputedStyle(el).position === 'static') el.style.position = 'relative'; b.dataset.abs = '1'; el.appendChild(b); }
     }
-    const txt = `${approx ? '≈' : ''}${res.score}%` + (applied ? ' ✓' : '');
+    const txt = `${approx ? '≈' : ''}${res.score}%` + (res.intern ? (res.rules === 'ok' ? ' · rules ✓' : res.rules === 'fail' ? ' · rules ✕' : res.rules ? ' · rules ?' : ' · intern') : '') + (applied ? ' ✓' : '');
     const bg = applied ? '#1d3b53' : color(res.score);
-    const title = (approx ? 'Estimate from the card text. Open the job for the full score.\n' : '') + (applied ? 'Already in your tracker\n' : '') + res.why + (res.missing && res.missing.length ? `\nMissing: ${res.missing.join(', ')}` : '');
+    const title = (approx ? 'Estimate from the card text. Open the job for the full score.\n' : '') + (applied ? 'Already in your tracker\n' : '') + (res.intern ? 'Internship\n' : '') + res.why + (res.missing && res.missing.length ? `\nMissing: ${res.missing.join(', ')}` : '') + (res.rulesWhy ? `\n\nPlacement rules:\n${res.rulesWhy}` : '');
     if (b.dataset.t !== txt + bg) {
       b.dataset.t = txt + bg;
       b.textContent = txt;
@@ -260,6 +263,8 @@
         <label><input type="checkbox" id="hideApplied"> Hide jobs I applied to</label>
         <label><input type="checkbox" id="hideOutArea"> Hide outside my areas</label>
         <label><input type="checkbox" id="hideSenior"> Hide senior / lead / 3rd line</label>
+        <label><input type="checkbox" id="onlyIntern"> Internships only</label>
+        <label><input type="checkbox" id="hidePlacementFail"> Hide internships that break my placement rules</label>
         <label id="fetchRow"><input type="checkbox" id="fetch"> Full score (load each description, slower)</label>
         <label><input type="checkbox" id="enabled"> Show scores in results</label>
         <div class="lg"><span><i style="background:#23905a"></i>70+</span><span><i style="background:#b47a12"></i>50–69</span><span><i style="background:#c0463b"></i>&lt;50</span><span>≈ estimate</span></div>
@@ -274,7 +279,7 @@
     $('min').oninput = () => { $('minv').textContent = $('min').value + '%'; cfg.min = +$('min').value; render(); };
     $('min').onchange = saveCfg;
     shadow.querySelectorAll('.seg button').forEach(bt => bt.onclick = () => { cfg.mode = bt.dataset.m; saveCfg(); render(); });
-    ['hideApplied', 'hideOutArea', 'hideSenior', 'fetch', 'enabled'].forEach(k => $(k).onchange = () => { cfg[k] = $(k).checked; saveCfg(); if (k === 'fetch' && cfg.fetch) cache.forEach(v => { v.failed = false; }); render(); });
+    ['hideApplied', 'hideOutArea', 'hideSenior', 'onlyIntern', 'hidePlacementFail', 'fetch', 'enabled'].forEach(k => $(k).onchange = () => { cfg[k] = $(k).checked; saveCfg(); if (k === 'fetch' && cfg.fetch) cache.forEach(v => { v.failed = false; }); render(); });
     c.classList.toggle('collapsed', !!cfg.collapsed);
     $('fetchRow').hidden = !site.fetchUrl; // nothing to load on sites without background fetching
   }
@@ -287,7 +292,7 @@
     $('arr').textContent = cfg.collapsed ? '▴' : '▾';
     $('min').value = cfg.min; $('minv').textContent = cfg.min + '%';
     shadow.querySelectorAll('.seg button').forEach(bt => bt.setAttribute('aria-pressed', bt.dataset.m === cfg.mode));
-    ['hideApplied', 'hideOutArea', 'hideSenior', 'fetch', 'enabled'].forEach(k => { $(k).checked = !!cfg[k]; });
+    ['hideApplied', 'hideOutArea', 'hideSenior', 'onlyIntern', 'hidePlacementFail', 'fetch', 'enabled'].forEach(k => { $(k).checked = !!cfg[k]; });
     if (shown != null) $('cnt').textContent = `${shown}/${cards.length}`;
     const pending = queue.length + active;
     $('status').textContent = !cfg.enabled ? 'Scores are off.'

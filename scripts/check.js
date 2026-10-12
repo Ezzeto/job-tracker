@@ -21,7 +21,7 @@ const sw = fs.readFileSync(path.join(root, manifest.background.service_worker), 
 (sw.match(/importScripts\(([^)]*)\)/) || ['', ''])[1].split(',').map(s => s.trim().replace(/['"]/g, '')).filter(Boolean).forEach(exists);
 for (const page of ['dashboard.html', 'popup.html']) {
   const html = fs.readFileSync(path.join(root, page), 'utf8');
-  [...html.matchAll(/<script src="([^"]+)"/g)].forEach(m => exists(m[1]));
+  [...html.matchAll(/<script\b[^>]*\ssrc="([^"]+)"/g)].forEach(m => exists(m[1]));
 }
 
 // Every JavaScript file, and the Apps Script, must parse

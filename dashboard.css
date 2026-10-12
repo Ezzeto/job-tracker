@@ -155,6 +155,43 @@ textarea{resize:vertical;min-height:60px}
 a.btn{text-decoration:none;display:inline-flex;align-items:center;color:inherit}
 a.btn.primary{color:#fff}
 
+/* Internships, placement rules, CV and ATS */
+.track-seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#fff}
+.track-seg button{border:0;background:#fff;padding:7px 12px;font-size:13px;cursor:pointer;color:var(--muted)}
+.track-seg button+button{border-left:1px solid var(--line)}
+.track-seg button[aria-pressed=true]{background:var(--navy);color:#fff;font-weight:600}
+.trk{display:inline-block;font-size:10.5px;font-weight:650;background:#efe6fb;color:#4b2a8a;border-radius:8px;padding:1px 7px;margin-right:6px;vertical-align:1px}
+.apb{display:inline-block;font-size:11.5px;font-weight:650;border-radius:10px;padding:2px 8px;white-space:nowrap}
+.ap-ok{background:var(--good-soft);color:#1d6b40}.ap-warn{background:var(--mid-soft);color:#7a5510}.ap-fail{background:var(--bad-soft);color:#8f2f26}
+.aplist{list-style:none;margin:0;padding:0;font-size:13px}
+.aplist li{display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.aplist li:last-child{border-bottom:0}
+.aplist i{font-style:normal;font-weight:700;flex:none;width:16px;text-align:center}
+.aplist span{color:var(--muted)}.aplist b{color:var(--ink);font-weight:600}
+.deadlines{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.dl{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.dl-n{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;min-width:48px;text-align:center;color:var(--navy)}
+.dl b{display:block;font-size:13.5px}.dl span{display:block;font-size:12.5px;color:var(--muted)}
+.dl.soon{border-color:#e6c77a}.dl.soon .dl-n{color:var(--mid)}
+.dl.urgent{border-color:#e3a39b;background:#fff8f7}.dl.urgent .dl-n{color:var(--bad)}
+.dl.past{opacity:.6}.dl.past .dl-n{color:var(--good)}
+#view-intern .grid2{margin-bottom:16px}
+.pl-grid{grid-template-columns:repeat(3,1fr)}
+.dl-row{display:grid;grid-template-columns:1fr 170px auto;gap:6px;margin-bottom:6px}
+.sub3{font-size:13px;color:var(--muted);font-weight:600;margin:16px 0 8px}
+.targets{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:6px 18px}
+.tg{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line);font-size:13.5px}
+.tg .seg button{padding:3px 8px;font-size:12px}
+.tg .seg button[aria-pressed=true]{background:var(--navy);color:#fff;font-weight:600}
+.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:2px dashed #b9cadb;border-radius:var(--r);padding:22px;cursor:pointer;background:var(--soft);color:var(--ink);text-align:center}
+.drop:hover,.drop.over{border-color:var(--blue);background:var(--blue-soft)}
+.drop span{font-size:12.5px;color:var(--muted)}
+.paste{margin-top:8px;font-size:13px}.paste summary{cursor:pointer;color:var(--blue)}
+.paste textarea{margin:8px 0}
+.cv-changes{background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:12.5px;display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.checklist{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px}
+.checklist label{font-size:13px}
+
 /* Skills */
 .skill-group{margin-bottom:16px}
 .skill-group h3{font-size:13px;color:var(--muted);font-weight:600;margin:0 0 6px}
@@ -189,6 +226,7 @@ table.offers{border-collapse:collapse;width:100%;font-size:13.5px}
 @media (max-width:1180px){ .c-type{display:none} }
 @media (max-width:1050px){ .c-plat{display:none} }
 @media (max-width:1000px){
+  .deadlines{grid-template-columns:1fr 1fr}.pl-grid,.checklist{grid-template-columns:1fr}
   .grid2{grid-template-columns:1fr}
   .pipeline{grid-template-columns:repeat(2,1fr)}
   .stage:nth-child(2){border-right:0}.stage:nth-child(2)::after{display:none}

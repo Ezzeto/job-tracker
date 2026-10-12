@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Job Tracker",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Records the jobs you apply for on UK job boards, scores how well each one fits your skills and tracks every application to an offer.",
   "permissions": [
     "storage",
@@ -42,6 +42,7 @@
         "lib/analyzer.js",
         "lib/store.js",
         "lib/extract.js",
+        "lib/cv.js",
         "content.js",
         "listscan.js"
       ],
@@ -60,12 +61,19 @@
         "*://*.jobs.ac.uk/*",
         "*://*.adzuna.co.uk/*",
         "*://*.monster.co.uk/*",
-        "*://*.ziprecruiter.co.uk/*"
+        "*://*.ziprecruiter.co.uk/*",
+        "*://*.brightnetwork.co.uk/*",
+        "*://*.gradcracker.com/*",
+        "*://*.ratemyplacement.co.uk/*",
+        "*://*.prospects.ac.uk/*",
+        "*://*.targetjobs.co.uk/*",
+        "*://*.monster.com/*"
       ],
       "js": [
         "lib/analyzer.js",
         "lib/store.js",
         "lib/extract.js",
+        "lib/cv.js",
         "content.js",
         "listscan.js"
       ],

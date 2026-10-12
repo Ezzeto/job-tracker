@@ -173,7 +173,15 @@
     const profile = await S.getProfile();
     const an = A.analyze(job, profile);
     const pageContacts = E.contactsFromDom(document);
+    let atsMatch = null;
+    try {
+      const { cvs } = await S.get('cvs');
+      const cv = cvs && cvs[an.track];
+      const skills = an.track === 'intern' ? profile.intern.skills : profile.skills;
+      if (cv && cv.text && globalThis.JT_CV) atsMatch = JT_CV.jobMatch(cv.text, job, skills);
+    } catch (e) { /* no CV loaded */ }
     return {
+      track: an.track, placement: an.placement, atsMatch,
       contacts: E.mergeContacts(job.contacts || [], pageContacts),
       notes: an.notes, benefits: an.benefits,
       title: job.title, company: job.company, location: job.location, url: job.url, platform: job.platform,
@@ -213,6 +221,12 @@
   button.s{background:#fff;color:#8f2f26;border:1px solid #e0b8b3;border-radius:6px;padding:8px 10px;font:inherit;cursor:pointer}
   button:focus-visible{outline:2px solid #2f7fb5;outline-offset:2px}
   .note{font-size:11px;color:#5a6b7d;margin-top:6px}
+  .ap{margin:8px 0 2px;border:1px solid #d6dee6;border-radius:8px;padding:6px 8px;background:#fff}
+  .ap .v{font-weight:600;font-size:12.5px;margin-bottom:3px}
+  .ap ul{list-style:none;margin:0;padding:0;font-size:11.5px}
+  .ap li{display:flex;gap:6px;padding:1px 0}
+  .ap li i{font-style:normal;flex:none;width:14px;text-align:center}
+  .trk{display:inline-block;font-size:10.5px;font-weight:600;background:#efe6fb;color:#4b2a8a;border-radius:8px;padding:2px 7px;margin-left:6px;vertical-align:middle}
   .badge{position:fixed;right:18px;bottom:18px;z-index:2147483645;display:flex;align-items:center;gap:8px;cursor:pointer;
     background:#fbfcfd;color:#1c2733;border:1px solid #cfd8e1;border-radius:22px;padding:6px 12px 6px 6px;
     box-shadow:0 6px 18px rgba(20,40,60,.18);font:600 13px/1 "Segoe UI",system-ui,sans-serif}
@@ -266,10 +280,13 @@
     box.setAttribute('role', 'dialog');
     box.setAttribute('aria-label', 'Application saved to Job Tracker');
     box.innerHTML = `
-      <div class="hd"><span class="tk">${esc(app.ticket)}</span><b>${isNew ? 'Application saved' : 'Already in your tracker'}</b><button class="x" title="Close" aria-label="Close">×</button></div>
+      <div class="hd"><span class="tk">${esc(app.ticket)}</span><b>${isNew ? 'Application saved' : 'Already in your tracker'}${app.track === 'intern' ? '<span class="trk">Internship</span>' : ''}</b><button class="x" title="Close" aria-label="Close">×</button></div>
       <div class="bd">
         <div class="score"><span class="n" style="color:${scoreColor(c.score)}">${c.score}%</span><div><b>Fit: ${esc(c.label)}</b><div class="note" style="margin:0">against your skills profile</div></div></div>
         <div class="tools">${c.matched.map(t => `<span class="t s">${esc(t)}</span>`).join('')}${c.basic.map(t => `<span class="t b">${esc(t)}</span>`).join('')}${c.missing.map(t => `<span class="t m">${esc(t)}</span>`).join('')}</div>
+        ${placementHtml(app.placement, true)}
+        ${atsHtml(app.atsMatch)}
+        <label>Application type</label><select id="track"><option value="job" ${app.track !== 'intern' ? 'selected' : ''}>Job</option><option value="intern" ${app.track === 'intern' ? 'selected' : ''}>Internship / placement</option></select>
         <label>Job title</label><input id="title" value="${esc(app.title)}">
         <div class="row"><div><label>Company</label><input id="company" value="${esc(app.company)}"></div>
           <div><label>Location</label><input id="location" value="${esc(app.location)}"></div></div>
@@ -293,7 +310,13 @@
     });
     $('save').onclick = async () => {
       const salaryText = $('salaryText').value.trim();
-      await S.updateApp(app.id, {
+      const track = $('track').value;
+      let re = {};
+      if (track !== (app.track || 'job')) {
+        const an = A.analyze({ ...app, title: $('title').value.trim(), location: $('location').value.trim(), track, category: '' }, await S.getProfile());
+        re = { chance: an.chance, placement: an.placement, tools: an.chance.tools };
+      }
+      await S.updateApp(app.id, { track, ...re,
         title: $('title').value.trim(), company: $('company').value.trim(), location: $('location').value.trim(),
         platform: $('platform').value, status: $('status').value, category: $('category').value,
         workTypes: [...box.querySelectorAll('.chip.on')].map(x => x.dataset.v),
@@ -316,6 +339,16 @@
   const reasonsHtml = c => `<ul class="reasons">${(c.reasons || []).map(r => `<li><span>${esc(r.text)}</span><b style="color:${r.delta == null ? '#5a6b7d' : r.delta > 0 ? '#23905a' : r.delta < 0 ? '#c0463b' : '#5a6b7d'}">${r.delta == null ? 'base' : r.delta > 0 ? '+' + r.delta : r.delta === 0 ? 'tip' : r.delta}</b></li>`).join('')}</ul>`;
   const toolsHtml = c => `<div class="tools">${c.matched.map(t => `<span class="t s">${esc(t)}</span>`).join('')}${c.basic.map(t => `<span class="t b">${esc(t)}</span>`).join('')}${c.missing.map(t => `<span class="t m">${esc(t)}</span>`).join('')}</div>`;
 
+  const PL_ICON = { ok: ['✓', '#23905a'], warn: ['!', '#b47a12'], fail: ['✕', '#c0463b'], unknown: ['?', '#7a8794'], info: ['i', '#1f6fa8'] };
+  const PL_HEAD = { ok: ['Fits your placement rules', '#1d6b40'], warn: ['Placement rules: check with the employer', '#7a5510'], fail: ['Breaks your placement rules', '#8f2f26'] };
+  const placementHtml = (pl, compact) => {
+    if (!pl) return '';
+    const items = compact ? pl.items.filter(i => i.state !== 'ok') : pl.items;
+    return `<div class="ap"><div class="v" style="color:${PL_HEAD[pl.verdict][1]}">${PL_HEAD[pl.verdict][0]}</div><ul>${items.map(i => `<li title="${esc(i.label)}"><i style="color:${PL_ICON[i.state][1]}">${PL_ICON[i.state][0]}</i><span><b>${esc(i.label.replace(/\s*\(.*\)/, ''))}:</b> ${esc(i.text)}</span></li>`).join('')}</ul></div>`;
+  };
+  const atsHtml = m => m ? `<div class="note" style="margin-top:6px"><b>ATS match with your CV: ${m.score}%</b>${m.addable.length ? `. You have these but your CV doesn't say so: ${m.addable.map(esc).join(', ')}` : ''}${m.missing.length ? `. Not in your CV or skills: ${m.missing.slice(0, 5).map(esc).join(', ')}` : ''}</div>` : '';
+  const plMark = pl => pl ? ({ ok: ' · rules ✓', warn: ' · rules ?', fail: ' · rules ✕' })[pl.verdict] : '';
+
   let previewSig = '', previewRec = null, previewHidden = false;
 
   function looksLikeJobPage(rec) {
@@ -334,9 +367,11 @@
     box.innerHTML = `
       <div class="hd">${existing ? `<span class="tk">${esc(existing.ticket)}</span>` : ''}<b>${existing ? 'In your tracker · ' + esc(A.statusLabel(existing.status)) : 'Fit before you apply'}</b><button class="x" aria-label="Close">×</button></div>
       <div class="bd">
-        <div style="font-weight:600;margin-bottom:6px">${esc(rec.title)}${rec.company ? ' — ' + esc(rec.company) : ''}</div>
+        <div style="font-weight:600;margin-bottom:6px">${esc(rec.title)}${rec.company ? ' — ' + esc(rec.company) : ''}${rec.track === 'intern' ? '<span class="trk">Internship</span>' : ''}</div>
         <div class="score"><span class="n" style="color:${scoreColor(c.score)}">${c.score}%</span><div><b>Fit: ${esc(c.label)}</b><div class="note" style="margin:0">${esc([rec.location, rec.salaryText].filter(Boolean).join(' · ') || 'against your skills profile')}</div></div></div>
         ${reasonsHtml(c)}
+        ${placementHtml(rec.placement)}
+        ${atsHtml(rec.atsMatch)}
         <h4>Tools in this ad</h4>
         ${c.tools.length ? toolsHtml(c) : '<div class="note">None found in the description.</div>'}
         ${c.missing.length ? `<div class="note">Worth preparing: ${c.missing.map(esc).join(', ')}.</div>` : ''}
@@ -373,7 +408,7 @@
       b.setAttribute('role', 'button');
       b.setAttribute('tabindex', '0');
       b.title = 'Why this score';
-      b.innerHTML = `<span class="pc" style="background:${scoreColor(c.score)}">${c.score}%</span><span>${existing ? esc(A.statusLabel(existing.status)) : 'Fit: ' + esc(c.label.toLowerCase())}</span><button class="hide" aria-label="Hide">×</button>`;
+      b.innerHTML = `<span class="pc" style="background:${scoreColor(c.score)}">${c.score}%</span><span>${existing ? esc(A.statusLabel(existing.status)) : (rec.track === 'intern' ? 'Internship' : 'Fit: ' + esc(c.label.toLowerCase())) + plMark(rec.placement)}</span><button class="hide" aria-label="Hide">×</button>`;
       b.onclick = e => { if (e.target.closest('.hide')) { previewHidden = true; b.remove(); return; } showPreviewPanel(previewRec, existing); };
       b.onkeydown = e => { if (e.key === 'Enter') showPreviewPanel(previewRec, existing); };
       root.appendChild(b);
