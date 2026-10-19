@@ -184,3 +184,38 @@ test('findSimilar matches an application form to the job saved from the ad', asy
   const hit = await S.findSimilar('IT Support Specialist', 'Zachary Daniels');
   assert.equal(hit && hit.id, 'x');
 });
+
+// Shaped like a real Reed ad that scored 67% 'Tailor CV' in 3.0.0
+const JP = `-IT Support / Microsoft 365 / Hybrid Working-
+A bank is currently recruiting a Japanese speakingIT Helpdesk & Administrator to join its London team on a temporary assignment.
+The role will provide IT helpdesk and administrative support, assisting users with technical issues while supporting day-to-day IT operations. The successful candidate will work closely with IT and HR teams and will receive full induction and on-the-job training.
+This opportunity would suit an IT support professional with good communication skills, a methodical approach and the ability to work effectively in a busy corporate environment.
+Key responsibilities
+- Troubleshoot and resolve user-related IT issues, escalating where required
+- Support Microsoft 365 users and keep documentation up to date
+- Administrative support for the IT and HR teams, using Microsoft Office
+Requirements
+- Previous experience in IT helpdesk, IT support or a related role
+- Good customer service
+Working Hours: weekend work and bank holiday work required, shifts between 7:30–15:30, 8:00–16:00, 9:00–17:00 and 10:00–18:00; overtime may be required and is payable
+Benefits: 20 days' annual leave plus 8 Bank Holidays for the first 12 weeks; 25 days' annual leave plus 8 Bank Holidays thereafter
+Working Style: Hybrid; full-time office attendance required for up to the first 4 weeks`;
+
+test('a language in the job title or "X speaking" rules the job out', () => {
+  const an = A.analyze({ title: 'IT Helpdesk & Administrator (fluent Japanese)', company: 'Centre People Appointments', location: 'London', description: JP }, profile({ languages: ['English', 'Russian', 'Ukrainian'] }));
+  assert.equal(an.chance.verdict, 'skip');
+  assert.match(an.chance.gates.blocks.map(b => b.text).join(), /Japanese/);
+  const body2 = A.analyze({ title: 'IT Helpdesk & Administrator', company: 'X', location: 'London', description: JP }, profile({ languages: ['English'] }));
+  assert.ok(body2.chance.gates.blocks.some(b => b.key === 'language'), 'found in "Japanese speakingIT" too');
+  const mine = A.analyze({ title: 'IT Helpdesk (fluent Russian)', company: 'X', location: 'London', description: JP.replace(/Japanese/g, 'Russian') }, profile({ languages: ['English', 'Russian'] }));
+  assert.ok(!mine.chance.gates.blocks.some(b => b.key === 'language'), 'a language you speak is fine');
+});
+
+test('shifts and weekend work are a note; hours, visas and taglines are not benefits', () => {
+  const an = A.analyze({ title: 'IT Helpdesk & Administrator', company: 'X', location: 'London', description: JP }, profile({ languages: ['English', 'Japanese'] }));
+  assert.ok(an.chance.reasons.some(r => /^Shifts or weekends: weekend work/.test(r.text)));
+  assert.ok(!an.chance.gates.asks.some(a => a.key === 'shifts'), 'a note, not a question');
+  assert.ok(an.chance.reasons.some(r => /Temporary/.test(r.text)));
+  assert.ok(!an.benefits.some(b => /IT Support \/|weekend work|visa/i.test(b)), JSON.stringify(an.benefits));
+  assert.ok(an.chance.matched.includes('Microsoft Office'), 'Microsoft 365 covers Office');
+});
