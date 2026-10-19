@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Job Tracker",
-  "version": "2.1.1",
+  "version": "3.0.1",
   "description": "Records the jobs you apply for on UK job boards, scores how well each one fits your skills and tracks every application to an offer.",
   "permissions": [
     "storage",
@@ -39,6 +39,7 @@
         "*://*.indeed.co.uk/*"
       ],
       "js": [
+        "lib/quality.js",
         "lib/analyzer.js",
         "lib/store.js",
         "lib/extract.js",
@@ -70,6 +71,7 @@
         "*://*.monster.com/*"
       ],
       "js": [
+        "lib/quality.js",
         "lib/analyzer.js",
         "lib/store.js",
         "lib/extract.js",

@@ -162,7 +162,9 @@
         const t = el.innerText || '';
         if (t.length > len && t.length < 20000 && el.querySelectorAll('a').length < 40) { best = t; len = t.length; }
       });
-      if (best.length > (job.description || '').length) job.description = best.slice(0, 15000);
+      const Q = globalThis.JT_Quality;
+      const usable = t => !Q || (!Q.looksLikeResultsList(t) && !Q.looksLikeApplicationForm(t));
+      if (best.length > (job.description || '').length && usable(best)) job.description = best.slice(0, 15000);
     }
     return job;
   }
@@ -170,6 +172,13 @@
   async function buildRecord(originEl) {
     const job = await extractJob(originEl);
     if (!job) return null;
+    const Q = globalThis.JT_Quality;
+    // A search heading or form title instead of the job title: look for the real one in the text
+    if (Q && (!job.title || Q.isJunkTitle(job.title))) {
+      const raw = job.description || '';
+      const h = (Q.looksLikeApplicationForm(raw) && Q.headerFromForm(raw)) || Q.recoverHeader(Q.cleanDescription(raw).text) || Q.recoverHeader(raw);
+      if (h && h.title) { job.title = h.title; if (h.company && !job.company) job.company = h.company; }
+    }
     const profile = await S.getProfile();
     const an = A.analyze(job, profile);
     const pageContacts = E.contactsFromDom(document);
@@ -185,7 +194,7 @@
       contacts: E.mergeContacts(job.contacts || [], pageContacts),
       notes: an.notes, benefits: an.benefits,
       title: job.title, company: job.company, location: job.location, url: job.url, platform: job.platform,
-      description: job.description, category: an.category, workTypes: an.workTypes,
+      description: an.description || job.description, category: an.category, workTypes: an.workTypes,
       salaryText: (an.salary && an.salary.text) || job.salaryText || '', salary: an.salary,
       tools: an.chance.tools, details: an.details, chance: an.chance,
     };
@@ -266,6 +275,17 @@
   }
 
   function scoreColor(n) { return n >= 70 ? '#23905a' : n >= 50 ? '#b47a12' : '#c0463b'; }
+  // Colour by verdict, not by the number: a 70% job you are ruled out of is red
+  const VCOL = { apply: '#23905a', tailor: '#2f7fb5', ask: '#b47a12', skip: '#c0463b', incomplete: '#7a8794' };
+  const vColor = c => (c && c.verdict ? VCOL[c.verdict] : scoreColor((c && c.score) || 0));
+  function verdictHtml(c, sub) {
+    const d = A.display ? A.display(c) : { text: c.score + '%', label: c.label, hint: '' };
+    const g = (c && c.gates) || { blocks: [], asks: [] };
+    const q = c && c.quality && !c.quality.ok ? c.quality.issues.filter(i => i.hard) : [];
+    const conf = c && c.verdict !== 'incomplete' && c.confidence ? { high: 'confident', medium: 'fairly sure', low: 'rough guess' }[c.confidence] : '';
+    return `<div class="score"><span class="n" style="color:${vColor(c)}">${esc(d.text)}</span><div><b style="color:${vColor(c)}">${esc(d.label)}</b>${conf ? ` <span class="note" style="margin:0">· ${conf}</span>` : ''}<div class="note" style="margin:0">${esc(sub || d.hint || '')}</div></div></div>
+      ${q.length || g.blocks.length || g.asks.length ? `<div class="ap"><ul>${q.map(i => `<li><i style="color:#7a8794">?</i><span>${esc(i.text)}</span></li>`).join('')}${g.blocks.map(b => `<li><i style="color:#c0463b">✕</i><span>${esc(b.text)}</span></li>`).join('')}${g.asks.map(b => `<li><i style="color:#b47a12">!</i><span>${esc(b.text)}</span></li>`).join('')}</ul></div>` : ''}`;
+  }
 
   function showPanel(app, { isNew }) {
     ensureHost();
@@ -282,7 +302,7 @@
     box.innerHTML = `
       <div class="hd"><span class="tk">${esc(app.ticket)}</span><b>${isNew ? 'Application saved' : 'Already in your tracker'}${app.track === 'intern' ? '<span class="trk">Internship</span>' : ''}</b><button class="x" title="Close" aria-label="Close">×</button></div>
       <div class="bd">
-        <div class="score"><span class="n" style="color:${scoreColor(c.score)}">${c.score}%</span><div><b>Fit: ${esc(c.label)}</b><div class="note" style="margin:0">against your skills profile</div></div></div>
+        ${verdictHtml(c)}
         <div class="tools">${c.matched.map(t => `<span class="t s">${esc(t)}</span>`).join('')}${c.basic.map(t => `<span class="t b">${esc(t)}</span>`).join('')}${c.missing.map(t => `<span class="t m">${esc(t)}</span>`).join('')}</div>
         ${placementHtml(app.placement, true)}
         ${atsHtml(app.atsMatch)}
@@ -352,7 +372,9 @@
   let previewSig = '', previewRec = null, previewHidden = false;
 
   function looksLikeJobPage(rec) {
-    return rec && rec.title && rec.title.length > 3 && (rec.description || '').length > 300;
+    if (!(rec && rec.title && rec.title.length > 3 && (rec.description || '').length > 300)) return false;
+    const issues = (rec.chance && rec.chance.quality && rec.chance.quality.issues) || [];
+    return !issues.some(i => ['junk-title', 'results-page', 'form-page', 'no-title'].includes(i.code));
   }
 
   async function showPreviewPanel(rec, existing) {
@@ -368,7 +390,7 @@
       <div class="hd">${existing ? `<span class="tk">${esc(existing.ticket)}</span>` : ''}<b>${existing ? 'In your tracker · ' + esc(A.statusLabel(existing.status)) : 'Fit before you apply'}</b><button class="x" aria-label="Close">×</button></div>
       <div class="bd">
         <div style="font-weight:600;margin-bottom:6px">${esc(rec.title)}${rec.company ? ' — ' + esc(rec.company) : ''}${rec.track === 'intern' ? '<span class="trk">Internship</span>' : ''}</div>
-        <div class="score"><span class="n" style="color:${scoreColor(c.score)}">${c.score}%</span><div><b>Fit: ${esc(c.label)}</b><div class="note" style="margin:0">${esc([rec.location, rec.salaryText].filter(Boolean).join(' · ') || 'against your skills profile')}</div></div></div>
+        ${verdictHtml(c, [rec.location, rec.salaryText].filter(Boolean).join(' · '))}
         ${reasonsHtml(c)}
         ${placementHtml(rec.placement)}
         ${atsHtml(rec.atsMatch)}
@@ -408,7 +430,8 @@
       b.setAttribute('role', 'button');
       b.setAttribute('tabindex', '0');
       b.title = 'Why this score';
-      b.innerHTML = `<span class="pc" style="background:${scoreColor(c.score)}">${c.score}%</span><span>${existing ? esc(A.statusLabel(existing.status)) : (rec.track === 'intern' ? 'Internship' : 'Fit: ' + esc(c.label.toLowerCase())) + plMark(rec.placement)}</span><button class="hide" aria-label="Hide">×</button>`;
+      const d = A.display(c);
+      b.innerHTML = `<span class="pc" style="background:${vColor(c)}">${esc(d.text)}</span><span>${existing ? esc(A.statusLabel(existing.status)) : esc(d.label) + (rec.track === 'intern' ? ' · internship' : '') + plMark(rec.placement)}</span><button class="hide" aria-label="Hide">×</button>`;
       b.onclick = e => { if (e.target.closest('.hide')) { previewHidden = true; b.remove(); return; } showPreviewPanel(previewRec, existing); };
       b.onkeydown = e => { if (e.key === 'Enter') showPreviewPanel(previewRec, existing); };
       root.appendChild(b);
@@ -438,7 +461,15 @@
     try {
       const rec = await buildRecord(originEl);
       if (!rec) { toast('Couldn\'t find a job on this page', 'Add by hand', openDashboard, 6000); return; }
-      const existing = await S.findByUrl(rec.url);
+      const issues = ((rec.chance && rec.chance.quality && rec.chance.quality.issues) || []).map(i => i.code);
+      // An application form or a page without a real title belongs to the job saved from its ad;
+      // a real ad with a new link is saved (Re-check flags it if it repeats an older one)
+      const notAnAd = issues.some(c => ['form-page', 'junk-title', 'no-title', 'results-page'].includes(c));
+      const existing = (await S.findByUrl(rec.url)) || (notAnAd ? await S.findSimilar(rec.title, rec.company) : null);
+      if (!existing && (issues.includes('results-page') || issues.includes('junk-title') || issues.includes('no-title'))) {
+        toast('This looks like a list of jobs, not one ad: open the job itself and press Apply there', 'Add by hand', openDashboard, 7000);
+        return;
+      }
       if (existing) {
         if (source === 'manual') showPanel(existing, { isNew: false });
         else toast(`Already in your tracker: ${existing.ticket} · ${A.statusLabel(existing.status)}`, 'Show', () => showPanel(existing, { isNew: false }));

@@ -8,7 +8,7 @@
   const site = E.siteFor(location.hostname);
   if (!site.cardLink) return;
 
-  const DEFAULTS = { enabled: true, fetch: false, min: 0, mode: 'dim', hideApplied: false, hideOutArea: false, hideSenior: false, onlyIntern: false, hidePlacementFail: false, collapsed: false };
+  const DEFAULTS = { enabled: true, fetch: false, min: 0, mode: 'dim', hideApplied: false, hideOutArea: false, hideSenior: false, hideSkip: false, onlyIntern: false, hidePlacementFail: false, collapsed: false };
   let cfg = { ...DEFAULTS };
   let profile = null;
   let appliedKeys = new Set();
@@ -115,11 +115,15 @@
   const fetchOf = c => site.fetchUrl ? site.fetchUrl(c.id) : c.href;
 
   // ---------- Scoring ----------
-  function score(job) {
-    const an = A.analyze(job, profile);
+  function score(job, approx) {
+    const an = A.analyze(job, profile, { approx: !!approx });
     const c = an.chance;
+    const blocks = (c.gates && c.gates.blocks) || [];
+    // A card is too short for a verdict, except when something on it already rules the job out
+    const verdict = approx ? (blocks.length ? 'skip' : null) : c.verdict;
     return {
-      score: c.score, label: c.label, lowData: c.lowData,
+      score: c.score, label: c.label, lowData: c.lowData, verdict, blocks: blocks.map(b => b.text),
+      asks: approx ? [] : ((c.gates && c.gates.asks) || []).map(b => b.text),
       outArea: !!c.outArea,
       senior: !!c.senior,
       missing: c.keyMissing && c.keyMissing.length ? c.keyMissing : c.missing.slice(0, 4),
@@ -134,7 +138,7 @@
     const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
     const title = card.title || lines[0] || '';
     const job = { title, description: text, location: guessLocation(lines, title) };
-    return { ...score(job), approx: true };
+    return { ...score(job, true), approx: true };
   }
   function guessLocation(lines, title) {
     const areas = (profile.areas || []).map(a => a.toLowerCase());
@@ -183,7 +187,7 @@
       const res = entry.res || entry.quick;
       const applied = appliedKeys.has(S.normUrl(key));
       if (entry.res) rated++;
-      const hide = (res.score < cfg.min) || (cfg.hideApplied && applied) || (cfg.hideOutArea && res.outArea) || (cfg.hideSenior && res.senior)
+      const hide = (res.verdict !== 'incomplete' && res.score < cfg.min) || (cfg.hideSkip && res.verdict === 'skip') || (cfg.hideApplied && applied) || (cfg.hideOutArea && res.outArea) || (cfg.hideSenior && res.senior)
         || (cfg.onlyIntern && !res.intern) || (cfg.hidePlacementFail && res.intern && res.rules === 'fail');
       decorate(c, res, !entry.res, applied, hide);
       if (!hide) shown++;
@@ -208,9 +212,11 @@
       else if (t) t.appendChild(b);
       else { if (getComputedStyle(el).position === 'static') el.style.position = 'relative'; b.dataset.abs = '1'; el.appendChild(b); }
     }
-    const txt = `${approx ? '≈' : ''}${res.score}%` + (res.intern ? (res.rules === 'ok' ? ' · rules ✓' : res.rules === 'fail' ? ' · rules ✕' : res.rules ? ' · rules ?' : ' · intern') : '') + (applied ? ' ✓' : '');
-    const bg = applied ? '#1d3b53' : color(res.score);
-    const title = (approx ? 'Estimate from the card text. Open the job for the full score.\n' : '') + (applied ? 'Already in your tracker\n' : '') + (res.intern ? 'Internship\n' : '') + res.why + (res.missing && res.missing.length ? `\nMissing: ${res.missing.join(', ')}` : '') + (res.rulesWhy ? `\n\nPlacement rules:\n${res.rulesWhy}` : '');
+    const VL = { apply: 'Apply', tailor: 'Tailor', ask: 'Check', skip: 'Skip', incomplete: '?' };
+    const txt = (res.verdict === 'incomplete' ? '?' : `${approx ? '≈' : ''}${res.score}%`) + (res.verdict && res.verdict !== 'incomplete' ? ' · ' + VL[res.verdict] : '') + (res.intern ? (res.rules === 'ok' ? ' · rules ✓' : res.rules === 'fail' ? ' · rules ✕' : res.rules ? ' · rules ?' : ' · intern') : '') + (applied ? ' ✓' : '');
+    const VC = { apply: '#23905a', tailor: '#2f7fb5', ask: '#b47a12', skip: '#c0463b', incomplete: '#7a8794' };
+    const bg = applied ? '#1d3b53' : res.verdict ? VC[res.verdict] : color(res.score);
+    const title = (approx ? 'Estimate from the card text. Open the job for the full score.\n' : '') + (applied ? 'Already in your tracker\n' : '') + (res.intern ? 'Internship\n' : '') + (res.blocks && res.blocks.length ? res.blocks.map(x => '✕ ' + x).join('\n') + '\n' : '') + (res.asks && res.asks.length ? res.asks.map(x => '! ' + x).join('\n') + '\n' : '') + res.why + (res.missing && res.missing.length ? `\nMissing: ${res.missing.join(', ')}` : '') + (res.rulesWhy ? `\n\nPlacement rules:\n${res.rulesWhy}` : '');
     if (b.dataset.t !== txt + bg) {
       b.dataset.t = txt + bg;
       b.textContent = txt;
@@ -263,6 +269,7 @@
         <label><input type="checkbox" id="hideApplied"> Hide jobs I applied to</label>
         <label><input type="checkbox" id="hideOutArea"> Hide outside my areas</label>
         <label><input type="checkbox" id="hideSenior"> Hide senior / lead / 3rd line</label>
+        <label><input type="checkbox" id="hideSkip"> Hide jobs that rule you out (licence, years, local only…)</label>
         <label><input type="checkbox" id="onlyIntern"> Internships only</label>
         <label><input type="checkbox" id="hidePlacementFail"> Hide internships that break my placement rules</label>
         <label id="fetchRow"><input type="checkbox" id="fetch"> Full score (load each description, slower)</label>
@@ -279,7 +286,7 @@
     $('min').oninput = () => { $('minv').textContent = $('min').value + '%'; cfg.min = +$('min').value; render(); };
     $('min').onchange = saveCfg;
     shadow.querySelectorAll('.seg button').forEach(bt => bt.onclick = () => { cfg.mode = bt.dataset.m; saveCfg(); render(); });
-    ['hideApplied', 'hideOutArea', 'hideSenior', 'onlyIntern', 'hidePlacementFail', 'fetch', 'enabled'].forEach(k => $(k).onchange = () => { cfg[k] = $(k).checked; saveCfg(); if (k === 'fetch' && cfg.fetch) cache.forEach(v => { v.failed = false; }); render(); });
+    ['hideApplied', 'hideOutArea', 'hideSenior', 'hideSkip', 'onlyIntern', 'hidePlacementFail', 'fetch', 'enabled'].forEach(k => $(k).onchange = () => { cfg[k] = $(k).checked; saveCfg(); if (k === 'fetch' && cfg.fetch) cache.forEach(v => { v.failed = false; }); render(); });
     c.classList.toggle('collapsed', !!cfg.collapsed);
     $('fetchRow').hidden = !site.fetchUrl; // nothing to load on sites without background fetching
   }
@@ -292,7 +299,7 @@
     $('arr').textContent = cfg.collapsed ? '▴' : '▾';
     $('min').value = cfg.min; $('minv').textContent = cfg.min + '%';
     shadow.querySelectorAll('.seg button').forEach(bt => bt.setAttribute('aria-pressed', bt.dataset.m === cfg.mode));
-    ['hideApplied', 'hideOutArea', 'hideSenior', 'onlyIntern', 'hidePlacementFail', 'fetch', 'enabled'].forEach(k => { $(k).checked = !!cfg[k]; });
+    ['hideApplied', 'hideOutArea', 'hideSenior', 'hideSkip', 'onlyIntern', 'hidePlacementFail', 'fetch', 'enabled'].forEach(k => { $(k).checked = !!cfg[k]; });
     if (shown != null) $('cnt').textContent = `${shown}/${cards.length}`;
     const pending = queue.length + active;
     $('status').textContent = !cfg.enabled ? 'Scores are off.'

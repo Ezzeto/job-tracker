@@ -33,7 +33,7 @@ flowchart LR
     LS[listscan.js<br/>scores result cards]
   end
   subgraph ext [Extension]
-    AN[lib/analyzer.js<br/>skills, salary, sections, fit score]
+    AN[lib/quality.js + lib/analyzer.js<br/>clean text, skills, gates, verdict]
     ST[(chrome.storage.local)]
     SW[background.js<br/>service worker]
     DB[dashboard.html / popup.html]
@@ -60,6 +60,17 @@ Everything runs locally. The analyser is plain JavaScript with no network calls 
 | Bonuses | positive | Part-time or flexible hours when you work fewer than five days; a language you speak that the ad asks for. |
 
 It is a guide for deciding where to spend time, not a prediction.
+
+### Verdicts (3.0)
+
+A number alone said little: in a real backup of 100 applications, 96 scored 50% or more, including empty records and application forms that scored 73%. Since 3.0 every job gets a verdict, and the number is shown only when the data under it is real.
+
+1. **Data quality** (`lib/quality.js`). The description is cleaned of LinkedIn and Indeed page chrome (search results, *Show match details*, *About the company*, footers). Search headings (*37,252 IT Engineer Jobs*), application forms and lists of jobs are recognised; the title is recovered from the text where possible (*Join Northwood as IT Support Engineer*). A record without a real ad gets **?** and the verdict *Incomplete*.
+2. **Gates** (`checkGates` in `lib/analyzer.js`). Blocks rule a job out as you are today: a required driving licence (including a bare *Full, clean driving licence* bullet), years far above yours (*3+ years in a support role*), a 3rd-line or senior title, a contractor day rate, a language you do not speak, *local candidates only* with a place outside your areas (the place is read from the sentence, not the saved location). Asks are worth checking first: one more year than you have, 2nd line, security clearance, a degree, the commute, placement dates not stated.
+3. **Verdict and confidence.** *Skip* if anything blocks; *Check first* if something needs asking or the ad names few skills; otherwise *Apply* (70+) or *Tailor CV* (45–69). Confidence (confident · fairly sure · rough guess) depends on the length of the ad and how many skills it names; a rough guess shows as ≈62%. A blocked job is capped at 25% so it sorts to the bottom.
+4. **Re-check and calibration.** *Data → Re-check all* downloads a backup, then runs the current rules over everything saved: repairs titles, cleans descriptions, re-scores, marks duplicates (same link; same title and company within two weeks; the same ad text) with an optional merge that keeps notes, contacts and the furthest status, and renumbers clashing tickets. *Overview → Does the verdict work?* shows reply and interview rates per verdict, so you can see whether Apply jobs really answer more often than Skip jobs.
+
+To check a rule change against your own data before shipping it, export a backup and run `node scripts/audit-export.js backup.json`: it prints the old score next to the new verdict for every application. Keep the backup outside the repository: it holds personal data.
 
 ### Google Sheets sync
 
@@ -101,6 +112,10 @@ Open **Internships** in the dashboard, paste the placement briefing into *Placem
 | --- | --- |
 | ✓ fits · ? not stated in the ad · ✕ breaks a rule · i something to agree with the employer | skills up to 50, role up to 25, level up to 20; a broken rule on dates, location or relevance costs 25, others 8 |
 
+### Upgrading from 2.x to 3.0
+
+Reload the extension, then open *Data → Re-check all* once: it downloads a backup first, then gives every saved application a verdict, cleans old descriptions and fixes clashing ticket numbers. Review the duplicates it lists before pressing *Merge duplicates*. For the sheet, paste the new `Code.gs` (adds the *Verdict* column and ignores broken *Next step* dates), run `setup`, then *Manage deployments → New version*. Fit % is left empty in the sheet for incomplete records.
+
 ### Upgrading from 2.0
 
 Replace the files and reload the extension; nothing is lost. For the sheet, paste the new `Code.gs` (adds the *Type* and *Placement rules* columns), run `setup`, then *Manage deployments → New version*. If the sheet still has the old Russian tabs next to the English ones, `setup` copies any rows that exist only in the old tab and removes the old tabs.
@@ -114,7 +129,7 @@ Version 2.0 switched the interface from Russian to English. Saved applications, 
 No build step and no runtime dependencies: the extension loads the files in this folder as they are.
 
 ```bash
-npm test          # 54 unit tests with node:test (Node 20+)
+npm test          # 78 unit tests with node:test (Node 20+)
 npm run check     # manifest references, script syntax, no committed token
 ```
 
@@ -137,7 +152,10 @@ content.js            job pages: Apply detection, extraction, fit panel
 listscan.js           search results: score badges and filter panel
 popup.html/js         toolbar popup
 dashboard.html/js/css overview, applications, offers, settings, data
-lib/analyzer.js       skills dictionary, salary parser, sections, fit score
+lib/analyzer.js       skills dictionary, salary parser, sections, fit score, gates, verdicts
+lib/quality.js        cleans descriptions, recognises forms, lists and junk titles
+lib/recheck.js        re-check, duplicates, merge, ticket repair
+scripts/audit-export.js  old score vs new verdict for a backup file (run locally)
 lib/extract.js        per-site selectors, JSON-LD, contacts
 lib/store.js          storage, tickets, URL normalisation, revisions
 lib/sync.js           Google Sheets push / pull

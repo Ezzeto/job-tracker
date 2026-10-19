@@ -25,6 +25,7 @@ const storage = fakeStorage();
 globalThis.chrome = { storage: { local: storage.local } };
 
 const lib = f => require(path.join(__dirname, '..', '..', 'lib', f));
+lib('quality.js');
 lib('analyzer.js');
 lib('store.js');
 lib('legacy.js');
@@ -32,14 +33,17 @@ lib('extract.js');
 lib('followup.js');
 lib('sync.js');
 lib('cv.js');
+lib('recheck.js');
 
 module.exports = {
   A: globalThis.JT_Analyzer,
+  Q: globalThis.JT_Quality,
   S: globalThis.JT_Store,
   L: globalThis.JT_Legacy,
   E: globalThis.JT_Extract,
   F: globalThis.JT_Follow,
   Sync: globalThis.JT_Sync,
   CV: globalThis.JT_CV,
+  R: globalThis.JT_Recheck,
   resetStorage: storage.reset,
 };

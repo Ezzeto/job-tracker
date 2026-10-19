@@ -37,7 +37,7 @@
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !/^https?:/.test(tab.url || '')) { $('msg').textContent = 'Open a job page first.'; return; }
     try {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['lib/analyzer.js', 'lib/store.js', 'lib/extract.js', 'lib/cv.js', 'content.js'] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['lib/quality.js', 'lib/analyzer.js', 'lib/store.js', 'lib/extract.js', 'lib/cv.js', 'content.js'] });
       await chrome.tabs.sendMessage(tab.id, { type: 'preview' });
       window.close();
     } catch (e) { $('msg').textContent = 'Couldn\'t read this page.'; }
@@ -47,7 +47,7 @@
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !/^https?:/.test(tab.url || '')) { $('msg').textContent = 'Can\'t add from this page. Open a job page, or add the application in the dashboard.'; return; }
     try {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['lib/analyzer.js', 'lib/store.js', 'lib/extract.js', 'lib/cv.js', 'content.js'] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['lib/quality.js', 'lib/analyzer.js', 'lib/store.js', 'lib/extract.js', 'lib/cv.js', 'content.js'] });
       await chrome.tabs.sendMessage(tab.id, { type: 'manualAdd' });
       window.close();
     } catch (e) {
