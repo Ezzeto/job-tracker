@@ -33,6 +33,7 @@
         <div class="panel"><h2>What employers ask for most</h2><p class="hint">Colour shows your level: green confident, amber basic, red none.</p><div id="toolsTop"></div></div>
         <div class="panel"><h2>Needs attention</h2><div id="attention"></div></div>
       </div>
+      <div class="panel"><h2>Does the verdict work?</h2><p class="hint">Reply and interview rate for each verdict.</p><div id="calibration"></div></div>
     </section>
 
     <!-- APPLICATIONS -->
@@ -181,6 +182,13 @@
         </div>
         <p class="msg" id="dataMsg" role="status"></p>
       </div>
+      <div class="panel">
+        <h2>Re-check all applications</h2>
+        <p class="hint">Runs the current rules over everything saved: repairs titles like "37,252 IT Engineer Jobs", strips search results and LinkedIn widgets from descriptions, re-scores with verdicts, finds duplicates and fixes clashing ticket numbers. A backup is downloaded first.</p>
+        <div class="btns"><button class="btn primary" id="recheckAll">Re-check all</button><button class="btn" id="mergeDups" hidden>Merge duplicates</button></div>
+        <p class="msg" id="recheckMsg" role="status"></p>
+        <div id="dupList"></div>
+      </div>
       <div class="panel danger">
         <h2>Delete everything</h2>
         <p class="hint">Deletes all applications and offers. Skills and settings are kept.</p>
@@ -193,8 +201,10 @@
   <div class="scrim" id="scrim" hidden></div>
   <aside class="drawer" id="drawer" hidden aria-label="Application" role="dialog"></aside>
 
+  <script src="lib/quality.js"></script>
   <script src="lib/analyzer.js"></script>
   <script src="lib/store.js"></script>
+  <script src="lib/recheck.js"></script>
   <script src="lib/legacy.js"></script>
   <script src="lib/extract.js"></script>
   <script src="lib/followup.js"></script>

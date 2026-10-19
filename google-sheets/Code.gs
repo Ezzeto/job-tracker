@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 10; // 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 11; // 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -14,7 +14,7 @@ const COLS = [
   ['appliedAt', 'Applied on'], ['status', 'Status'], ['chance', 'Fit %'], ['nextDate', 'Next step'],
   ['notes', 'Notes'], ['missing', 'Missing skills'], ['tools', 'Tools'], ['details', 'Key details'],
   ['url', 'Link'], ['updated', '_updated'], ['benefits', 'Benefits'], ['contacts', 'Contacts'], ['followup', 'Follow-up'],
-  ['track', 'Type'], ['placement', 'Placement rules'],
+  ['track', 'Type'], ['placement', 'Placement rules'], ['verdict', 'Verdict'],
 ];
 const C = {}; COLS.forEach(([k], i) => { C[k] = i + 1; });
 // [status, status cell background, text colour, light tint for the whole row]
@@ -195,7 +195,7 @@ function formatSheet_(sh) {
   if (last >= 2) sh.setRowHeightsForced(2, last - 1, ROW_H);
 
   const widths = { ticket: 82, title: 230, company: 150, location: 120, category: 150, workTypes: 140, salary: 120,
-    platform: 95, appliedAt: 92, status: 165, chance: 64, nextDate: 100, notes: 260, missing: 170, tools: 200, details: 260, url: 80, benefits: 260, contacts: 260, followup: 110, track: 95, placement: 110 };
+    platform: 95, appliedAt: 92, status: 165, chance: 64, nextDate: 100, notes: 260, missing: 170, tools: 200, details: 260, url: 80, benefits: 260, contacts: 260, followup: 110, track: 95, placement: 110, verdict: 100 };
   Object.keys(widths).forEach(k => sh.setColumnWidth(C[k], widths[k]));
   ['ticket', 'appliedAt', 'chance', 'nextDate', 'url'].forEach(k => sh.getRange(2, C[k], maxRows - 1, 1).setHorizontalAlignment('center'));
   sh.getRange(2, C.appliedAt, maxRows - 1, 1).setNumberFormat('dd/mm/yyyy');
@@ -450,7 +450,8 @@ function doPost(e) {
     const toRow = a => COLS.map(([k]) => {
       const v = a[k];
       if (k === 'appliedAt') return v ? new Date(v) : '';
-      if (k === 'nextDate') { if (!v) return ''; const [y, m, d] = String(v).split('-').map(Number); return new Date(y, m - 1, d); }
+      // Only a real yyyy-mm-dd date: ',' or '1970-01-01' used to land in the sheet as 1970 or a broken cell
+      if (k === 'nextDate') { const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); if (!m || +m[1] < 2000) return ''; return new Date(+m[1], +m[2] - 1, +m[3]); }
       if (k === 'chance') return v === '' || v == null ? '' : Number(v);
       return v == null ? '' : v;
     });

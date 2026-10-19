@@ -10,6 +10,17 @@
   const pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '—';
   const daysSince = d => Math.floor((Date.now() - new Date(d).getTime()) / 864e5);
   const chanceClass = n => n >= 70 ? 'c-good' : n >= 50 ? 'c-mid' : 'c-bad';
+  // A verdict pill: Apply / Tailor CV / Check first / Skip / ? (incomplete)
+  const V_CLASS = { apply: 'c-good', tailor: 'c-tailor', ask: 'c-mid', skip: 'c-bad', incomplete: 'c-none' };
+  const V_RANK = { apply: 0, tailor: 1, ask: 2, skip: 3, incomplete: 4 };
+  function fitPill(c) {
+    if (!c) return '—';
+    const d = A.display(c);
+    if (!c.verdict) return `<span class="chance ${chanceClass(c.score)}">${c.score}%</span>`;
+    const why = [d.hint, ...((c.gates && c.gates.blocks) || []).map(b => '✕ ' + b.text), ...((c.gates && c.gates.asks) || []).map(b => '! ' + b.text), ...((c.quality && !c.quality.ok && c.quality.issues) || []).filter(i => i.hard).map(i => '? ' + i.text)].filter(Boolean).join('\n');
+    return `<span class="chance ${V_CLASS[c.verdict]}" title="${esc(why)}">${esc(d.text)}</span> <span class="vlabel">${esc(d.label)}</span>`;
+  }
+  const sure = a => a.chance && a.chance.verdict !== 'incomplete' && a.chance.confidence !== 'low' && a.chance.v >= 3;
   const PER = { year: '/yr', hour: '/hr', day: '/day', week: '/wk', month: '/mo' };
   const fmtSal = a => {
     const x = a.salary;
@@ -90,10 +101,16 @@
     const noresp = ovApps().filter(a => a.status === 'noresponse').length;
     const active = ovApps().filter(a => ['applied', 'screening', 'test', 'interview1', 'interview2', 'interview3', 'offer'].includes(a.status)).length;
     const week = ovApps().filter(a => daysSince(a.appliedAt) < 7).length;
-    const withChance = ovApps().filter(a => a.chance);
+    // Only scores you can trust go into the average; incomplete records are counted separately
+    const withChance = ovApps().filter(sure);
     const avg = withChance.length ? Math.round(withChance.reduce((s, a) => s + a.chance.score, 0) / withChance.length) : null;
+    const incomplete = ovApps().filter(a => a.chance && a.chance.verdict === 'incomplete').length;
+    const skipped = ovApps().filter(a => a.chance && a.chance.verdict === 'skip').length;
     $('#kpis').innerHTML = `<span>In progress: <b>${active}</b></span><span>Rejected: <b>${rejected}</b></span><span>No response: <b>${noresp}</b></span>
-      <span>Last 7 days: <b>${week}</b></span><span>Average fit: <b>${avg == null ? '—' : avg + '%'}</b></span>`;
+      <span>Last 7 days: <b>${week}</b></span><span title="Only applications with a full job ad">Average fit: <b>${avg == null ? '—' : avg + '%'}</b></span>
+      ${skipped ? `<span title="Applications the tracker now marks Skip: something in the ad ruled you out">Applied to Skip jobs: <b>${skipped}</b></span>` : ''}
+      ${incomplete ? `<span title="The job ad was not captured: open the job page and re-save, or paste the description">Incomplete: <b>${incomplete}</b></span>` : ''}`;
+    renderCalibration();
 
     renderWeekly();
     renderPlatforms();
@@ -139,6 +156,22 @@
       <span class="track"><i style="width:${v.r / max * 100}%;background:#1f6fa8"></i><i style="width:${(v.n - v.r) / max * 100}%;background:#b9d3e8"></i></span>
       <span class="v">${v.n} · ${pct(v.r, v.n)}</span></div>`).join('') +
       `<div class="legend"><span style="--c:#1f6fa8">Response</span><span style="--c:#b9d3e8">No response</span><span style="--c:transparent">right: total · response rate</span></div>`;
+  }
+
+  // Does the verdict mean anything? Replies and interviews per verdict, from your own history
+  function renderCalibration() {
+    const box = $('#calibration');
+    if (!box) return;
+    const rows = ['apply', 'tailor', 'ask', 'skip'].map(v => {
+      const list = ovApps().filter(a => a.chance && a.chance.verdict === v && daysSince(a.appliedAt) >= 14);
+      return { v, n: list.length, r: list.filter(a => S.everReached(a, A.RESPONDED)).length, i: list.filter(a => S.everReached(a, ['interview1', 'interview2', 'interview3', 'offer', 'accepted'])).length };
+    }).filter(x => x.n);
+    if (!rows.length) { box.innerHTML = '<p class="empty">After a few weeks this shows whether Apply jobs really answer more often than Skip jobs.</p>'; return; }
+    const max = Math.max(...rows.map(x => x.n));
+    box.innerHTML = rows.map(x => `<div class="hbar"><span class="name">${esc(A.VERDICTS[x.v].label)}</span>
+      <span class="track"><i style="width:${x.r / max * 100}%;background:#1f6fa8"></i><i style="width:${(x.n - x.r) / max * 100}%;background:#b9d3e8"></i></span>
+      <span class="v">${x.n} · ${pct(x.r, x.n)} reply · ${pct(x.i, x.n)} interview</span></div>`).join('') +
+      `<p class="hint" style="margin:8px 0 0">Applications older than two weeks. If Skip replies as often as Apply, the rules need changing: tell me which ads were wrong.</p>`;
   }
 
   function renderToolsTop() {
@@ -205,7 +238,8 @@
     let list = apps.filter(a => (!tr || trackOf(a) === tr) &&
       (!st || a.status === st) && (!pl || a.platform === pl) && (!ca || a.category === ca) &&
       (!qs || [a.title, a.company, a.location, a.notes, a.ticket].join(' ').toLowerCase().includes(qs)));
-    if (sort === 'chance') list.sort((x, y) => ((y.chance || {}).score || 0) - ((x.chance || {}).score || 0));
+    const vr = a => (a.chance && a.chance.verdict in V_RANK ? V_RANK[a.chance.verdict] : 5);
+    if (sort === 'chance') list.sort((x, y) => vr(x) - vr(y) || ((y.chance || {}).score || 0) - ((x.chance || {}).score || 0));
     else if (sort === 'salary') list.sort((x, y) => ((y.salary || {}).annualMax || 0) - ((x.salary || {}).annualMax || 0));
     else list.sort((x, y) => new Date(y.appliedAt) - new Date(x.appliedAt));
 
@@ -219,7 +253,7 @@
     $('#appsBody').innerHTML = list.map(a => `
       <tr data-id="${a.id}">
         <td><span class="ticket">${esc(a.ticket)}</span></td>
-        <td class="nowrap">${a.chance ? `<span class="chance ${chanceClass(a.chance.score)}">${a.chance.score}%</span>` : '—'}${trackOf(a) === 'intern' ? ' ' + plBadge(a.placement) : ''}</td>
+        <td class="nowrap">${fitPill(a.chance)}${a.dupOf ? ` <span class="tag" title="Looks like the same job as ${esc(a.dupOf)}">dup</span>` : ''}${trackOf(a) === 'intern' ? ' ' + plBadge(a.placement) : ''}</td>
         <td class="job"><b title="${esc(a.title)}">${trackOf(a) === 'intern' ? '<span class="trk">Internship</span>' : ''}${esc(a.title || 'Untitled')}</b><span title="${esc([a.company, a.location].filter(Boolean).join(' · '))}">${esc([a.company, a.location].filter(Boolean).join(' · '))}</span></td>
         <td><select class="st-select" data-st="${a.id}" aria-label="Status" style="background-image:radial-gradient(circle,${A.statusColor(a.status)} 60%,transparent 62%)">${stOpts(a.status)}</select></td>
         <td class="nowrap">${fmtDate(a.appliedAt)}</td>
@@ -233,18 +267,30 @@
   }
 
   // ---------- DRAWER ----------
-  function ring(score) {
-    const r = 36, c = 2 * Math.PI * r, col = score >= 70 ? '#23905a' : score >= 50 ? '#b47a12' : '#c0463b';
-    return `<svg class="score-ring" viewBox="0 0 84 84" role="img" aria-label="Fit ${score}%"><circle cx="42" cy="42" r="${r}" fill="none" stroke="#e3e9ef" stroke-width="8"/>
-      <circle cx="42" cy="42" r="${r}" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${c * score / 100} ${c}" transform="rotate(-90 42 42)"/>
-      <text x="42" y="48" text-anchor="middle" font-size="19" font-weight="700" fill="${col}">${score}%</text></svg>`;
+  const V_COL = { apply: '#23905a', tailor: '#2f7fb5', ask: '#b47a12', skip: '#c0463b', incomplete: '#7a8794' };
+  function ring(score, ch) {
+    const unknown = ch && ch.verdict === 'incomplete';
+    const r = 36, c = 2 * Math.PI * r, col = ch && ch.verdict ? V_COL[ch.verdict] : score >= 70 ? '#23905a' : score >= 50 ? '#b47a12' : '#c0463b';
+    const label = ch ? A.display(ch).text : score + '%';
+    return `<svg class="score-ring" viewBox="0 0 84 84" role="img" aria-label="Fit ${esc(label)}"><circle cx="42" cy="42" r="${r}" fill="none" stroke="#e3e9ef" stroke-width="8"/>
+      ${unknown ? '' : `<circle cx="42" cy="42" r="${r}" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${c * score / 100} ${c}" transform="rotate(-90 42 42)"/>`}
+      <text x="42" y="48" text-anchor="middle" font-size="19" font-weight="700" fill="${col}">${esc(label)}</text></svg>`;
+  }
+  function gatesHtml(c) {
+    const g = c.gates || { blocks: [], asks: [] };
+    const q = c.quality && !c.quality.ok ? c.quality.issues.filter(i => i.hard) : [];
+    if (!q.length && !g.blocks.length && !g.asks.length) return '';
+    return `<ul class="aplist gates">${q.map(i => `<li><i style="color:#7a8794">?</i><span>${esc(i.text)}</span></li>`).join('')}${g.blocks.map(b => `<li><i style="color:#c0463b">✕</i><span>${esc(b.text)}</span></li>`).join('')}${g.asks.map(b => `<li><i style="color:#b47a12">!</i><span>${esc(b.text)}</span></li>`).join('')}</ul>`;
   }
 
   function analysisHtml(a) {
     if (!a.chance) return '<p class="empty">Paste the job description below and press Re-analyse.</p>';
     const c = a.chance;
-    return `<div class="score-card">${ring(c.score)}<div style="flex:1"><b>Fit: ${esc(c.label)}</b>
-      <ul class="reasons">${c.reasons.map(r => `<li><span>${esc(r.text)}</span><span class="d" style="color:${r.delta == null ? '#5a6b7d' : r.delta > 0 ? '#23905a' : r.delta < 0 ? '#c0463b' : '#5a6b7d'}">${r.delta == null ? 'base' : r.delta > 0 ? '+' + r.delta : r.delta === 0 ? 'tip' : r.delta}</span></li>`).join('')}</ul></div></div>
+    const d = A.display(c);
+    const conf = c.verdict && c.verdict !== 'incomplete' ? ({ high: ' · confident', medium: ' · fairly sure', low: ' · rough guess' })[c.confidence] || '' : '';
+    return `<div class="score-card">${ring(c.score, c)}<div style="flex:1"><b style="color:${c.verdict ? V_COL[c.verdict] : 'inherit'}">${esc(c.verdict ? d.label : 'Fit: ' + c.label)}</b><span class="hint">${esc(conf)}</span>${c.verdict ? `<div class="hint" style="margin:2px 0 0">${esc(c.verdict === 'incomplete' ? d.hint + ', or paste the description below and press Re-analyse' : d.hint)}</div>` : ''}
+      ${gatesHtml(c)}
+      <ul class="reasons">${(c.verdict === 'incomplete' ? [] : c.reasons).map(r => `<li><span>${esc(r.text)}</span><span class="d" style="color:${r.delta == null ? '#5a6b7d' : r.delta > 0 ? '#23905a' : r.delta < 0 ? '#c0463b' : '#5a6b7d'}">${r.delta == null ? 'base' : r.delta > 0 ? '+' + r.delta : r.delta === 0 ? 'tip' : r.delta}</span></li>`).join('')}</ul></div></div>
       <div class="tools">${c.matched.map(t => `<span class="t s">${esc(t)}</span>`).join('')}${c.basic.map(t => `<span class="t b">${esc(t)}</span>`).join('')}${c.missing.map(t => `<span class="t m">${esc(t)}</span>`).join('')}</div>
       ${c.missing.length ? `<p class="hint" style="margin:8px 0 0">Prepare for the interview: ${c.missing.map(esc).join(', ')}.</p>` : ''}`;
   }
@@ -701,7 +747,7 @@
     list.forEach(a => {
       if (!a.description && !a.title) return;
       if (onlyTrack && trackOf(a) !== onlyTrack) return;
-      const an = A.analyze({ title: a.title, description: a.description || '', location: a.location, workTypes: a.workTypes, category: a.category, track: a.track, salaryText: a.salaryText }, profile);
+      const an = A.analyze({ title: a.title, company: a.company, description: a.description || '', location: a.location, workTypes: a.workTypes, category: a.category, track: a.track, salaryText: a.salaryText }, profile);
       a.chance = an.chance; a.tools = an.chance.tools; a.track = an.track; a.placement = an.placement;
       if (a.description) {
         a.details = an.details;
@@ -740,7 +786,7 @@
     $('#plList').innerHTML = !list.length
       ? '<p class="empty">No internships yet. Open an internship ad and the extension recognises it, checks it against your placement rules and saves it when you press Apply. In search results, tick "Internships only".</p>'
       : `<p class="hint" style="margin:0 0 8px">${list.length} application${list.length === 1 ? '' : 's'} · fit your rules: ${list.filter(a => a.placement && a.placement.verdict === 'ok').length} · offers: ${offers}</p>` +
-        list.slice(0, 12).map(a => `<div class="att"><div class="what"><b>${esc(a.title || 'Untitled')}${a.company ? ' — ' + esc(a.company) : ''}</b><span>${esc(A.statusLabel(a.status))} · ${a.chance ? a.chance.score + '%' : '—'}${a.placement ? ' · ' + esc(PL_HEAD[a.placement.verdict]) : ''}</span></div><div class="btns">${plBadge(a.placement)}<button class="btn small" data-open="${a.id}">Open</button></div></div>`).join('');
+        list.slice(0, 12).map(a => `<div class="att"><div class="what"><b>${esc(a.title || 'Untitled')}${a.company ? ' — ' + esc(a.company) : ''}</b><span>${esc(A.statusLabel(a.status))} · ${a.chance ? esc(A.display(a.chance).text + (a.chance.verdict ? ' ' + A.VERDICTS[a.chance.verdict].label : '')) : '—'}${a.placement ? ' · ' + esc(PL_HEAD[a.placement.verdict]) : ''}</span></div><div class="btns">${plBadge(a.placement)}<button class="btn small" data-open="${a.id}">Open</button></div></div>`).join('');
     $$('#plList [data-open]').forEach(b => b.onclick = () => openDrawer(apps.find(a => a.id === b.dataset.open)));
 
     const F = { plStart: 'start', plEnd: 'end', plWeeks: 'minWeeks', plMinH: 'minHours', plMaxH: 'maxHours', plDays: 'daysPerWeek' };
@@ -899,6 +945,57 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const stamp = () => new Date().toISOString().slice(0, 10);
+  // ---------- RE-CHECK ----------
+  // Repairs titles, cleans descriptions, re-scores, marks duplicates and fixes clashing tickets.
+  // A backup is downloaded first, since descriptions are rewritten.
+  const recheckMsg = t => { $('#recheckMsg').innerHTML = t; };
+  async function downloadBackup(suffix) {
+    const all = await S.get(['apps', 'profile', 'counter', 'offerWeights']);
+    const blob = new Blob([JSON.stringify({ version: chrome.runtime.getManifest().version, exportedAt: new Date().toISOString(), ...all }, null, 2)], { type: 'application/json' });
+    const u = URL.createObjectURL(blob), link = document.createElement('a');
+    link.href = u; link.download = `job-tracker-${new Date().toISOString().slice(0, 10)}${suffix || ''}.json`; link.click();
+    setTimeout(() => URL.revokeObjectURL(u), 2000);
+  }
+  function renderDupList(list) {
+    const dups = list.filter(a => a.dupOf);
+    $('#mergeDups').hidden = !dups.length;
+    $('#dupList').innerHTML = dups.length ? `<ul class="details">${dups.map(a => `<li><b>${esc(a.ticket)}</b> ${esc(a.title || 'Untitled')}${a.company ? ' — ' + esc(a.company) : ''} → same job as <b>${esc(a.dupOf)}</b></li>`).join('')}</ul>` : '';
+  }
+  $('#recheckAll').onclick = async () => {
+    if (!globalThis.JT_Recheck) return;
+    $('#recheckAll').disabled = true;
+    try {
+      await downloadBackup('-before-recheck');
+      const list = await S.getApps();
+      const { counter } = await S.get('counter');
+      const rep = JT_Recheck.recheckAll(list, profile, counter);
+      list.forEach(a => S.touch(a));
+      await S.saveApps(list);
+      await S.set({ counter: rep.counter });
+      apps = await S.getApps();
+      const v = rep.verdicts, L = k => A.VERDICTS[k] ? A.VERDICTS[k].label : k;
+      recheckMsg(`<b>${esc(rep.summary)}</b><br>${Object.keys(v).map(k => `${esc(L(k))}: ${v[k]}`).join(' · ')}` +
+        (rep.renumbered.length ? `<br>New ticket numbers: ${rep.renumbered.map(r => esc(r.from + ' → ' + r.to)).join(', ')}` : '') +
+        (rep.incomplete.length ? `<br>Incomplete (open the job page and save again, or paste the description): ${rep.incomplete.map(esc).join(', ')}` : ''));
+      renderDupList(apps);
+      renderAll();
+    } finally { $('#recheckAll').disabled = false; }
+  };
+  $('#mergeDups').onclick = async () => {
+    const list = await S.getApps();
+    const n = list.filter(a => a.dupOf).length;
+    if (!n || !confirm(`Merge ${n} duplicate record${n === 1 ? '' : 's'} into the job they repeat? Notes, contacts, follow-ups and status history are kept.`)) return;
+    const { apps: kept, merged } = JT_Recheck.mergeDuplicates(list);
+    kept.forEach(a => { delete a.dupOf; S.touch(a); });
+    // Merged records are deleted from the sheet on the next sync
+    const { pendingDeletes = [] } = await S.get('pendingDeletes');
+    await S.set({ pendingDeletes: pendingDeletes.concat(merged.map(m => m.id).filter(id => (list.find(a => a.id === id) || {}).syncedAt)) });
+    await S.saveApps(kept);
+    apps = await S.getApps();
+    recheckMsg(`Merged: ${merged.map(m => esc(m.ticket + ' → ' + m.into)).join(', ')}`);
+    renderDupList(apps); renderAll();
+  };
+
   $('#exportJson').onclick = async () => {
     const all = await S.get(['apps', 'profile', 'counter', 'offerWeights']);
     download(`job-tracker-${stamp()}.json`, JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), ...all }, null, 2), 'application/json');
@@ -907,7 +1004,7 @@
     const cols = [['Ticket', a => a.ticket], ['Job title', a => a.title], ['Company', a => a.company], ['Location', a => a.location],
       ['Role type', a => a.category], ['Work type', a => (a.workTypes || []).join(', ')], ['Salary', a => (a.salary && a.salary.text) || a.salaryText],
       ['Source', a => a.platform], ['Applied on', a => fmtDate(a.appliedAt)], ['Status', a => A.statusLabel(a.status)],
-      ['Fit %', a => a.chance ? a.chance.score : ''], ['Tools', a => (a.tools || []).join(', ')],
+      ['Fit %', a => a.chance && a.chance.verdict !== 'incomplete' ? a.chance.score : ''], ['Verdict', a => a.chance && a.chance.verdict ? A.VERDICTS[a.chance.verdict].label : ''], ['Tools', a => (a.tools || []).join(', ')],
       ['Missing', a => a.chance ? a.chance.missing.join(', ') : ''], ['Benefits', a => (a.benefits || []).join(' • ')], ['Notes', a => a.notes], ['Link', a => a.url]];
     const cellv = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
     const csv = '\ufeff' + [cols.map(c => cellv(c[0])).join(',')].concat(apps.map(a => cols.map(c => cellv(c[1](a))).join(','))).join('\r\n');

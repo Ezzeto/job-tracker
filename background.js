@@ -1,5 +1,5 @@
 /* Job Tracker — background service worker */
-importScripts('lib/analyzer.js', 'lib/store.js', 'lib/legacy.js', 'lib/sync.js');
+importScripts('lib/quality.js', 'lib/analyzer.js', 'lib/store.js', 'lib/legacy.js', 'lib/sync.js');
 
 async function openDashboard(hash) {
   const url = chrome.runtime.getURL('dashboard.html') + (hash || '');
