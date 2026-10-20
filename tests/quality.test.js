@@ -249,3 +249,32 @@ test('a job that is not in IT is ruled out; IT titles outside the categories are
   const ict = A.analyze(job('ICT Technician Schools', '- 1 year of IT support'), profile());
   assert.ok(!ict.chance.gates.blocks.some(b => b.key === 'role'));
 });
+
+// ---------- 3.0.3: admin, facilities and adverts that named only office skills scored 70%+ ----------
+const office = (title, lines) => ({ title, company: 'X', location: 'London', description: lines.join('\n') + '\n' + '- Proficiency in Microsoft Office, including Outlook, Word and Excel.\n- Excellent customer service and communication.\n- Keep accurate records of every request and follow it up promptly with the right team.\n'.repeat(3) });
+
+test('facilities, reception and admin roles are not IT roles, even with a "helpdesk"', () => {
+  for (const [t, lines] of [
+    ['Facilities Management Officer', ['- Manage Facilities Management helpdesk requests', '- Issue building passes to visitors']],
+    ['Workspace Services Receptionist', ['- Raise and track maintenance requests through CAFM systems', '- Manage visitor sign-in']],
+    ['Help Desk Admin', ['- Raise new jobs on our CAFM system for engineers', '- Process engineer timesheets']],
+    ['Fire & Security Administrator', ['- Raise reactive work orders for engineers', '- Update the IT/CAFM system with PPM completion']],
+    ['School Administrator', ['- Admissions, student data and the school calendar', '- Ability to use SIMS']],
+  ]) {
+    const an = A.analyze(office(t, lines), profile());
+    assert.equal(an.chance.verdict, 'skip', t);
+    assert.ok(an.chance.gates.blocks.some(b => b.key === 'role'), t);
+  }
+});
+
+test('training courses and survey sites are not jobs', () => {
+  const course = A.analyze(office('IT Support Assistant - Training Course', ['Course Details', '- Duration: 7 weeks', 'Price: £0', '- This is a fully government-funded course - there are no fees to pay.']), profile());
+  assert.ok(course.chance.gates.blocks.some(b => b.key === 'not-a-job'));
+  const survey = A.analyze(office('Paid Research', ['Take part in paid surveys, focus groups and mystery shopping.', "It's not a suitable replacement for a job."]), profile());
+  assert.ok(survey.chance.gates.blocks.some(b => b.key === 'not-a-job'));
+});
+
+test('IT roles that mention admin or an IT system are still IT roles', () => {
+  for (const t of ['IT Administrator', 'Systems Administrator', 'I.T Helpdesk', 'IT Support Engineer (Mac)', '1st Line Support'])
+    assert.ok(!A.analyze(job(t, '- 1 year of IT support'), profile()).chance.gates.blocks.some(b => b.key === 'role' || b.key === 'not-a-job'), t);
+});
