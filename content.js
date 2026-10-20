@@ -65,6 +65,18 @@
     return null;
   }
 
+  // CV-Library's split view: the open job is ?jobId=… in the address, shown in a pane on the right.
+  // The pane has no JSON-LD, so the job page itself is fetched (same site, same cookies).
+  function paneJobLink(originEl, site) {
+    if (site.name !== 'cvlibrary') return null;
+    const id = new URL(location.href).searchParams.get('jobId');
+    if (!id || !/^\d{5,}$/.test(id)) return null;
+    const inPane = !originEl || originEl.closest('[class*="JobDetailPane"], [class*="JobView_"]');
+    if (!inPane) return null;
+    const card = document.querySelector(`a[href*="/job/${id}/"]`);
+    return card ? card.href : `${location.origin}/job/${id}`;
+  }
+
   const isJobPage = site => {
     if (site.name === 'reed') return /\/jobs\/[^/?#]+\/\d+/.test(location.pathname);
     if (site.name === 'totaljobs') return /\/job\//.test(location.pathname);
@@ -134,7 +146,7 @@
     const scope = findScope(originEl, site);
     const needFetch = ['reed', 'totaljobs', 'cvlibrary'].includes(site.name) && !isJobPage(site);
     if (needFetch) {
-      const link = findJobLink(originEl, scope, site);
+      const link = paneJobLink(originEl, site) || findJobLink(originEl, scope, site);
       if (link) {
         const key = S.cleanUrl(link);
         if (!fetchCache.has(key)) fetchCache.set(key, E.fetchAndParse(link, link).catch(e => { fetchCache.delete(key); throw e; }));

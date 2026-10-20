@@ -219,3 +219,33 @@ test('shifts and weekend work are a note; hours, visas and taglines are not bene
   assert.ok(!an.benefits.some(b => /IT Support \/|weekend work|visa/i.test(b)), JSON.stringify(an.benefits));
   assert.ok(an.chance.matched.includes('Microsoft Office'), 'Microsoft 365 covers Office');
 });
+
+// ---------- 3.0.2: places, day rates, non-IT roles (CV-Library search, Oct 2026) ----------
+test('London districts and Hertfordshire towns count as your areas', () => {
+  const areas = ['london', 'hertfordshire', 'essex', 'cambridge'];
+  for (const l of ['Whitechapel, England', 'Elstree and Borehamwood, England', 'Potters Bar, England', 'Clapham, London (2 miles)', 'SE11, Greater London', 'Harlow, Essex'])
+    assert.ok(A.inAreas(l, areas), l);
+  for (const l of ['Manchester', 'Crawley, England', 'Bristol']) assert.ok(!A.inAreas(l, areas), l);
+  const an = A.analyze({ title: 'IT Support Engineer', company: 'X', location: 'Whitechapel, England', description: body('- 1 year of IT support') }, profile({ areas: ['London'] }));
+  assert.ok(!an.chance.gates.asks.some(a => a.key === 'commute'));
+});
+
+test('a modest day rate is a contract question, not a senior role', () => {
+  const j = { ...job('1st Line Support', '- 1 year of IT support'), salaryText: '£200 - £250 per day' };
+  const an = A.analyze(j, profile());
+  assert.ok(!an.chance.gates.blocks.some(b => b.key === 'level'), JSON.stringify(an.chance.gates));
+  assert.ok(an.chance.gates.asks.some(a => a.key === 'contract'));
+  const high = A.analyze({ ...j, salaryText: '£450 per day' }, profile());
+  assert.equal(high.chance.verdict, 'skip');
+});
+
+test('a job that is not in IT is ruled out; IT titles outside the categories are not', () => {
+  const water = 'You will carry out water hygiene and legionella risk assessments, flush outlets, take water samples and keep site records for commercial buildings across London. '.repeat(6);
+  const an = A.analyze({ title: 'Water Treatment Engineer', company: 'X', location: 'London', description: water }, profile());
+  assert.equal(an.chance.verdict, 'skip');
+  assert.ok(an.chance.gates.blocks.some(b => b.key === 'role'));
+  assert.equal(A.detectCategory('ICT Technician Schools', ''), 'IT Technician / Field Support');
+  assert.equal(A.detectCategory('Desktop Analyst', ''), 'IT Help Desk / Service Desk');
+  const ict = A.analyze(job('ICT Technician Schools', '- 1 year of IT support'), profile());
+  assert.ok(!ict.chance.gates.blocks.some(b => b.key === 'role'));
+});

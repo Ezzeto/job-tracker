@@ -43,3 +43,10 @@ test('siteFor matches supported job boards', () => {
   assert.equal(E.siteFor('careers.example.com').name, 'other');
   assert.equal(E.siteFor('www.linkedin.com').fetchUrl, null, 'LinkedIn results are never fetched in the background');
 });
+
+test('CV-Library job links match with and without the slug', () => {
+  const s = E.siteFor('www.cv-library.co.uk');
+  assert.ok(s.cardLink.test('https://www.cv-library.co.uk/job/225697311/it-support-engineer'));
+  assert.ok(s.cardLink.test('https://www.cv-library.co.uk/job/225697311'));
+  assert.ok(!s.cardLink.test('https://www.cv-library.co.uk/jobs/it-support'));
+});

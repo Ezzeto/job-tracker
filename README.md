@@ -129,7 +129,7 @@ Version 2.0 switched the interface from Russian to English. Saved applications, 
 No build step and no runtime dependencies: the extension loads the files in this folder as they are.
 
 ```bash
-npm test          # 78 unit tests with node:test (Node 20+)
+npm test          # 82 unit tests with node:test (Node 20+)
 npm run check     # manifest references, script syntax, no committed token
 ```
 
