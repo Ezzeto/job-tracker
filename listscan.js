@@ -27,7 +27,12 @@
     cfg = { ...DEFAULTS, ...(got.listFilter || {}) };
     profile = await S.getProfile();
     const now = Date.now();
-    Object.entries(got.scoreCache || {}).forEach(([k, v]) => { if (now - v.at < CACHE_DAYS * 864e5 && v.v === 3) cache.set(k, v); });
+    // Cached jobs are scored again with the current rules: a cached verdict from an older
+    // version (a facilities job rated 72% Apply before 3.0.3) must not outlive the update
+    Object.entries(got.scoreCache || {}).forEach(([k, v]) => {
+      if (!(now - v.at < CACHE_DAYS * 864e5 && v.v === 3 && v.job)) return;
+      try { v.res = score(v.job); cache.set(k, v); } catch (e) { /* drop a broken entry */ }
+    });
     const apps = await S.getApps();
     appliedKeys = new Set(apps.map(a => a.urlKey).filter(Boolean));
   }
