@@ -311,3 +311,18 @@ test('paid traineeships with a "guaranteed offer" are not jobs', () => {
   const an = A.analyze(office('Trainee IT Support', ['We back our confidence in your job placement with a guaranteed offer for everyone who completes our IT Traineeship.', 'Step 1 Online study with 24/7 support from our mentors', 'Step 2 CV workshop followed by job interview with one of our recruitment partners in your area.']), profile());
   assert.ok(an.chance.gates.blocks.some(b => b.key === 'not-a-job'));
 });
+
+// ---------- 3.0.8: Orpington counted as London, two hours from home ----------
+test('a London office far from home asks about the journey; a hybrid one only notes it', () => {
+  const p = profile({ areas: ['London', 'Hertfordshire', "Bishop's Stortford"] });
+  assert.equal(A.homeOf(p).name, "Bishop's Stortford");
+  const far = A.analyze({ ...job('IT Support Engineer', '- 1 year of IT support'), location: 'Orpington, Kent' }, p);
+  assert.ok(far.chance.gates.asks.some(a => a.key === 'commute' && /km from Bishop's Stortford/.test(a.text)), JSON.stringify(far.chance.gates));
+  assert.notEqual(far.chance.verdict, 'apply');
+  const near = A.analyze({ ...job('IT Support Engineer', '- 1 year of IT support'), location: 'Islington, Greater London' }, p);
+  assert.ok(!near.chance.gates.asks.some(a => a.key === 'commute'));
+  const hybrid = A.analyze({ ...job('IT Support Engineer', '- 1 year of IT support\n- Hybrid: 3 days in the office'), location: 'Croydon' }, p);
+  assert.ok(!hybrid.chance.gates.asks.some(a => a.key === 'commute'));
+  const home = A.analyze({ ...job('IT Support Engineer', '- 1 year of IT support'), location: 'Croydon' }, { ...p, home: 'Croydon' });
+  assert.ok(!home.chance.gates.asks.some(a => a.key === 'commute'), 'home set explicitly');
+});

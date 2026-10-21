@@ -411,13 +411,31 @@
         ${c.missing.length ? `<div class="note">Worth preparing: ${c.missing.map(esc).join(', ')}.</div>` : ''}
         ${(rec.benefits || []).length ? `<h4>Benefits</h4><ul class="det">${rec.benefits.slice(0, 6).map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
         ${(rec.details || []).length ? `<h4>Key details</h4><ul class="det">${rec.details.slice(0, 7).map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
-        <div class="note">The application is saved automatically when you press Apply.</div>
+        <div class="note">The application is saved automatically when you press Apply. <a id="wrong" style="color:#1f6fa8;cursor:pointer;text-decoration:underline">Wrong verdict?</a></div>
+        <div id="fb" hidden style="margin-top:8px;border:1px solid #d6dee6;border-radius:8px;padding:8px;background:#fff">
+          <label style="margin-top:0">What should it be?</label>
+          <select id="fbV"><option value="apply">Apply</option><option value="tailor">Tailor CV</option><option value="ask">Check first</option><option value="skip">Skip</option><option value="notjob">Not a job / not IT</option></select>
+          <label>Why (optional)</label><input id="fbN" placeholder="e.g. needs a car, too far, admin role">
+          <div style="display:flex;gap:6px;margin-top:8px"><button class="p" id="fbSave" style="flex:none;padding:6px 12px">Save</button></div>
+        </div>
       </div>
       <div class="ft"><button class="p" id="close">Got it</button><button class="s" id="hide" style="color:#5a6b7d;border-color:#cfd8e1">Hide on this page</button></div>`;
     root.appendChild(box);
     box.querySelector('.x').onclick = () => box.remove();
     box.querySelector('#close').onclick = () => box.remove();
     box.querySelector('#hide').onclick = () => { previewHidden = true; box.remove(); removeBadge(); };
+    // A wrong verdict is kept with the ad text, so it can become a test for the next version
+    box.querySelector('#wrong').onclick = () => { const f = box.querySelector('#fb'); f.hidden = !f.hidden; };
+    box.querySelector('#fbSave').onclick = async () => {
+      const { verdictFeedback = [] } = await S.get('verdictFeedback');
+      verdictFeedback.push({
+        at: new Date().toISOString(), version: chrome.runtime.getManifest().version, url: rec.url, title: rec.title, company: rec.company, location: rec.location,
+        salaryText: rec.salaryText, verdict: c.verdict, score: c.score, expected: box.querySelector('#fbV').value, note: box.querySelector('#fbN').value.trim(),
+        description: String(rec.description || '').slice(0, 8000),
+      });
+      await S.set({ verdictFeedback: verdictFeedback.slice(-200) });
+      box.querySelector('#fb').innerHTML = '<div class="note" style="margin:0">Saved. Download the list from Data → Wrong verdicts and send it over.</div>';
+    };
   }
 
   function removeBadge() { if (shadow) { const b = shadow.getElementById('root').querySelector('.badge'); if (b) b.remove(); } }
