@@ -299,3 +299,15 @@ test("'remote locations' and 'remote support' are not remote work", () => {
   assert.ok(!A.detectWorkTypes('Contract: Permanent').includes('Contract'));
   assert.ok(A.detectWorkTypes('Work Location: In person').includes('On-site'));
 });
+
+// ---------- 3.0.7: an apprenticeship closed to people with a higher qualification scored 87% 'Apply' ----------
+test('an apprenticeship that excludes existing qualifications is a question, not Apply', () => {
+  const an = A.analyze(job('IT Apprentice', '- Prospective apprentices must not hold an existing qualification at the same or higher level as this apprenticeship in a similar subject'), profile());
+  assert.ok(an.chance.gates.asks.some(a => a.key === 'eligibility'));
+  assert.notEqual(an.chance.verdict, 'apply');
+});
+
+test('paid traineeships with a "guaranteed offer" are not jobs', () => {
+  const an = A.analyze(office('Trainee IT Support', ['We back our confidence in your job placement with a guaranteed offer for everyone who completes our IT Traineeship.', 'Step 1 Online study with 24/7 support from our mentors', 'Step 2 CV workshop followed by job interview with one of our recruitment partners in your area.']), profile());
+  assert.ok(an.chance.gates.blocks.some(b => b.key === 'not-a-job'));
+});
