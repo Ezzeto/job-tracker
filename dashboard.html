@@ -125,6 +125,8 @@
           <div class="full"><label>Roles you are aiming for (other role types score lower; none ticked means all count)</label><div class="chips" id="pTargets"></div></div>
           <label class="full">Languages besides English, comma-separated (a bonus when an ad asks for one)<input type="text" id="pLangs" placeholder="Ukrainian, Polish"></label>
           <label class="full">Where you can work: towns and areas, comma-separated (jobs elsewhere score lower; leave empty to skip)<textarea id="pAreas" rows="2" placeholder="London, Hertfordshire, Cambridge"></textarea></label>
+          <label>Home town (for the journey check)<input id="pHome" placeholder="Bishop's Stortford"></label>
+          <label>Longest journey, km in a straight line<input type="number" id="pCommute" min="5" max="300" placeholder="50"></label>
         </div>
       </div>
       <div class="panel">
@@ -188,6 +190,12 @@
         <div class="btns"><button class="btn primary" id="recheckAll">Re-check all</button><button class="btn" id="mergeDups" hidden>Merge duplicates</button></div>
         <p class="msg" id="recheckMsg" role="status"></p>
         <div id="dupList"></div>
+      </div>
+      <div class="panel">
+        <h2>Wrong verdicts</h2>
+        <p class="hint">Verdicts you marked as wrong on job pages, with the ad text. Download the file and share it so each one can become a test; <code>node scripts/check-feedback.js</code> shows which ones the current rules already get right.</p>
+        <div class="btns"><button class="btn" id="fbExport">Download wrong verdicts (JSON)</button><button class="btn" id="fbClear">Clear the list</button></div>
+        <p class="msg" id="fbMsg" role="status"></p>
       </div>
       <div class="panel danger">
         <h2>Delete everything</h2>

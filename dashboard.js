@@ -691,6 +691,8 @@
     $('#pSignLi').value = profile.signLinkedIn || ''; $('#pMail').value = profile.mailClient || 'gmail';
     $('#pPitch').value = profile.pitch || ''; $('#pHighlights').value = profile.highlights || '';
     $('#pAreas').value = (profile.areas || []).join(', ');
+    $('#pHome').value = profile.home || ''; $('#pHome').placeholder = (A.homeOf(profile) || {}).name || "Bishop's Stortford";
+    $('#pCommute').value = profile.maxCommuteKm || 50;
     const targets = profile.targetCategories || [];
     $('#pTargets').innerHTML = A.CATEGORY_NAMES.filter(c => c !== 'Other').map(c => `<button type="button" class="chip" data-target="${esc(c)}" aria-pressed="${targets.includes(c)}">${esc(c)}</button>`).join('');
     $$('#pTargets .chip').forEach(ch => ch.onclick = async () => {
@@ -732,9 +734,10 @@
     profile.signLinkedIn = $('#pSignLi').value.trim(); profile.mailClient = $('#pMail').value;
     profile.pitch = $('#pPitch').value.trim(); profile.highlights = $('#pHighlights').value.trim();
     profile.areas = $('#pAreas').value.split(',').map(x => x.trim()).filter(Boolean);
+    profile.home = $('#pHome').value.trim(); profile.maxCommuteKm = +$('#pCommute').value || 50;
     await S.saveProfile(profile);
   };
-  ['#pDays', '#pHours', '#pLicence', '#pLangs', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
+  ['#pDays', '#pHours', '#pLicence', '#pLangs', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pHome', '#pCommute', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
   $('#resetSkills').onclick = async () => {
     if (!confirm(`Clear all ${skTrack === 'intern' ? 'internship' : 'job'} skill levels?`)) return;
     if (skTrack === 'intern') profile.intern.skills = {}; else profile.skills = { ...A.DEFAULT_SKILLS };
@@ -995,6 +998,22 @@
     recheckMsg(`Merged: ${merged.map(m => esc(m.ticket + ' → ' + m.into)).join(', ')}`);
     renderDupList(apps); renderAll();
   };
+
+  // ---------- WRONG VERDICTS ----------
+  async function renderFeedback() {
+    const { verdictFeedback = [] } = await S.get('verdictFeedback');
+    $('#fbMsg').textContent = verdictFeedback.length ? `${verdictFeedback.length} reported` : 'None reported yet. Use "Wrong verdict?" in the panel on a job page.';
+    $('#fbExport').disabled = $('#fbClear').disabled = !verdictFeedback.length;
+  }
+  $('#fbExport').onclick = async () => {
+    const { verdictFeedback = [] } = await S.get('verdictFeedback');
+    const blob = new Blob([JSON.stringify({ version: chrome.runtime.getManifest().version, exportedAt: new Date().toISOString(), verdictFeedback }, null, 2)], { type: 'application/json' });
+    const u = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = u; a.download = `job-tracker-wrong-verdicts-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+    setTimeout(() => URL.revokeObjectURL(u), 2000);
+  };
+  $('#fbClear').onclick = async () => { if (confirm('Clear the list of wrong verdicts?')) { await S.set({ verdictFeedback: [] }); renderFeedback(); } };
+  renderFeedback();
 
   $('#exportJson').onclick = async () => {
     const all = await S.get(['apps', 'profile', 'counter', 'offerWeights']);
