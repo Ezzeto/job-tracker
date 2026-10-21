@@ -50,3 +50,9 @@ test('CV-Library job links match with and without the slug', () => {
   assert.ok(s.cardLink.test('https://www.cv-library.co.uk/job/225697311'));
   assert.ok(!s.cardLink.test('https://www.cv-library.co.uk/jobs/it-support'));
 });
+
+test('it-jobs.co.uk is read as the CV-Library platform it runs on', () => {
+  const s = E.siteFor('www.it-jobs.co.uk');
+  assert.equal(s.name, 'cvlibrary');
+  assert.ok(s.cardLink.test('https://www.it-jobs.co.uk/job/225705834/it-support-analyst'));
+});
