@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Job Tracker",
-  "version": "3.0.9",
+  "version": "3.1.0",
   "description": "Records the jobs you apply for on UK job boards, scores how well each one fits your skills and tracks every application to an offer.",
   "permissions": [
     "storage",

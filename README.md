@@ -70,6 +70,8 @@ A number alone said little: in a real backup of 100 applications, 96 scored 50% 
 3. **Verdict and confidence.** *Skip* if anything blocks; *Check first* if something needs asking or the ad names few skills; otherwise *Apply* (70+) or *Tailor CV* (45–69). Confidence (confident · fairly sure · rough guess) depends on the length of the ad and how many skills it names; a rough guess shows as ≈62%. A blocked job is capped at 25% so it sorts to the bottom.
 4. **Re-check and calibration.** *Data → Re-check all* downloads a backup, then runs the current rules over everything saved: repairs titles, cleans descriptions, re-scores, marks duplicates (same link; same title and company within two weeks; the same ad text) with an optional merge that keeps notes, contacts and the furthest status, and renumbers clashing tickets. *Overview → Does the verdict work?* shows reply and interview rates per verdict, so you can see whether Apply jobs really answer more often than Skip jobs.
 
+**The same job on another site (3.1).** Agencies post one vacancy on CV-Library, Reed, Totaljobs and LinkedIn. Before you apply, the job panel and badge say *Already applied via CV-Library* when a saved application matches by the agency's reference (*BH37630*, *Ref: AJ47736*), by the ad text, or by title and company within 60 days; pressing Apply does not save a second record. On search results the badge tooltip says the same once the full ad is loaded.
+
 **Journey check (3.0.8).** A place can be inside your areas and still be far from home: Orpington is London, but about 55 km from Bishop's Stortford. Set *Home town* and *Longest journey* in Settings (default: the first town in your areas, 50 km). An office-based job further away asks about the journey and scores lower; a hybrid one only gets a note.
 
 **Wrong verdicts.** Every job panel has a *Wrong verdict?* link: pick what it should be and add a reason. *Data → Wrong verdicts* downloads them with the ad text, and `node scripts/check-feedback.js wrong-verdicts.json [backup.json]` shows which ones the current rules already get right. Each one is meant to become a unit test.
@@ -133,7 +135,7 @@ Version 2.0 switched the interface from Russian to English. Saved applications, 
 No build step and no runtime dependencies: the extension loads the files in this folder as they are.
 
 ```bash
-npm test          # 93 unit tests with node:test (Node 20+)
+npm test          # 95 unit tests with node:test (Node 20+)
 npm run check     # manifest references, script syntax, no committed token
 ```
 
