@@ -8,7 +8,7 @@ I built it for my own job search in the UK, to keep track of applications spread
 
 ## What it does
 
-- **Captures applications automatically.** Press *Apply* on LinkedIn, Indeed, Reed, Totaljobs, CV-Library, CWJobs, Glassdoor or jobs.ac.uk and the job is saved with its title, company, location, salary, description and any recruiter contacts. On any other site, one click in the popup adds the page.
+- **Captures applications automatically.** Press *Apply* on LinkedIn, Indeed, Reed, Totaljobs, CV-Library, IT-Jobs, CWJobs, Glassdoor or jobs.ac.uk and the job is saved with its title, company, location, salary, description and any recruiter contacts. On any other site, one click in the popup adds the page.
 - **Scores fit before you apply.** A badge on the job page shows a 0–100 score and the reasons behind it: which tools in the ad you know, which you don't, seniority, years of experience, and hard constraints such as a driving licence or security clearance.
 - **Scores search results.** Each card in a results list gets a badge, and a small panel filters out jobs below a minimum score, jobs you already applied to, or senior roles.
 - **Tracks the pipeline.** Twelve statuses from *Applied* to *Offer accepted*, a full history per application, a weekly chart, response rate per job board, and a list of what needs attention (follow-ups due, next steps, offer deadlines).
@@ -129,7 +129,7 @@ Version 2.0 switched the interface from Russian to English. Saved applications, 
 No build step and no runtime dependencies: the extension loads the files in this folder as they are.
 
 ```bash
-npm test          # 85 unit tests with node:test (Node 20+)
+npm test          # 89 unit tests with node:test (Node 20+)
 npm run check     # manifest references, script syntax, no committed token
 ```
 

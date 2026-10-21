@@ -65,7 +65,7 @@
     return null;
   }
 
-  // CV-Library's split view: the open job is ?jobId=… in the address, shown in a pane on the right.
+  // CV-Library's split view (also it-jobs.co.uk, which runs on the same platform): the open job is ?jobId=… in the address, shown in a pane on the right.
   // The pane has no JSON-LD, so the job page itself is fetched (same site, same cookies).
   function paneJobLink(originEl, site) {
     if (site.name !== 'cvlibrary') return null;
