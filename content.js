@@ -391,7 +391,9 @@
     return !issues.some(i => ['junk-title', 'results-page', 'form-page', 'no-title'].includes(i.code));
   }
 
-  async function showPreviewPanel(rec, existing) {
+  const fmtDay = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
+  const WHY = { ref: 'same job reference', text: 'same ad text', title: 'same title and company' };
+  async function showPreviewPanel(rec, existing, elsewhere) {
     ensureHost();
     const root = shadow.getElementById('root');
     root.querySelector('.jt') && root.querySelector('.jt').remove();
@@ -403,6 +405,7 @@
     box.innerHTML = `
       <div class="hd">${existing ? `<span class="tk">${esc(existing.ticket)}</span>` : ''}<b>${existing ? 'In your tracker · ' + esc(A.statusLabel(existing.status)) : 'Fit before you apply'}</b><button class="x" aria-label="Close">×</button></div>
       <div class="bd">
+        ${elsewhere ? `<div class="ap" style="border-color:#b47a12;background:#fff8ec"><div class="v" style="color:#7a5510">You already applied for this job</div><div style="font-size:12px">${esc(existing.ticket)} · via ${esc(existing.platform || 'another site')}${existing.appliedAt ? ' on ' + esc(fmtDay(existing.appliedAt)) : ''} · ${esc(A.statusLabel(existing.status))}<br><span class="note" style="margin:0">Matched by ${esc(WHY[elsewhere.why])}. Applying again through another site usually reaches the same recruiter twice.</span></div></div>` : ''}
         <div style="font-weight:600;margin-bottom:6px">${esc(rec.title)}${rec.company ? ' — ' + esc(rec.company) : ''}${rec.track === 'intern' ? '<span class="trk">Internship</span>' : ''}</div>
         ${verdictHtml(c, [rec.location, rec.salaryText].filter(Boolean).join(' · '))}
         ${reasonsHtml(c)}
@@ -450,7 +453,8 @@
       const rec = await buildRecord();
       if (!looksLikeJobPage(rec)) { removeBadge(); previewSig = ''; return force ? null : undefined; }
       const sig = rec.title + '|' + rec.company + '|' + Math.round(rec.description.length / 200);
-      const existing = await S.findByUrl(rec.url);
+      let existing = await S.findByUrl(rec.url), elsewhere = null;
+      if (!existing) { const s = await S.findSameJob(rec); if (s) { existing = s.app; elsewhere = s; } }
       if (sig === previewSig && !force) return;
       previewSig = sig; previewRec = rec;
       ensureHost();
@@ -463,11 +467,11 @@
       b.setAttribute('tabindex', '0');
       b.title = 'Why this score';
       const d = A.display(c);
-      b.innerHTML = `<span class="pc" style="background:${vColor(c)}">${esc(d.text)}</span><span>${existing ? esc(A.statusLabel(existing.status)) : esc(d.label) + (rec.track === 'intern' ? ' · internship' : '') + plMark(rec.placement)}</span><button class="hide" aria-label="Hide">×</button>`;
-      b.onclick = e => { if (e.target.closest('.hide')) { previewHidden = true; b.remove(); return; } showPreviewPanel(previewRec, existing); };
-      b.onkeydown = e => { if (e.key === 'Enter') showPreviewPanel(previewRec, existing); };
+      b.innerHTML = `<span class="pc" style="background:${vColor(c)}">${esc(d.text)}</span><span>${existing ? (elsewhere ? 'Already applied via ' + esc(existing.platform || 'another site') : esc(A.statusLabel(existing.status))) : esc(d.label) + (rec.track === 'intern' ? ' · internship' : '') + plMark(rec.placement)}</span><button class="hide" aria-label="Hide">×</button>`;
+      b.onclick = e => { if (e.target.closest('.hide')) { previewHidden = true; b.remove(); return; } showPreviewPanel(previewRec, existing, elsewhere); };
+      b.onkeydown = e => { if (e.key === 'Enter') showPreviewPanel(previewRec, existing, elsewhere); };
       root.appendChild(b);
-      if (force) showPreviewPanel(rec, existing);
+      if (force) showPreviewPanel(rec, existing, elsewhere);
     } catch (e) {
       if (!String(e).includes('Extension context invalidated')) console.warn('[Job Tracker]', e);
     }
@@ -497,14 +501,16 @@
       // An application form or a page without a real title belongs to the job saved from its ad;
       // a real ad with a new link is saved (Re-check flags it if it repeats an older one)
       const notAnAd = issues.some(c => ['form-page', 'junk-title', 'no-title', 'results-page'].includes(c));
-      const existing = (await S.findByUrl(rec.url)) || (notAnAd ? await S.findSimilar(rec.title, rec.company) : null);
+      let existing = (await S.findByUrl(rec.url)) || (notAnAd ? await S.findSimilar(rec.title, rec.company) : null);
+      let elsewhere = null;
+      if (!existing && !notAnAd) { elsewhere = await S.findSameJob(rec); if (elsewhere) existing = elsewhere.app; }
       if (!existing && (issues.includes('results-page') || issues.includes('junk-title') || issues.includes('no-title'))) {
         toast('This looks like a list of jobs, not one ad: open the job itself and press Apply there', 'Add by hand', openDashboard, 7000);
         return;
       }
       if (existing) {
         if (source === 'manual') showPanel(existing, { isNew: false });
-        else toast(`Already in your tracker: ${existing.ticket} · ${A.statusLabel(existing.status)}`, 'Show', () => showPanel(existing, { isNew: false }));
+        else toast(elsewhere ? `You already applied for this job via ${existing.platform || 'another site'}: ${existing.ticket} · ${A.statusLabel(existing.status)}` : `Already in your tracker: ${existing.ticket} · ${A.statusLabel(existing.status)}`, 'Show', () => showPanel(existing, { isNew: false }), 8000);
         return;
       }
       const app = await S.addApp(rec);

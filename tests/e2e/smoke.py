@@ -7,13 +7,13 @@ from playwright.async_api import async_playwright
 
 # Usage: python3 tests/e2e/smoke.py <path-to-extension> [screenshot-dir]
 EXT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "."); OUT = sys.argv[2] if len(sys.argv) > 2 else None
-JOB_HTML = """<!doctype html><html><head><title>Junior Python Developer - Fernhill Digital - Cambridge | Indeed.com</title>
+JOB_HTML = """<!doctype html><html><head><title>Junior Python Developer - Fernhill Labs - Cambridge | Indeed.com</title>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"JobPosting","title":"Junior Python Developer",
-"hiringOrganization":{"@type":"Organization","name":"Fernhill Digital"},"jobLocation":{"@type":"Place","address":{"addressLocality":"Cambridge","addressRegion":"Cambridgeshire"}},
+"hiringOrganization":{"@type":"Organization","name":"Fernhill Labs"},"jobLocation":{"@type":"Place","address":{"addressLocality":"Cambridge","addressRegion":"Cambridgeshire"}},
 "employmentType":"PART_TIME","baseSalary":{"@type":"MonetaryAmount","currency":"GBP","value":{"@type":"QuantitativeValue","minValue":14,"maxValue":16,"unitText":"HOUR"}},
 "description":"<p>We are a small product studio.</p><h3>Requirements</h3><ul><li>Strong Python and SQL</li><li>Experience with Git</li><li>Docker is essential</li></ul><h3>Nice to have</h3><ul><li>Django or FastAPI would be a plus</li></ul><h3>Benefits</h3><ul><li>25 days annual leave</li><li>Flexible working</li></ul><p>Contact Jane Porter at jobs@fernhill.example for questions. Training provided.</p>"}</script></head>
 <body><main><div id="jobsearch-ViewjobPaneWrapper"><h1 data-testid="jobsearch-JobInfoHeader-title">Junior Python Developer</h1>
-<div data-testid="inlineHeader-companyName">Fernhill Digital</div><div data-testid="inlineHeader-companyLocation">Cambridge</div>
+<div data-testid="inlineHeader-companyName">Fernhill Labs</div><div data-testid="inlineHeader-companyLocation">Cambridge</div>
 <div id="jobDescriptionText"><p>We are a small product studio building internal tools for clients.</p><h3>Requirements</h3><ul><li>Strong Python and SQL</li><li>Experience with Git</li><li>Docker is essential</li></ul><h3>Nice to have</h3><ul><li>Django or FastAPI would be a plus</li></ul><h3>Benefits</h3><ul><li>25 days annual leave</li><li>Flexible working</li></ul><p>Contact Jane Porter at jobs@fernhill.example for questions. Training provided. Part-time, 3 days a week.</p></div>
 <button id="jobsearch-ApplyButton">Apply now</button></div></main></body></html>"""
 

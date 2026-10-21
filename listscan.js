@@ -12,6 +12,7 @@
   let cfg = { ...DEFAULTS };
   let profile = null;
   let appliedKeys = new Set();
+  let savedApps = [];
   const cache = new Map();          // key -> result
   const queue = [];                 // keys to fetch
   const queued = new Set();
@@ -34,6 +35,7 @@
       try { v.res = score(v.job); cache.set(k, v); } catch (e) { /* drop a broken entry */ }
     });
     const apps = await S.getApps();
+    savedApps = apps;
     appliedKeys = new Set(apps.map(a => a.urlKey).filter(Boolean));
   }
   let saveTimer = null;
@@ -49,7 +51,7 @@
   const saveCfg = () => S.set({ listFilter: cfg });
 
   chrome.storage.onChanged.addListener(async ch => {
-    if (ch.apps) { const apps = await S.getApps(); appliedKeys = new Set(apps.map(a => a.urlKey).filter(Boolean)); scheduleScan(); }
+    if (ch.apps) { const apps = await S.getApps(); savedApps = apps; appliedKeys = new Set(apps.map(a => a.urlKey).filter(Boolean)); cache.forEach(v => { delete v.elsewhere; }); scheduleScan(); }
     if (ch.profile) { profile = await S.getProfile(); cache.forEach(v => { if (v.job) v.res = score(v.job); }); scheduleScan(); }
   });
 
@@ -191,11 +193,13 @@
       if (!entry.res && !entry.quick) entry.quick = quickScore(c);
       if (cfg.fetch && !entry.full && !entry.failed && !queued.has(key) && entry.fetchUrl) { queued.add(key); queue.push(key); }
       const res = entry.res || entry.quick;
-      const applied = appliedKeys.has(S.normUrl(key));
+      // Applied here, or the same vacancy applied for on another site (needs the full ad)
+      if (entry.job && entry.elsewhere === undefined) { const s = S.sameJobIn({ ...entry.job, url: key }, savedApps); entry.elsewhere = s ? s.app.platform || 'another site' : null; }
+      const applied = appliedKeys.has(S.normUrl(key)) || !!entry.elsewhere;
       if (entry.res) rated++;
       const hide = (res.verdict !== 'incomplete' && res.score < cfg.min) || (cfg.hideSkip && res.verdict === 'skip') || (cfg.hideApplied && applied) || (cfg.hideOutArea && res.outArea) || (cfg.hideSenior && res.senior)
         || (cfg.onlyIntern && !res.intern) || (cfg.hidePlacementFail && res.intern && res.rules === 'fail');
-      decorate(c, res, !entry.res, applied, hide);
+      decorate(c, res, !entry.res, applied, hide, entry.elsewhere);
       if (!hide) shown++;
     }
     updatePanel(shown, rated);
@@ -207,7 +211,7 @@
     el.style.removeProperty('display'); el.style.removeProperty('opacity'); el.style.removeProperty('filter');
   }
 
-  function decorate(c, res, approx, applied, hide) {
+  function decorate(c, res, approx, applied, hide, elsewhere) {
     const el = c.el;
     let b = el.querySelector('.jt-card-badge');
     if (!b) {
@@ -222,7 +226,7 @@
     const txt = (res.verdict === 'incomplete' ? '?' : `${approx ? '≈' : ''}${res.score}%`) + (res.verdict && res.verdict !== 'incomplete' ? ' · ' + VL[res.verdict] : '') + (res.intern ? (res.rules === 'ok' ? ' · rules ✓' : res.rules === 'fail' ? ' · rules ✕' : res.rules ? ' · rules ?' : ' · intern') : '') + (applied ? ' ✓' : '');
     const VC = { apply: '#23905a', tailor: '#2f7fb5', ask: '#b47a12', skip: '#c0463b', incomplete: '#7a8794' };
     const bg = applied ? '#1d3b53' : res.verdict ? VC[res.verdict] : color(res.score);
-    const title = (approx ? 'Estimate from the card text. Open the job for the full score.\n' : '') + (applied ? 'Already in your tracker\n' : '') + (res.intern ? 'Internship\n' : '') + (res.blocks && res.blocks.length ? res.blocks.map(x => '✕ ' + x).join('\n') + '\n' : '') + (res.asks && res.asks.length ? res.asks.map(x => '! ' + x).join('\n') + '\n' : '') + res.why + (res.missing && res.missing.length ? `\nMissing: ${res.missing.join(', ')}` : '') + (res.rulesWhy ? `\n\nPlacement rules:\n${res.rulesWhy}` : '');
+    const title = (approx ? 'Estimate from the card text. Open the job for the full score.\n' : '') + (applied ? (elsewhere ? `Already applied for this job via ${elsewhere}\n` : 'Already in your tracker\n') : '') + (res.intern ? 'Internship\n' : '') + (res.blocks && res.blocks.length ? res.blocks.map(x => '✕ ' + x).join('\n') + '\n' : '') + (res.asks && res.asks.length ? res.asks.map(x => '! ' + x).join('\n') + '\n' : '') + res.why + (res.missing && res.missing.length ? `\nMissing: ${res.missing.join(', ')}` : '') + (res.rulesWhy ? `\n\nPlacement rules:\n${res.rulesWhy}` : '');
     if (b.dataset.t !== txt + bg) {
       b.dataset.t = txt + bg;
       b.textContent = txt;

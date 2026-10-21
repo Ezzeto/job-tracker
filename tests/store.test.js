@@ -39,3 +39,26 @@ test('addApp, updateApp and deleteApp keep tickets, history and pending deletes'
   assert.deepEqual((await S.get('pendingDeletes')).pendingDeletes, [a.id], 'an app never synced needs no sheet delete');
   assert.equal((await S.getApps()).length, 0);
 });
+
+// ---------- 3.1.0: the same vacancy on another site ----------
+const zd = 'Zachary Daniels Recruitment is partnering with a well-established consumer-facing business to recruit an IT Support Engineer for its growing internal technology team. ' +
+  'You will become a key point of contact for colleagues across a busy multi-site organisation, providing day-to-day technical support while gaining exposure to wider technology deployments and infrastructure projects. ' +
+  'Acting as the first point of contact for IT queries and service requests, logging prioritising and resolving incidents through the IT service management platform, troubleshooting laptops desktops printers mobile devices and other business hardware. ' +
+  'Supporting users across Windows macOS Android and iOS, managing user accounts password resets and access permissions, supporting Active Directory and Google Workspace environments, completing onboarding and offboarding activities for employees.';
+test('jobRefs reads agency references', () => {
+  assert.deepEqual(S.jobRefs('Some ad text\nApply today.\nBH37630'), ['BH37630']);
+  assert.ok(S.jobRefs('(Ref: AJ47736 - Please include this)').includes('AJ47736'));
+  assert.ok(S.jobRefs('Job Reference: 1359902').includes('1359902'));
+});
+test('sameJobIn finds the same vacancy saved from another site', () => {
+  const saved = [{ id: 'a', ticket: 'APP-0101', platform: 'CV-Library', urlKey: 'cv-library.co.uk/job/1', title: 'IT Support Engineer', company: 'Zachary Daniels Recruitment', description: zd + '\nBH37630', appliedAt: new Date().toISOString() }];
+  const byRef = S.sameJobIn({ url: 'https://www.reed.co.uk/jobs/it-support-engineer/2', title: 'IT Support Engineer', company: 'Zachary Daniels', description: 'Short text.\nBH37630' }, saved);
+  assert.equal(byRef.why, 'ref'); assert.equal(byRef.app.ticket, 'APP-0101');
+  const byText = S.sameJobIn({ url: 'https://www.reed.co.uk/x', title: 'IT Support Engineer', company: 'A consumer brand', description: zd }, saved);
+  assert.equal(byText.why, 'text');
+  assert.equal(S.sameJobIn({ url: 'https://www.reed.co.uk/x', title: '2nd Line Engineer', company: 'Someone', description: zd }, saved), null, 'same blurb, different job');
+  const byTitle = S.sameJobIn({ url: 'https://www.reed.co.uk/y', title: 'IT Support Engineer', company: 'Zachary Daniels', description: 'Different short text' }, saved);
+  assert.equal(byTitle.why, 'title');
+  assert.equal(S.sameJobIn({ url: 'https://cv-library.co.uk/job/1', title: 'IT Support Engineer', company: 'Zachary Daniels', description: zd }, saved), null, 'the same link is not "another site"');
+  assert.equal(S.sameJobIn({ url: 'https://www.reed.co.uk/z', title: '1st Line Support', company: 'Reed', description: 'Another job entirely.' }, saved), null);
+});
