@@ -278,3 +278,24 @@ test('IT roles that mention admin or an IT system are still IT roles', () => {
   for (const t of ['IT Administrator', 'Systems Administrator', 'I.T Helpdesk', 'IT Support Engineer (Mac)', '1st Line Support'])
     assert.ok(!A.analyze(job(t, '- 1 year of IT support'), profile()).chance.gates.blocks.some(b => b.key === 'role' || b.key === 'not-a-job'), t);
 });
+
+// ---------- 3.0.4: a rural office that needs a car scored 82% 'Apply' ----------
+test('"you will need to be able to drive" and the car screening question rule a job out', () => {
+  for (const line of ["- Our office is on a farm, so you'll need to be able to drive and have reliable transport to get to work.", 'Application question(s):\nDo you have a car and a driver\'s license?']) {
+    const an = A.analyze(job('Technical Support Technician', line), profile());
+    assert.ok(an.chance.gates.blocks.some(b => b.key === 'licence'), line);
+  }
+});
+
+test("Indeed's 'Technical support: 2 years (required)' counts as years asked", () => {
+  assert.deepEqual(A.yearsAsked('Experience:\nTechnical support: 2 years (required)\nWork Location: In person'), { years: 2, preferred: false, text: 'Technical support: 2 years (required)' });
+  assert.equal(A.yearsAsked('IT support: 1 year (preferred)').preferred, true);
+});
+
+test("'remote locations' and 'remote support' are not remote work", () => {
+  assert.ok(!A.detectWorkTypes('Cameras for farms and remote locations. Provide remote and on-site support.').includes('Remote'));
+  for (const t of ['Remote working available', 'Hybrid: 3 days office / 2 days remote', 'This is a fully remote role', 'Work from home'])
+    assert.ok(A.detectWorkTypes(t).includes('Remote') || A.detectWorkTypes(t).includes('Hybrid'), t);
+  assert.ok(!A.detectWorkTypes('Contract: Permanent').includes('Contract'));
+  assert.ok(A.detectWorkTypes('Work Location: In person').includes('On-site'));
+});
