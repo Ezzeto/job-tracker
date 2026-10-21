@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { E } = require('./helpers/env');
+const { E, resetStorage } = require('./helpers/env');
 
 test('contactsFromText finds emails and UK phone numbers, skipping no-reply addresses', () => {
   const c = E.contactsFromText('Email careers@acme.example or call 020 7946 0958. Do not reply to noreply@acme.example.');
@@ -55,4 +55,17 @@ test('it-jobs.co.uk is read as the CV-Library platform it runs on', () => {
   const s = E.siteFor('www.it-jobs.co.uk');
   assert.equal(s.name, 'cvlibrary');
   assert.ok(s.cardLink.test('https://www.it-jobs.co.uk/job/225705834/it-support-analyst'));
+});
+
+test('a site that answers 403 is left alone for hours instead of being retried', async () => {
+  resetStorage();
+  let calls = 0;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => { calls++; return { ok: false, status: 403, text: async () => 'Access Denied' }; };
+  try {
+    await assert.rejects(E.fetchAndParse('https://www.totaljobs.com/job/x-job1'), e => e.status === 403);
+    await assert.rejects(E.fetchAndParse('https://www.totaljobs.com/job/y-job2'), e => e.status === 'cooldown');
+    assert.equal(calls, 1, 'the second request never reached the site');
+    assert.ok(await E.blockedUntil('www.totaljobs.com') > Date.now() + 5 * 3600e3);
+  } finally { globalThis.fetch = realFetch; }
 });
