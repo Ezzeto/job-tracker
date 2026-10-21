@@ -165,7 +165,8 @@
       entry.full = true; entry.at = Date.now(); entry.v = 3;
       saveCache();
     } catch (e) {
-      if (e.status === 429 || e.status === 403 || e.status === 999) { pausedUntil = Date.now() + 5 * 60e3; queue.unshift(key); }
+      // The site is refusing: stop fetching for hours (shared with other tabs), never retry in a loop
+      if (e.status === 429 || e.status === 403 || e.status === 999 || e.status === 'cooldown') { pausedUntil = Date.now() + 6 * 3600e3; queue.length = 0; queued.clear(); }
       entry.failed = true;
       failCount++;
     } finally {
@@ -308,7 +309,7 @@
     if (shown != null) $('cnt').textContent = `${shown}/${cards.length}`;
     const pending = queue.length + active;
     $('status').textContent = !cfg.enabled ? 'Scores are off.'
-      : Date.now() < pausedUntil ? 'The site is rate-limiting requests. Trying again in a few minutes; scores are estimates (≈) for now.'
+      : Date.now() < pausedUntil ? 'The site is blocking automatic requests, so full ads are not loaded for a few hours. Scores are estimates (≈) from the cards; open a job to see its full score.'
       : cfg.fetch && failCount >= 3 && !rated ? 'This site does not return descriptions in the background, so scores are estimates (≈). Open a job to see its full score.'
       : cfg.fetch ? (pending ? `Loading descriptions: ${pending} left. Full score for ${rated || 0} of ${cards.length}.` : `Full score for ${rated || 0} of ${cards.length}. Hover a score to see why.`)
       : !site.fetchUrl ? 'Scores come from the card text (≈). Open a job to see its full score.' : 'Scores come from the card text (≈). Turn on full score to load each description.';

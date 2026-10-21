@@ -149,7 +149,9 @@
       const link = paneJobLink(originEl, site) || findJobLink(originEl, scope, site);
       if (link) {
         const key = S.cleanUrl(link);
-        if (!fetchCache.has(key)) fetchCache.set(key, E.fetchAndParse(link, link).catch(e => { fetchCache.delete(key); throw e; }));
+        // A failed fetch is remembered for 10 minutes: the page changes often, and retrying on
+        // every change would hammer a site that is already refusing (Totaljobs 'Access Denied')
+        if (!fetchCache.has(key)) fetchCache.set(key, E.fetchAndParse(link, link).catch(e => { setTimeout(() => fetchCache.delete(key), 10 * 60e3); throw e; }));
         try { return await fetchCache.get(key); } catch (e) { console.warn('[Job Tracker] fetch', e); }
       }
       if (!scope) return null;
