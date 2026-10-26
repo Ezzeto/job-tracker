@@ -1,5 +1,5 @@
 /* Job Tracker — background service worker */
-importScripts('lib/quality.js', 'lib/analyzer.js', 'lib/store.js', 'lib/legacy.js', 'lib/sync.js');
+importScripts('lib/quality.js', 'lib/analyzer.js', 'lib/store.js', 'lib/legacy.js', 'lib/insights.js', 'lib/sync.js');
 
 async function openDashboard(hash) {
   const url = chrome.runtime.getURL('dashboard.html') + (hash || '');
@@ -42,7 +42,7 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   }
   updateBadge();
 });
-chrome.runtime.onStartup.addListener(() => { updateBadge(); autoSync(); });
+chrome.runtime.onStartup.addListener(() => { updateBadge(); autoSync(); markStale(); });
 
 // Auto-sync: push a few seconds after a change, full sync every 10 minutes
 let pushTimer = null;
@@ -58,10 +58,24 @@ chrome.storage.onChanged.addListener((ch) => {
   }
 });
 chrome.alarms.create('jt-sync', { periodInMinutes: 10 });
-chrome.alarms.onAlarm.addListener(a => { if (a.name === 'jt-sync') autoSync(false); });
+chrome.alarms.create('jt-stale', { periodInMinutes: 360 });
+chrome.alarms.onAlarm.addListener(a => {
+  if (a.name === 'jt-sync') autoSync(false);
+  if (a.name === 'jt-stale') markStale();
+});
+
+// 'Applied' with no reply and no follow-up for N days (Settings) becomes 'No response',
+// so the reply-rate charts count silence as an answer instead of waiting forever
+async function markStale() {
+  const p = await JT_Store.getProfile();
+  const ids = JT_Insights.staleIds(await JT_Store.getApps(), Number(p.autoNoResponseDays) || 0);
+  for (const id of ids) await JT_Store.updateApp(id, { status: 'noresponse', outcome: { type: 'ghosted', auto: true, at: new Date().toISOString() } });
+  return ids.length;
+}
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg && msg.type === 'openDashboard') { openDashboard(msg.hash); reply({ ok: true }); }
   if (msg && msg.type === 'syncNow') { JT_Sync.syncNow().then(reply); return true; }
+  if (msg && msg.type === 'markStale') { markStale().then(n => reply({ ok: true, n })); return true; }
   if (msg && msg.type === 'syncTest') { JT_Sync.test(msg.cfg).then(reply); return true; }
 });

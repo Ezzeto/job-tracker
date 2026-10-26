@@ -246,3 +246,18 @@ table.offers{border-collapse:collapse;width:100%;font-size:13.5px}
   .drawer:not([hidden]){animation:slide .18s ease-out}
   @keyframes slide{from{transform:translateX(24px);opacity:.6}to{transform:none;opacity:1}}
 }
+
+/* Why no interviews */
+.why-head{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.why-head div{background:var(--soft);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}
+.why-head b{display:block;font-size:22px;font-weight:650;font-variant-numeric:tabular-nums}
+.why-head span{font-size:12px;color:var(--muted)}
+.why-v{margin:0 0 12px;padding:10px 14px 10px 30px;background:var(--mid-soft);border-radius:var(--r);font-size:13px}
+.why-v li{margin:3px 0}
+.why-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.why-grp h3{font-size:13px;font-weight:600;margin:0 0 6px;color:var(--muted)}
+.why-t{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+.why-t th{text-align:right;font-weight:500;color:var(--muted);padding:3px 6px;border-bottom:1px solid var(--line)}
+.why-t td{text-align:right;padding:4px 6px;border-bottom:1px solid var(--soft);white-space:nowrap}
+.why-t th:first-child,.why-t td:first-child{text-align:left;white-space:normal}
+.why-t .bar{display:inline-block;vertical-align:middle;width:40px;height:6px;margin-right:6px;border-radius:3px;background:linear-gradient(90deg,var(--blue) var(--w),var(--blue-soft) var(--w))}

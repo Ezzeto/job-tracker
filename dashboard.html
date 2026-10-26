@@ -33,6 +33,7 @@
         <div class="panel"><h2>What employers ask for most</h2><p class="hint">Colour shows your level: green confident, amber basic, red none.</p><div id="toolsTop"></div></div>
         <div class="panel"><h2>Needs attention</h2><div id="attention"></div></div>
       </div>
+      <div class="panel"><h2>Why no interviews?</h2><p class="hint">Reply and interview rate split by how you applied, the CV and letter you sent, how old the ad was, how many had applied before you and what the ad demanded.</p><div id="why"></div></div>
       <div class="panel"><h2>Does the verdict work?</h2><p class="hint">Reply and interview rate for each verdict.</p><div id="calibration"></div></div>
     </section>
 
@@ -119,6 +120,8 @@
           <label>Hours per week<input type="number" id="pHours" min="1" max="60"></label>
           <label class="check"><input type="checkbox" id="pLicence"> I have a full UK driving licence</label>
           <label class="check"><input type="checkbox" id="pAuto"> Save automatically when I press Apply</label>
+          <label>Mark 'Applied' as 'No response' after, days (0 = never)<input type="number" id="pStale" min="0" max="180"></label>
+          <label>Cover letter I usually send<select id="pCover"></select></label>
           <label class="check"><input type="checkbox" id="pSched"> Lower the score for full-time roles (off: just show a tip)</label>
           <label class="check"><input type="checkbox" id="pList"> Score jobs in search results (badges and filter)</label>
           <label class="check"><input type="checkbox" id="pPreview"> Show the fit score on a job page before I apply</label>
@@ -215,6 +218,7 @@
   <script src="lib/recheck.js"></script>
   <script src="lib/legacy.js"></script>
   <script src="lib/extract.js"></script>
+  <script src="lib/insights.js"></script>
   <script src="lib/followup.js"></script>
   <script src="lib/cv.js"></script>
   <script src="lib/vendor/mammoth.browser.min.js"></script>

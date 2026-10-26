@@ -30,6 +30,7 @@ lib('analyzer.js');
 lib('store.js');
 lib('legacy.js');
 lib('extract.js');
+lib('insights.js');
 lib('followup.js');
 lib('sync.js');
 lib('cv.js');
@@ -41,6 +42,7 @@ module.exports = {
   S: globalThis.JT_Store,
   L: globalThis.JT_Legacy,
   E: globalThis.JT_Extract,
+  I: globalThis.JT_Insights,
   F: globalThis.JT_Follow,
   Sync: globalThis.JT_Sync,
   CV: globalThis.JT_CV,
