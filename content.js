@@ -8,6 +8,7 @@
   const S = globalThis.JT_Store;
 
   const E = globalThis.JT_Extract;
+  const I = globalThis.JT_Insights;
 
   // ---------- Reading the job ----------
   const txt = el => (el ? (el.innerText || el.textContent || '').trim() : '');
@@ -183,7 +184,27 @@
     return job;
   }
 
-  async function buildRecord(originEl) {
+  // Text near the job header: 'Reposted 2 weeks ago · Over 100 people clicked apply'
+  const TOP_CARD = '.job-details-jobs-unified-top-card__tertiary-description-container, .job-details-jobs-unified-top-card__primary-description-container, .jobs-unified-top-card__subtitle-primary-grouping, .jobs-unified-top-card, .job-details-jobs-unified-top-card__container--two-pane, [data-testid="jobsearch-JobInfoHeader-title"] ~ div, .jobsearch-JobMetadataFooter, [data-testid="myJobsStateDate"], .job-header, [class*="jobHeader" i], [class*="job-header" i]';
+  function postingText(originEl, job) {
+    const parts = [];
+    document.querySelectorAll(TOP_CARD).forEach(el => { if (parts.length < 6) parts.push(txt(el).slice(0, 600)); });
+    const scope = findScope(originEl, E.siteFor(location.hostname));
+    if (scope) parts.push(txt(scope).slice(0, 4000));
+    if (job.headText) parts.push(job.headText);
+    return parts.join(' · ');
+  }
+  function postingFor(originEl, job) {
+    if (!I) return null;
+    const m = I.postingMeta(postingText(originEl, job));
+    let daysAgo = m.postedDaysAgo;
+    const ld = job.datePosted && new Date(job.datePosted);
+    if (daysAgo == null && ld && !isNaN(ld) && ld <= new Date()) daysAgo = Math.floor((Date.now() - ld) / 864e5);
+    if (daysAgo == null && m.applicants == null) return null;
+    return { daysAgo, reposted: m.reposted, applicants: m.applicants, applicantsText: m.applicantsText, seenAt: new Date().toISOString() };
+  }
+
+  async function buildRecord(originEl, how) {
     const job = await extractJob(originEl);
     if (!job) return null;
     const Q = globalThis.JT_Quality;
@@ -196,10 +217,11 @@
     const profile = await S.getProfile();
     const an = A.analyze(job, profile);
     const pageContacts = E.contactsFromDom(document);
-    let atsMatch = null;
+    let atsMatch = null, cvLabel = '';
     try {
       const { cvs } = await S.get('cvs');
       const cv = cvs && cvs[an.track];
+      if (cv && cv.name) cvLabel = cv.name + (cv.at ? ' (' + new Date(cv.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ')' : '');
       const skills = an.track === 'intern' ? profile.intern.skills : profile.skills;
       if (cv && cv.text && globalThis.JT_CV) atsMatch = JT_CV.jobMatch(cv.text, job, skills);
     } catch (e) { /* no CV loaded */ }
@@ -211,6 +233,14 @@
       description: an.description || job.description, category: an.category, workTypes: an.workTypes,
       salaryText: (an.salary && an.salary.text) || job.salaryText || '', salary: an.salary,
       tools: an.chance.tools, details: an.details, chance: an.chance,
+      posting: postingFor(originEl, job),
+      reqs: I ? I.requirements(an.description || job.description) : null,
+      apply: {
+        method: I && how ? I.methodFromButton(how.text, job.platform, how.yes) : 'unknown',
+        button: how && how.text ? how.text.slice(0, 40) : '',
+        cover: (profile.applyDefaults && profile.applyDefaults.cover) || 'none',
+        cv: cvLabel,
+      },
     };
   }
 
@@ -326,6 +356,9 @@
           <div><label>Location</label><input id="location" value="${esc(app.location)}"></div></div>
         <div class="row"><div><label>Source</label><select id="platform">${opt(platforms, app.platform)}</select></div>
           <div><label>Status</label><select id="status">${stOpt}</select></div></div>
+        ${I ? `<div class="row"><div><label>How you applied</label><select id="method">${I.METHODS.map(m => `<option value="${m.id}" ${m.id === ((app.apply && app.apply.method) || 'unknown') ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select></div>
+          <div><label>Cover letter</label><select id="cover">${I.COVERS.map(m => `<option value="${m.id}" ${m.id === ((app.apply && app.apply.cover) || 'unknown') ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select></div></div>
+        <div class="note">${esc(postingLine(app))}</div>` : ''}
         <label>Role type</label><select id="category">${opt(A.CATEGORY_NAMES, app.category)}</select>
         <label>Work type</label><div class="chips" id="wt">${A.WORK_TYPES.map(w => `<span class="chip ${app.workTypes.includes(w) ? 'on' : ''}" data-v="${esc(w)}" role="checkbox" tabindex="0" aria-checked="${app.workTypes.includes(w)}">${esc(w)}</span>`).join('')}</div>
         <label>Salary</label><input id="salaryText" value="${esc(app.salaryText)}" placeholder="Not listed. Add it if you find out">
@@ -356,6 +389,7 @@
         workTypes: [...box.querySelectorAll('.chip.on')].map(x => x.dataset.v),
         salaryText, salary: A.parseSalary(salaryText) || (salaryText ? { text: salaryText } : null),
         notes: $('notes').value,
+        ...(I ? { apply: { ...(app.apply || {}), method: $('method').value, cover: $('cover').value } } : {}),
       });
       box.remove();
       toast('Saved', 'Open dashboard', openDashboard, 3000);
@@ -368,6 +402,13 @@
   }
 
   function openDashboard() { chrome.runtime.sendMessage({ type: 'openDashboard' }); }
+  function postingLine(app) {
+    const p = app.posting || {}, out = [];
+    if (p.daysAgo != null) out.push((p.reposted ? 'Reposted ' : 'Ad posted ') + (p.daysAgo === 0 ? 'today' : p.daysAgo + ' day' + (p.daysAgo === 1 ? '' : 's') + ' ago'));
+    if (p.applicants != null) out.push(p.applicantsText || p.applicants + ' applicants');
+    if (app.apply && app.apply.cv) out.push('CV: ' + app.apply.cv);
+    return out.length ? out.join(' · ') : 'Ad age and applicant count not shown on this page';
+  }
 
   // ---------- Fit before applying ----------
   const reasonsHtml = c => `<ul class="reasons">${(c.reasons || []).map(r => `<li><span>${esc(r.text)}</span><b style="color:${r.delta == null ? '#5a6b7d' : r.delta > 0 ? '#23905a' : r.delta < 0 ? '#c0463b' : '#5a6b7d'}">${r.delta == null ? 'base' : r.delta > 0 ? '+' + r.delta : r.delta === 0 ? 'tip' : r.delta}</b></li>`).join('')}</ul>`;
@@ -491,11 +532,11 @@
   document.addEventListener('load', e => { if (e.target && e.target.tagName === 'IFRAME') { previewSig = ''; schedulePreview(800); } }, true);
 
   let busy = false;
-  async function captureApplication(source, originEl) {
+  async function captureApplication(source, originEl, how) {
     if (busy) return;
     busy = true;
     try {
-      const rec = await buildRecord(originEl);
+      const rec = await buildRecord(originEl, how);
       if (!rec) { toast('Couldn\'t find a job on this page', 'Add by hand', openDashboard, 6000); return; }
       const issues = ((rec.chance && rec.chance.quality && rec.chance.quality.issues) || []).map(i => i.code);
       // An application form or a page without a real title belongs to the job saved from its ad;
@@ -570,7 +611,8 @@
     lastHit = Date.now();
     let auto = true;
     try { auto = (await S.getProfile()).autoDetect !== false; } catch (err) { return; }
-    if (auto) captureApplication('click', el);
+    const text = ((el.innerText || el.value || '') + ' ' + (el.getAttribute('aria-label') || '')).replace(/\s+/g, ' ').trim();
+    if (auto) captureApplication('click', el, { text, yes });
   }
   // pointerdown fires before the site opens a new tab or navigates away
   window.addEventListener('pointerdown', e => { if (e.button === 0 || e.button === 1) onPress(e); }, true);

@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 11; // 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 12; // 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -15,6 +15,8 @@ const COLS = [
   ['notes', 'Notes'], ['missing', 'Missing skills'], ['tools', 'Tools'], ['details', 'Key details'],
   ['url', 'Link'], ['updated', '_updated'], ['benefits', 'Benefits'], ['contacts', 'Contacts'], ['followup', 'Follow-up'],
   ['track', 'Type'], ['placement', 'Placement rules'], ['verdict', 'Verdict'],
+  ['method', 'Applied via'], ['cover', 'Cover letter'], ['cv', 'CV sent'], ['adAge', 'Ad age (days)'], ['applicants', 'Applicants'],
+  ['rejDays', 'Days to rejection'], ['outcome', 'Why rejected'], ['reqs', 'Ad demands'],
 ];
 const C = {}; COLS.forEach(([k], i) => { C[k] = i + 1; });
 // [status, status cell background, text colour, light tint for the whole row]
@@ -172,10 +174,11 @@ function fillType_(sh) {
 const ROW_H = 30;
 // Column groups collapsed by default; the "+" above the sheet expands them.
 // Long text stays hidden; a short version shows in the note on the job title.
-const GROUPS = [['location', 'workTypes'], ['notes', 'details'], ['benefits', 'contacts']];
+const GROUPS = [['location', 'workTypes'], ['notes', 'details'], ['benefits', 'contacts'], ['cover', 'cv']];
 
 function formatSheet_(sh) {
   const n = COLS.length;
+  if (sh.getMaxColumns() < n) sh.insertColumnsAfter(sh.getMaxColumns(), n - sh.getMaxColumns());
   const maxRows = Math.max(sh.getMaxRows(), 1000);
   if (sh.getMaxRows() < maxRows) sh.insertRowsAfter(sh.getMaxRows(), maxRows - sh.getMaxRows());
   const body = sh.getRange(2, 1, maxRows - 1, n);
@@ -195,9 +198,10 @@ function formatSheet_(sh) {
   if (last >= 2) sh.setRowHeightsForced(2, last - 1, ROW_H);
 
   const widths = { ticket: 82, title: 230, company: 150, location: 120, category: 150, workTypes: 140, salary: 120,
-    platform: 95, appliedAt: 92, status: 165, chance: 64, nextDate: 100, notes: 260, missing: 170, tools: 200, details: 260, url: 80, benefits: 260, contacts: 260, followup: 110, track: 95, placement: 110, verdict: 100 };
+    platform: 95, appliedAt: 92, status: 165, chance: 64, nextDate: 100, notes: 260, missing: 170, tools: 200, details: 260, url: 80, benefits: 260, contacts: 260, followup: 110, track: 95, placement: 110, verdict: 100,
+    method: 150, cover: 120, cv: 160, adAge: 80, applicants: 85, rejDays: 90, outcome: 200, reqs: 240 };
   Object.keys(widths).forEach(k => sh.setColumnWidth(C[k], widths[k]));
-  ['ticket', 'appliedAt', 'chance', 'nextDate', 'url'].forEach(k => sh.getRange(2, C[k], maxRows - 1, 1).setHorizontalAlignment('center'));
+  ['ticket', 'appliedAt', 'chance', 'nextDate', 'url', 'adAge', 'applicants', 'rejDays'].forEach(k => sh.getRange(2, C[k], maxRows - 1, 1).setHorizontalAlignment('center'));
   sh.getRange(2, C.appliedAt, maxRows - 1, 1).setNumberFormat('dd/mm/yyyy');
   sh.getRange(2, C.nextDate, maxRows - 1, 1).setNumberFormat('dd/mm/yyyy')
     .setDataValidation(SpreadsheetApp.newDataValidation().requireDate().setAllowInvalid(true).build());
@@ -388,7 +392,7 @@ function ensureSheet_() {
   const ss = SpreadsheetApp.getActive();
   const sh = ss.getSheetByName(SHEET);
   // First call after an update: old Russian tabs left over, or new columns without a header
-  if (!sh || ss.getSheetByName(LEGACY_SHEET) || ss.getSheetByName(LEGACY_SUMMARY) || sh.getRange(1, COLS.length).getValue() !== COLS[COLS.length - 1][1]) setup();
+  if (!sh || ss.getSheetByName(LEGACY_SHEET) || ss.getSheetByName(LEGACY_SUMMARY) || sh.getMaxColumns() < COLS.length || sh.getRange(1, COLS.length).getValue() !== COLS[COLS.length - 1][1]) setup();
   return ss.getSheetByName(SHEET);
 }
 
@@ -452,7 +456,7 @@ function doPost(e) {
       if (k === 'appliedAt') return v ? new Date(v) : '';
       // Only a real yyyy-mm-dd date: ',' or '1970-01-01' used to land in the sheet as 1970 or a broken cell
       if (k === 'nextDate') { const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); if (!m || +m[1] < 2000) return ''; return new Date(+m[1], +m[2] - 1, +m[3]); }
-      if (k === 'chance') return v === '' || v == null ? '' : Number(v);
+      if (k === 'chance' || k === 'adAge' || k === 'applicants' || k === 'rejDays') return v === '' || v == null ? '' : Number(v);
       return v == null ? '' : v;
     });
     const appendRows = [];

@@ -1,7 +1,7 @@
 /* Job Tracker — dashboard */
 (async function () {
   'use strict';
-  const A = JT_Analyzer, S = JT_Store;
+  const A = JT_Analyzer, S = JT_Store, I = JT_Insights;
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -111,6 +111,7 @@
       ${skipped ? `<span title="Applications the tracker now marks Skip: something in the ad ruled you out">Applied to Skip jobs: <b>${skipped}</b></span>` : ''}
       ${incomplete ? `<span title="The job ad was not captured: open the job page and re-save, or paste the description">Incomplete: <b>${incomplete}</b></span>` : ''}`;
     renderCalibration();
+    renderWhy();
 
     renderWeekly();
     renderPlatforms();
@@ -172,6 +173,39 @@
       <span class="track"><i style="width:${x.r / max * 100}%;background:#1f6fa8"></i><i style="width:${(x.n - x.r) / max * 100}%;background:#b9d3e8"></i></span>
       <span class="v">${x.n} · ${pct(x.r, x.n)} reply · ${pct(x.i, x.n)} interview</span></div>`).join('') +
       `<p class="hint" style="margin:8px 0 0">Applications older than two weeks. If Skip replies as often as Apply, the rules need changing: tell me which ads were wrong.</p>`;
+  }
+
+  // Reply and interview rate per factor: method, cover letter, CV, ad age, competition, requirements
+  function renderWhy() {
+    const box = $('#why');
+    if (!box) return;
+    const b = I.breakdown(ovApps(), { responded: a => S.everReached(a, A.RESPONDED), interviewed: a => S.everReached(a, A.INTERVIEW), minAgeDays: 7 });
+    if (b.total < 5) { box.innerHTML = '<p class="empty">After about 10 applications older than a week this shows what the ones that got a reply have in common.</p>'; return; }
+    const r = b.rejection;
+    const head = `<div class="why-head">
+      <div><b>${b.total}</b><span>applications older than a week</span></div>
+      <div><b>${pct(b.total - r.silent, b.total)}</b><span>got any reply</span></div>
+      <div><b>${r.n ? pct(r.fast, r.n) : '—'}</b><span>of rejections came within 3 days${r.median != null ? ` (median ${r.median} d)` : ''}</span></div>
+      <div><b>${r.silent}</b><span>never answered</span></div></div>`;
+    const reasonRows = Object.entries(r.reasons).filter(([k]) => k).sort((x, y) => y[1] - x[1]);
+    const verdict = [];
+    if (r.n >= 3 && r.fast / r.n >= 0.6) verdict.push('Most rejections arrive within 3 days: the CV is filtered before anyone talks to you. Change the CV and the first lines of the application, not your interview prep.');
+    const grp = t => b.groups.find(g => g.title === t);
+    const rate = x => x.n ? x.replied / x.n : 0;
+    const meth = grp('How you applied').rows.filter(x => x.n >= 5 && x.key !== 'Not recorded');
+    if (meth.length >= 2) { const s2 = meth.slice().sort((x, y) => rate(y) - rate(x)); if (rate(s2[0]) - rate(s2[s2.length - 1]) >= 0.1) verdict.push(`${s2[0].key} answers ${pct(s2[0].replied, s2[0].n)} of the time, ${s2[s2.length - 1].key} ${pct(s2[s2.length - 1].replied, s2[s2.length - 1].n)}.`); }
+    const crowd = grp('Applicants before you').rows.find(x => x.key === 'Over 100');
+    if (crowd && crowd.n >= 5 && !crowd.interview) verdict.push(`${crowd.n} applications went to ads with 100+ applicants and none led to an interview: apply in the first 2–3 days or skip them.`);
+    const exp = grp('What the ad demanded').rows.find(x => x.key === I.REQS[0].label);
+    if (exp && exp.n >= 5 && !exp.interview) verdict.push(`Ads that demand previous professional IT experience: ${exp.n} applied, ${exp.replied} replies, no interviews. Your freelance and home-lab work needs to be visible as experience, or target roles that train.`);
+    const unknown = grp('How you applied').rows.find(x => x.key === 'Not recorded');
+    const tbl = g => `<div class="why-grp"><h3>${esc(g.title)}</h3><table class="why-t"><thead><tr><th></th><th>Sent</th><th>Reply</th><th>Interview</th><th>Rejected</th></tr></thead><tbody>${g.rows.map(x => `
+      <tr><td>${esc(x.key)}</td><td>${x.n}</td><td><span class="bar" style="--w:${x.n ? x.replied / x.n * 100 : 0}%"></span>${pct(x.replied, x.n)}</td><td>${pct(x.interview, x.n)}</td><td>${x.rejected}</td></tr>`).join('')}</tbody></table></div>`;
+    box.innerHTML = head +
+      (verdict.length ? `<ul class="why-v">${verdict.map(v => `<li>${esc(v)}</li>`).join('')}</ul>` : '') +
+      `<div class="why-grid">${b.groups.filter(g => g.rows.length > 1 || !/^(Not recorded|Unknown)$/.test(g.rows[0] ? g.rows[0].key : 'Unknown')).map(tbl).join('')}
+        ${reasonRows.length ? `<div class="why-grp"><h3>Reasons employers gave</h3><table class="why-t"><tbody>${reasonRows.map(([k, n]) => `<tr><td>${esc(I.label(I.REASONS, k))}</td><td>${n}</td></tr>`).join('')}</tbody></table></div>` : ''}</div>` +
+      (unknown && unknown.n / b.total > 0.5 ? `<p class="hint" style="margin:10px 0 0">${unknown.n} applications have no method recorded (saved before version 3.2). New ones are filled in automatically from the button you press; for older ones open the application and set it.</p>` : '');
   }
 
   function renderToolsTop() {
@@ -460,6 +494,7 @@
           </div>
           ${a.url ? `<p style="margin:10px 0 0"><a href="${esc(a.url)}" target="_blank" rel="noopener">Open job ad</a></p>` : ''}
         </div>
+        ${applyPanelHtml(a)}
         <div class="panel"><h2>Benefits</h2><div id="benBox">${benefitsHtml(a)}</div></div>
         <div class="panel"><h2>Key details</h2><div id="detBox">${detailsHtml(a)}</div></div>
         <div class="panel"><div class="row-between"><h2>Job description</h2><button class="btn small" id="dReanalyze">Re-analyse</button></div>
@@ -485,6 +520,8 @@
     else $('#dTitle').focus();
 
     $$('#dWt .chip').forEach(ch => ch.onclick = () => ch.setAttribute('aria-pressed', ch.getAttribute('aria-pressed') !== 'true'));
+    const showOutcome = () => { const st = $('#dStatus').value; $('#dOutcome').hidden = st !== 'rejected'; };
+    $('#dStatus').addEventListener('change', showOutcome); showOutcome();
     const close = () => { d.hidden = true; $('#scrim').hidden = true; current = null; if (location.hash.startsWith('#app=')) history.replaceState(null, '', '#apps'); };
     d.querySelector('.x').onclick = close; $('#dCancel').onclick = close; $('#scrim').onclick = close;
     d.onkeydown = e => { if (e.key === 'Escape') close(); };
@@ -500,6 +537,7 @@
         nextDate: $('#dNext').value, url: $('#dUrl').value.trim(),
         workTypes: $$('#dWt .chip[aria-pressed=true]').map(c => c.dataset.v),
         notes: $('#dNotes').value, description: $('#dDesc').value,
+        ...collectApply(a, $('#dStatus').value),
       };
     };
 
@@ -525,7 +563,7 @@
       const trackChanged = !app || f.track !== app.track;
       if ((f.description || f.title) && (descChanged || !a.chance || trackChanged)) {
         const an = A.analyze({ title: f.title, description: f.description, location: f.location, workTypes: f.workTypes, category: f.category, track: f.track, salaryText: f.salaryText }, profile);
-        extra = { chance: an.chance, tools: an.chance.tools, details: an.details, benefits: an.benefits, placement: an.placement };
+        extra = { chance: an.chance, tools: an.chance.tools, details: an.details, benefits: an.benefits, placement: an.placement, reqs: I.requirements(f.description) };
         if (!f.notes.trim() && an.notes) extra.notes = an.notes;
       } else if (a.chance) extra = { chance: a.chance, tools: a.tools, details: a.details, benefits: a.benefits || [], placement: a.placement || null };
       if (isNew) {
@@ -544,6 +582,51 @@
     };
     if ($('#dOffer')) $('#dOffer').onclick = () => { close(); location.hash = '#offers'; };
 
+  }
+
+  // ---------- How you applied and how it ended (JT_Insights) ----------
+  const numOrNull = v => (v === '' || v == null || isNaN(+v) ? null : +v);
+  function applyPanelHtml(a) {
+    const ap = a.apply || {}, po = a.posting || {}, oc = a.outcome || {};
+    const sel = (id, list, cur) => `<select id="${id}">${list.map(x => `<option value="${x.id}" ${x.id === cur ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select>`;
+    const reqs = a.reqs || I.requirements(a.description) || [];
+    const guess = I.outcomeType({ ...a, status: 'rejected', outcome: null }, S.everReached(a, A.INTERVIEW));
+    const dr = I.daysToRejection(a);
+    return `<div class="panel"><h2>How you applied</h2>
+      <p class="hint">Fill these in for every application: after 20–30 of them the overview shows which way of applying gets replies.</p>
+      <div class="form-grid">
+        <label>Method${sel('dMethod', I.METHODS, ap.method || 'unknown')}</label>
+        <label>Cover letter${sel('dCover', I.COVERS, ap.cover || 'unknown')}</label>
+        <label class="full">CV sent<input type="text" id="dCv" value="${esc(ap.cv || '')}" placeholder="File name or version, e.g. CV IT Support v2"></label>
+        <label>Ad age when you applied, days<input type="number" min="0" id="dPosted" value="${po.daysAgo == null ? '' : po.daysAgo}"></label>
+        <label>Applicants before you<input type="number" min="0" id="dApplicants" value="${po.applicants == null ? '' : po.applicants}" placeholder="LinkedIn shows it"></label>
+        <label class="full">Screening questions they asked<input type="text" id="dScreen" value="${esc(ap.screening || '')}" placeholder="e.g. years of experience, right to work, salary, notice"></label>
+      </div>
+      ${reqs.length ? `<p class="hint" style="margin:10px 0 0">The ad demands: <b>${reqs.map(id => esc((I.REQS.find(r => r.id === id) || {}).label || id)).join(' · ')}</b></p>` : ''}
+      <div id="dOutcome" hidden style="margin-top:12px">
+        <h2>Why it was a no</h2>
+        <div class="form-grid">
+          <label>When<select id="dOcType"><option value="">${esc(guess ? 'Guess: ' + I.label(I.OUTCOMES, guess) : 'Not sure')}</option>${I.OUTCOMES.map(x => `<option value="${x.id}" ${x.id === oc.type && !oc.guess ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label>
+          <label>Reason they gave${sel('dOcReason', I.REASONS, oc.reason || '')}</label>
+          <label class="full">What they wrote (paste the key line)<textarea id="dOcText" rows="3" placeholder="'…we have decided to progress with candidates whose experience more closely matches…'">${esc(oc.text || '')}</textarea></label>
+        </div>
+        ${dr != null ? `<p class="hint" style="margin:6px 0 0">The reply came ${dr} day${dr === 1 ? '' : 's'} after you applied${dr <= 3 ? ': too fast for a person to have read it closely, so it was a CV screen or an automatic filter.' : '.'}</p>` : ''}
+      </div>
+    </div>`;
+  }
+  function collectApply(a, status) {
+    if (!$('#dMethod')) return {};
+    const out = {
+      apply: { ...(a.apply || {}), method: $('#dMethod').value, cover: $('#dCover').value, cv: $('#dCv').value.trim(), screening: $('#dScreen').value.trim() },
+      posting: { ...(a.posting || {}), daysAgo: numOrNull($('#dPosted').value), applicants: numOrNull($('#dApplicants').value) },
+    };
+    if (out.posting.daysAgo == null && out.posting.applicants == null && !a.posting) out.posting = null;
+    if (status === 'rejected') {
+      const type = $('#dOcType').value, reason = $('#dOcReason').value, text = $('#dOcText').value.trim();
+      out.outcome = { ...(a.outcome || {}), type: type || '', reason, text, at: (a.outcome && a.outcome.at) || I.rejectedAt(a) || new Date().toISOString() };
+      if (!type) delete out.outcome.type;
+    }
+    return out;
   }
 
   // ---------- OFFERS ----------
@@ -684,6 +767,8 @@
     $('#pDays').value = profile.daysPerWeek; $('#pHours').value = profile.hoursPerWeek;
     $('#pLicence').checked = !!profile.hasDrivingLicence; $('#pLangs').value = (profile.languages || []).join(', ');
     $('#pAuto').checked = profile.autoDetect !== false;
+    $('#pStale').value = profile.autoNoResponseDays == null ? 30 : profile.autoNoResponseDays;
+    $('#pCover').innerHTML = I.COVERS.filter(c => c.id !== 'unknown').map(c => `<option value="${c.id}" ${c.id === ((profile.applyDefaults && profile.applyDefaults.cover) || 'none') ? 'selected' : ''}>${esc(c.label)}</option>`).join('');
     $('#pPreview').checked = profile.showPreview !== false;
     $('#pSched').checked = !!profile.penalizeSchedule;
     $('#pList').checked = profile.listScan !== false;
@@ -727,6 +812,8 @@
     profile.hasDrivingLicence = $('#pLicence').checked;
     profile.languages = $('#pLangs').value.split(',').map(x => x.trim()).filter(Boolean);
     profile.autoDetect = $('#pAuto').checked;
+    profile.autoNoResponseDays = Math.max(0, Math.min(180, parseInt($('#pStale').value, 10) || 0));
+    profile.applyDefaults = { ...(profile.applyDefaults || {}), cover: $('#pCover').value };
     profile.showPreview = $('#pPreview').checked;
     profile.penalizeSchedule = $('#pSched').checked;
     profile.listScan = $('#pList').checked;
