@@ -95,3 +95,31 @@ test('a new application keeps apply, posting, reqs and outcome, and they reach t
   assert.match(row.outcome, /CV screen/); assert.match(row.outcome, /Not enough experience/);
   assert.match(row.reqs, /previous IT/);
 });
+
+test('today counts what you sent on this calendar day, and how many were Skip jobs', () => {
+  const now = '2026-10-27T18:00:00';
+  const apps = [
+    { appliedAt: '2026-10-27T09:00:00', status: 'applied', chance: { verdict: 'skip' } },
+    { appliedAt: '2026-10-27T10:00:00', status: 'applied', chance: { verdict: 'tailor' }, apply: { cvTailored: true } },
+    { appliedAt: '2026-10-27T11:00:00', status: 'withdrawn' },
+    { appliedAt: '2026-10-26T23:00:00', status: 'applied' },
+  ];
+  assert.deepEqual(I.today(apps, now), { n: 2, skip: 1, tailored: 1 });
+});
+
+test('workingDaysSince skips weekends', () => {
+  assert.equal(I.workingDaysSince('2026-10-23T10:00:00', '2026-10-27T09:00:00'), 2); // Fri -> Tue
+  assert.equal(I.workingDaysSince('2026-10-26T10:00:00', '2026-10-30T09:00:00'), 4); // Mon -> Fri
+  assert.equal(I.workingDaysSince('2026-10-30T10:00:00', '2026-10-29T09:00:00'), 0);
+});
+
+test('breakdown shows replies by verdict and by tailored CV', () => {
+  const apps = [
+    { appliedAt: '2026-09-01', status: 'rejected', chance: { verdict: 'skip' } },
+    { appliedAt: '2026-09-01', status: 'interview1', chance: { verdict: 'tailor' }, apply: { cvTailored: true } },
+  ];
+  const b = I.breakdown(apps, { responded: a => a.status !== 'applied', interviewed: a => /interview/.test(a.status), now: '2026-10-27' });
+  const v = b.groups.find(g => g.title === 'Verdict when you applied');
+  assert.deepEqual(v.rows.map(r => [r.key, r.interview]), [['Tailor CV', 1], ['Skip', 0]]);
+  assert.ok(b.groups.find(g => g.title === 'CV tailored to the ad').rows.some(r => r.key === 'Yes' && r.n === 1));
+});

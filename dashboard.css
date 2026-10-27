@@ -261,3 +261,7 @@ table.offers{border-collapse:collapse;width:100%;font-size:13.5px}
 .why-t td{text-align:right;padding:4px 6px;border-bottom:1px solid var(--soft);white-space:nowrap}
 .why-t th:first-child,.why-t td:first-child{text-align:left;white-space:normal}
 .why-t .bar{display:inline-block;vertical-align:middle;width:40px;height:6px;margin-right:6px;border-radius:3px;background:linear-gradient(90deg,var(--blue) var(--w),var(--blue-soft) var(--w))}
+
+/* Internships switched off in Settings */
+body.no-intern a[data-view="intern"], body.no-intern #ovTrack, body.no-intern #fTrack,
+body.no-intern #skTrack { display: none; }

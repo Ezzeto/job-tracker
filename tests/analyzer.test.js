@@ -102,3 +102,39 @@ test('every status has a label and colour', () => {
     assert.match(A.statusColor(s.id), /^#[0-9a-f]{6}$/i);
   }
 });
+
+test('parseSalary reads a range with the thousands written once', () => {
+  const a = A.parseSalary('£26-28,000 per annum');
+  assert.equal(a.min, 26000); assert.equal(a.max, 28000); assert.equal(a.annualMin, 26000);
+  const b = A.parseSalary('£26-28k');
+  assert.equal(b.min, 26000); assert.equal(b.max, 28000);
+  const h = A.parseSalary('£13.50 - £15 per hour');
+  assert.equal(h.min, 13.5); assert.equal(h.period, 'hour');
+});
+
+const SD = (extra) => `1st Line IT Support Analyst. You will support 300 users across Microsoft 365, Active Directory, Intune and Windows 11, log tickets in ServiceNow and escalate to 2nd line. ${extra} Full training on our systems. Salary £27,000 per annum. Hybrid, London.`;
+
+test('commercial years decide the experience gate when set', () => {
+  const two = { title: '1st Line Support Analyst', description: SD('You must have 2 years of experience in an IT support role.') };
+  const oldWay = A.checkGates(two, profile({ experienceYears: 1 }), { level: { level: 'entry' }, years: { years: 2, preferred: false } });
+  assert.ok(!oldWay.blocks.some(b => b.key === 'experience'));
+  const honest = A.checkGates(two, profile({ experienceYears: 1, commercialYears: 0 }), { level: { level: 'entry' }, years: { years: 2, preferred: false } });
+  assert.ok(honest.blocks.some(b => b.key === 'experience' && /paid IT job/.test(b.text)));
+  assert.equal(A.myYearsOf(profile({ experienceYears: 3, commercialYears: '' })), 3);
+  assert.equal(A.myYearsOf(profile({ experienceYears: 3, commercialYears: 0 })), 0);
+});
+
+test('previous IT support experience with no years stated is a question when you have none in a paid job', () => {
+  const job = { title: '1st Line Support', description: SD('Previous experience in an IT support role is essential.') };
+  const g = A.checkGates(job, profile({ commercialYears: 0 }), { level: { level: 'entry' } });
+  assert.ok(g.asks.some(a => a.key === 'experience'));
+  const pref = { title: '1st Line Support', description: SD('Previous experience in a service desk role is desirable.') };
+  assert.ok(!A.checkGates(pref, profile({ commercialYears: 0 }), { level: { level: 'entry' } }).asks.some(a => a.key === 'experience'));
+  assert.ok(!A.checkGates(job, profile({ commercialYears: 1 }), { level: { level: 'entry' } }).asks.some(a => a.key === 'experience'));
+});
+
+test('a job you are ruled out of shows no percentage', () => {
+  const d = A.display({ verdict: 'skip', score: 62, confidence: 'high', gates: { blocks: [{ key: 'licence', text: 'x' }], asks: [] } });
+  assert.equal(d.text, '✕');
+  assert.equal(A.display({ verdict: 'skip', score: 30, confidence: 'high', gates: { blocks: [], asks: [] } }).text, '30%');
+});

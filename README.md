@@ -70,6 +70,17 @@ A number alone said little: in a real backup of 100 applications, 96 scored 50% 
 3. **Verdict and confidence.** *Skip* if anything blocks; *Check first* if something needs asking or the ad names few skills; otherwise *Apply* (70+) or *Tailor CV* (45–69). Confidence (confident · fairly sure · rough guess) depends on the length of the ad and how many skills it names; a rough guess shows as ≈62%. A blocked job is capped at 25% so it sorts to the bottom.
 4. **Re-check and calibration.** *Data → Re-check all* downloads a backup, then runs the current rules over everything saved: repairs titles, cleans descriptions, re-scores, marks duplicates (same link; same title and company within two weeks; the same ad text) with an optional merge that keeps notes, contacts and the furthest status, and renumbers clashing tickets. *Overview → Does the verdict work?* shows reply and interview rates per verdict, so you can see whether Apply jobs really answer more often than Skip jobs.
 
+**Fewer, better applications (3.3).** Changes made after reading a real backup of 100 applications with no interviews:
+
+- *Paid experience is its own number.* Settings has two figures: years you can show (freelance included) and years in a paid IT job with an employer. When the second is set, the experience gate uses it, because a CV screen for *1 year in an IT support role* usually looks for an employer. With none, *2 years required* rules a job out, *1 year* or *previous experience in an IT support role* becomes a question.
+- *A ruled-out job shows ✕, not a percentage.* A 62% next to *Skip* still read as a chance.
+- *Before you apply* the side panel says what to do with the verdict (tailor first, check the open questions, better not to apply) and counts what you sent today against a daily target (Settings, default 5). Nothing is blocked.
+- *After you apply* the panel warns when the job was marked Skip (press Undo if you only opened the form) and asks whether you changed your CV for it. *Why no interviews?* then compares replies by verdict and by tailored versus standard CV.
+- *Follow-ups are due after 4 working days*, not 7 calendar days.
+- *Copy CV prompt.* Each application has a *CV and cover letter* panel: it copies a prompt with the ad, your fact bank (Settings) and rules that forbid inventing anything, for you to paste into Claude or ChatGPT. A cover letter needs a sentence in your own words on why this employer. Nothing is sent from the extension.
+- *Internships are hidden* unless switched on in Settings; the records stay.
+- Salaries written as *£26-28,000* or *£26-28k* are read as £26,000–£28,000.
+
 **Why no interviews (3.2).** Every new application records *how* you applied, taken from the button you pressed (*Easy Apply*, company website, job-board form; agency, email and referral by hand), the cover letter (default in Settings) and the CV file loaded in the CV tab, how old the ad was and how many people had applied (*Reposted 2 weeks ago · Over 100 people clicked apply*, *Posted 21 October*, JSON-LD `datePosted`), and which hard demands the ad makes (previous IT experience, years, full-time, degree, driving licence, certificates, clearance). When an application is rejected the drawer asks when and why, and guesses *CV screen* for a 'no' within 3 days. *Overview → Why no interviews?* shows reply and interview rates for each of these, the share of rejections that came within 3 days, and plain-language findings. *Applied* with no reply or follow-up for 30 days (Settings; 0 = never) becomes *No response* on its own. The new fields go to Google Sheets as eight extra columns (update `Code.gs` to version 12).
 
 **The same job on another site (3.1).** Agencies post one vacancy on CV-Library, Reed, Totaljobs and LinkedIn. Before you apply, the job panel and badge say *Already applied via CV-Library* when a saved application matches by the agency's reference (*BH37630*, *Ref: AJ47736*), by the ad text, or by title and company within 60 days; pressing Apply does not save a second record. On search results the badge tooltip says the same once the full ad is loaded.
@@ -169,6 +180,7 @@ lib/extract.js        per-site selectors, JSON-LD, contacts
 lib/store.js          storage, tickets, URL normalisation, revisions
 lib/sync.js           Google Sheets push / pull
 lib/followup.js       follow-up templates
+lib/prompt.js         'Copy CV prompt': ad + fact bank + rules for an AI chat
 lib/cv.js             CV sections, skills from the CV, ATS check, keyword match
 lib/cvread.mjs        reads PDF (pdf.js) and Word (mammoth) files in the browser
 lib/vendor/           pdf.js 4.10 and mammoth, with their licences
@@ -180,7 +192,7 @@ tests/                unit tests, helpers and the browser smoke test
 ## Roadmap
 
 - Move the analyser to TypeScript and split `dashboard.js` into modules.
-- Optional AI assistant: rewrite CV bullets for a specific ad and draft cover letters, with the user's own API key.
+- Optional local AI (Ollama, off by default) for the CV prompt, so nothing leaves the computer.
 - Replace keyword matching with semantic matching: a small Python (FastAPI) service that embeds the job ad and the CV, compared against the current scorer on a hand-labelled set of real ads.
 - Publish to the Chrome Web Store.
 
