@@ -347,6 +347,7 @@
       <div class="hd"><span class="tk">${esc(app.ticket)}</span><b>${isNew ? 'Application saved' : 'Already in your tracker'}${app.track === 'intern' ? '<span class="trk">Internship</span>' : ''}</b><button class="x" title="Close" aria-label="Close">×</button></div>
       <div class="bd">
         ${verdictHtml(c)}
+        ${isNew && c.verdict === 'skip' ? `<div class="ap" style="border-color:#8f2f26;background:#fdf1f0"><div class="v" style="color:#8f2f26">This job was marked Skip</div><div style="font-size:12px">If you only opened the form, press <b>Undo</b>. If you sent it, write in Notes why it was worth it: it helps check whether the verdicts are right.</div></div>` : ''}
         <div class="tools">${c.matched.map(t => `<span class="t s">${esc(t)}</span>`).join('')}${c.basic.map(t => `<span class="t b">${esc(t)}</span>`).join('')}${c.missing.map(t => `<span class="t m">${esc(t)}</span>`).join('')}</div>
         ${placementHtml(app.placement, true)}
         ${atsHtml(app.atsMatch)}
@@ -359,6 +360,7 @@
         ${I ? `<div class="row"><div><label>How you applied</label><select id="method">${I.METHODS.map(m => `<option value="${m.id}" ${m.id === ((app.apply && app.apply.method) || 'unknown') ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select></div>
           <div><label>Cover letter</label><select id="cover">${I.COVERS.map(m => `<option value="${m.id}" ${m.id === ((app.apply && app.apply.cover) || 'unknown') ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select></div></div>
         <div class="note">${esc(postingLine(app))}</div>` : ''}
+        <label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" id="cvTailored" style="width:auto;margin:0" ${app.apply && app.apply.cvTailored ? 'checked' : ''}> I changed my CV for this job</label>
         <label>Role type</label><select id="category">${opt(A.CATEGORY_NAMES, app.category)}</select>
         <label>Work type</label><div class="chips" id="wt">${A.WORK_TYPES.map(w => `<span class="chip ${app.workTypes.includes(w) ? 'on' : ''}" data-v="${esc(w)}" role="checkbox" tabindex="0" aria-checked="${app.workTypes.includes(w)}">${esc(w)}</span>`).join('')}</div>
         <label>Salary</label><input id="salaryText" value="${esc(app.salaryText)}" placeholder="Not listed. Add it if you find out">
@@ -389,7 +391,7 @@
         workTypes: [...box.querySelectorAll('.chip.on')].map(x => x.dataset.v),
         salaryText, salary: A.parseSalary(salaryText) || (salaryText ? { text: salaryText } : null),
         notes: $('notes').value,
-        ...(I ? { apply: { ...(app.apply || {}), method: $('method').value, cover: $('cover').value } } : {}),
+        ...(I ? { apply: { ...(app.apply || {}), method: $('method').value, cover: $('cover').value, cvTailored: $('cvTailored').checked } } : { apply: { ...(app.apply || {}), cvTailored: $('cvTailored').checked } }),
       });
       box.remove();
       toast('Saved', 'Open dashboard', openDashboard, 3000);
@@ -432,6 +434,23 @@
     return !issues.some(i => ['junk-title', 'results-page', 'form-page', 'no-title'].includes(i.code));
   }
 
+  // What to do with this job before pressing Apply, and how many you have sent today.
+  // Ten careful applications beat forty identical ones: the counter is a nudge, nothing is blocked.
+  function adviceHtml(c, day, profile) {
+    const limit = (profile && profile.dailyLimit) || 5;
+    const v = c && c.verdict;
+    const box = (col, bg, head, body) => `<div class="ap" style="border-color:${col};background:${bg}"><div class="v" style="color:${col}">${head}</div><div style="font-size:12px">${body}</div></div>`;
+    let out = '';
+    if (v === 'skip') out += box('#8f2f26', '#fdf1f0', 'Better not to apply', 'Something above rules you out, so the CV screen will most likely say no. Spend the time on a Tailor CV or Apply job instead.');
+    else if (v === 'tailor') out += box('#1f5f8a', '#eef6fb', 'Tailor the CV first', 'Open the dashboard → this job → <b>Copy CV prompt</b>, or move the matching tools to the top of your CV by hand. Tick “CV tailored” after you apply.');
+    else if (v === 'ask') out += box('#7a5510', '#fff8ec', 'Check the open questions first', 'Ask the recruiter or look them up before you send the CV: a quick message often gets a faster answer than the form.');
+    if (day) {
+      const over = day.n >= limit;
+      out += `<div class="note" style="margin:6px 0 0;${over ? 'color:#8f2f26;font-weight:600' : ''}">Today: ${day.n} sent${day.tailored ? `, ${day.tailored} with a tailored CV` : ''}${day.skip ? `, ${day.skip} to Skip jobs` : ''} · your daily target is ${limit} careful ones${over ? '. Target reached: follow up on older ones instead' : ''}</div>`;
+    }
+    return out;
+  }
+
   const fmtDay = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
   const WHY = { ref: 'same job reference', text: 'same ad text', title: 'same title and company' };
   async function showPreviewPanel(rec, existing, elsewhere) {
@@ -439,6 +458,8 @@
     const root = shadow.getElementById('root');
     root.querySelector('.jt') && root.querySelector('.jt').remove();
     const c = rec.chance;
+    let dayHtml = '';
+    try { if (!existing) dayHtml = adviceHtml(c, I ? I.today(await S.getApps()) : null, await S.getProfile()); } catch (e) { /* the panel works without it */ }
     const box = document.createElement('div');
     box.className = 'jt';
     box.setAttribute('role', 'dialog');
@@ -449,6 +470,7 @@
         ${elsewhere ? `<div class="ap" style="border-color:#b47a12;background:#fff8ec"><div class="v" style="color:#7a5510">You already applied for this job</div><div style="font-size:12px">${esc(existing.ticket)} · via ${esc(existing.platform || 'another site')}${existing.appliedAt ? ' on ' + esc(fmtDay(existing.appliedAt)) : ''} · ${esc(A.statusLabel(existing.status))}<br><span class="note" style="margin:0">Matched by ${esc(WHY[elsewhere.why])}. Applying again through another site usually reaches the same recruiter twice.</span></div></div>` : ''}
         <div style="font-weight:600;margin-bottom:6px">${esc(rec.title)}${rec.company ? ' — ' + esc(rec.company) : ''}${rec.track === 'intern' ? '<span class="trk">Internship</span>' : ''}</div>
         ${verdictHtml(c, [rec.location, rec.salaryText].filter(Boolean).join(' · '))}
+        ${dayHtml}
         ${reasonsHtml(c)}
         ${placementHtml(rec.placement)}
         ${atsHtml(rec.atsMatch)}

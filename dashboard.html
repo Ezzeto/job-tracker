@@ -118,6 +118,10 @@
         <div class="form-grid">
           <label>Days per week<input type="number" id="pDays" min="1" max="7"></label>
           <label>Hours per week<input type="number" id="pHours" min="1" max="60"></label>
+          <label>Years of IT experience you can show, freelance included<input type="number" id="pExp" min="0" max="40" step="0.5"></label>
+          <label>Years in a paid IT job with an employer (leave empty to use the figure on the left)<input type="number" id="pComm" min="0" max="40" step="0.5" placeholder="e.g. 0"></label>
+          <label>Careful applications a day (the side panel counts them)<input type="number" id="pDaily" min="1" max="50"></label>
+          <label class="check"><input type="checkbox" id="pIntern"> Show internships and placements</label>
           <label class="check"><input type="checkbox" id="pLicence"> I have a full UK driving licence</label>
           <label class="check"><input type="checkbox" id="pAuto"> Save automatically when I press Apply</label>
           <label>Mark 'Applied' as 'No response' after, days (0 = never)<input type="number" id="pStale" min="0" max="180"></label>
@@ -142,6 +146,11 @@
           <label class="full">Short pitch for LinkedIn notes<input type="text" id="pPitch" placeholder="Second-year Computing with AI student building Python and FastAPI projects"></label>
           <label class="full">One or two sentences about you for emails and calls<textarea id="pHighlights" rows="2" placeholder="I build Python back ends with FastAPI and PostgreSQL, and bring seven years of hands-on IT support."></textarea></label>
         </div>
+      </div>
+      <div class="panel">
+        <h2>Fact bank for the CV prompt</h2>
+        <p class="hint">Everything true about your work, one fact per line, with dates. The <b>Copy CV prompt</b> button on an application uses only this, so the AI has nothing to invent from. Write numbers only if you can back them up.</p>
+        <textarea id="pFacts" rows="12" style="width:100%" placeholder="Freelance IT support, Sep 2018 – present&#10;- Set up and repaired Windows laptops and home networks for local clients&#10;Home lab, 2025 – present&#10;- Built a Windows Server domain with Active Directory, Group Policy and Entra ID&#10;- Enrolled devices in Intune; logged and closed tickets in osTicket"></textarea>
       </div>
       <div class="panel" id="sheetPanel">
         <div class="row-between"><h2>Google Sheet</h2><span class="sync-state" id="syncState"></span></div>
@@ -220,6 +229,7 @@
   <script src="lib/extract.js"></script>
   <script src="lib/insights.js"></script>
   <script src="lib/followup.js"></script>
+  <script src="lib/prompt.js"></script>
   <script src="lib/cv.js"></script>
   <script src="lib/vendor/mammoth.browser.min.js"></script>
   <script type="module" src="lib/cvread.mjs"></script>

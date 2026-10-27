@@ -41,6 +41,9 @@
 
   let apps = await S.getApps();
   let profile = await S.getProfile();
+  // Internships are hidden unless switched on in Settings; the records stay and show again when it is on
+  function applyInternVisibility() { document.body.classList.toggle('no-intern', !profile.showInternships); }
+  applyInternVisibility();
   let current = null; // the open drawer
 
   chrome.storage.onChanged.addListener(async ch => {
@@ -78,7 +81,7 @@
   }
 
   // ---------- OVERVIEW ----------
-  const ovApps = () => ovTrack === 'all' ? apps : apps.filter(a => trackOf(a) === ovTrack);
+  const ovApps = () => !profile.showInternships ? apps.filter(a => trackOf(a) === 'job') : ovTrack === 'all' ? apps : apps.filter(a => trackOf(a) === ovTrack);
   $$('#ovTrack button').forEach(b => b.onclick = () => { ovTrack = b.dataset.t; renderOverview(); });
   function renderOverview() {
     $$('#ovTrack button').forEach(b => b.setAttribute('aria-pressed', b.dataset.t === ovTrack));
@@ -198,6 +201,12 @@
     if (crowd && crowd.n >= 5 && !crowd.interview) verdict.push(`${crowd.n} applications went to ads with 100+ applicants and none led to an interview: apply in the first 2–3 days or skip them.`);
     const exp = grp('What the ad demanded').rows.find(x => x.key === I.REQS[0].label);
     if (exp && exp.n >= 5 && !exp.interview) verdict.push(`Ads that demand previous professional IT experience: ${exp.n} applied, ${exp.replied} replies, no interviews. Your freelance and home-lab work needs to be visible as experience, or target roles that train.`);
+    const vg = grp('Verdict when you applied');
+    const skipRow = vg && vg.rows.find(x => x.key === 'Skip');
+    if (skipRow && skipRow.n >= 5 && !skipRow.interview) verdict.push(`${skipRow.n} applications went to jobs marked Skip and none led to an interview. Those slots are better spent tailoring the CV for a Tailor CV or Apply job.`);
+    const tg = grp('CV tailored to the ad');
+    const ty = tg && tg.rows.find(x => x.key === 'Yes'), tn = tg && tg.rows.find(x => x.key === 'No');
+    if (ty && tn && ty.n >= 3 && tn.n >= 3) verdict.push(`Tailored CV: ${pct(ty.replied, ty.n)} replies. Same CV for everything: ${pct(tn.replied, tn.n)}.`);
     const unknown = grp('How you applied').rows.find(x => x.key === 'Not recorded');
     const tbl = g => `<div class="why-grp"><h3>${esc(g.title)}</h3><table class="why-t"><thead><tr><th></th><th>Sent</th><th>Reply</th><th>Interview</th><th>Rejected</th></tr></thead><tbody>${g.rows.map(x => `
       <tr><td>${esc(x.key)}</td><td>${x.n}</td><td><span class="bar" style="--w:${x.n ? x.replied / x.n * 100 : 0}%"></span>${pct(x.replied, x.n)}</td><td>${pct(x.interview, x.n)}</td><td>${x.rejected}</td></tr>`).join('')}</tbody></table></div>`;
@@ -235,8 +244,9 @@
         const cnt = (a.contacts || []).filter(c => c.type !== 'name').length;
         const ctext = cnt ? ` · ${cnt} contact${cnt === 1 ? '' : 's'}` : '';
         if ((fu.length >= 2 && dl >= 10) || d >= 35) items.push({ a, prio: 2, text: `${d} days without a reply${fu.length ? `, ${fu.length} follow-up${fu.length === 1 ? '' : 's'}` : ''}`, action: 'noresponse' });
-        else if (fu.length === 0 && d >= 7) items.push({ a, prio: 1, text: `${d} days without a reply: time to follow up${ctext}`, fu: true });
-        else if (fu.length === 1 && dl >= 7) items.push({ a, prio: 1, text: `Followed up ${dl} days ago: you can send a second one${ctext}`, fu: true });
+        // First nudge after 4 working days: recruiters shortlist in the first week, a message on day 10 is too late
+        else if (fu.length === 0 && I.workingDaysSince(a.appliedAt) >= 4) items.push({ a, prio: 1, text: `${I.workingDaysSince(a.appliedAt)} working days without a reply: time to follow up${ctext || ' · find a recruiter or hiring manager on LinkedIn first'}`, fu: true });
+        else if (fu.length === 1 && I.workingDaysSince(fu[0].at) >= 5) items.push({ a, prio: 1, text: `Followed up ${dl} days ago: you can send a second one${ctext}`, fu: true });
       }
       if (a.status === 'offer' && a.offer && a.offer.deadline) items.push({ a, prio: 0, text: `Reply to the offer by ${fmtDate(a.offer.deadline)}` });
     });
@@ -268,7 +278,7 @@
   function renderAppsRows() {
     const qs = $('#fSearch').value.trim().toLowerCase();
     const st = $('#fStatus').value, pl = $('#fPlatform').value, ca = $('#fCategory').value, sort = $('#fSort').value;
-    const tr = $('#fTrack').value;
+    const tr = profile.showInternships ? $('#fTrack').value : 'job';
     let list = apps.filter(a => (!tr || trackOf(a) === tr) &&
       (!st || a.status === st) && (!pl || a.platform === pl) && (!ca || a.category === ca) &&
       (!qs || [a.title, a.company, a.location, a.notes, a.ticket].join(' ').toLowerCase().includes(qs)));
@@ -368,6 +378,31 @@
     const next = (profile.intern.placement.deadlines || []).filter(d => d.date && daysTo(d.date) >= 0).sort((x, y) => x.date < y.date ? -1 : 1)[0];
     return `<div class="row-between"><h2>Placement paperwork</h2><span class="hint" style="margin:0">${done} of ${CHECK_ITEMS.length}${next ? ` · next: ${esc(next.label)}, ${longDate(next.date)}` : ''}</span></div>
       <div class="checklist">${CHECK_ITEMS.map(([k, l]) => `<label class="check"><input type="checkbox" data-k="${k}" ${ck[k] ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>`;
+  }
+
+  // ---------- CV + COVER LETTER PROMPT ----------
+  // Builds a prompt for Claude or ChatGPT from this ad and your fact bank. Nothing is sent: it goes to the clipboard.
+  function renderCvPrompt(a) {
+    const box = $('#cvPanel'); if (!box || !window.JT_Prompt) return;
+    const P = window.JT_Prompt;
+    const v = a.chance && a.chance.verdict;
+    const asks = P.wantsLetter(a.description);
+    box.innerHTML = `
+      <div class="row-between"><h2>CV and cover letter</h2><span class="hint" style="margin:0">${v === 'skip' ? 'Marked Skip: probably not worth tailoring' : asks ? 'The ad asks for a cover letter' : 'No cover letter asked for'}</span></div>
+      <p class="hint">Copies a prompt with this ad, your fact bank and strict rules (no invented facts). Paste it into Claude or ChatGPT, then check every line before you send anything.</p>
+      <div class="form-grid">
+        <label class="full">Why this employer, in your own words (needed for a letter)<textarea id="cvWhy" rows="2" placeholder="e.g. You support three NHS trusts, and I want my first IT job to be one where the fix matters to someone's day.">${esc(a.whyThem || '')}</textarea></label>
+        <label class="check"><input type="checkbox" id="cvLetter" ${asks ? 'checked' : ''}> Also write a cover letter</label>
+      </div>
+      <div class="btns" style="margin-top:10px"><button class="btn primary" id="cvCopy">Copy CV prompt</button></div>
+      <p class="msg" id="cvMsg" role="status"></p>`;
+    $('#cvWhy').onchange = async () => { a.whyThem = $('#cvWhy').value.trim(); await S.updateApp(a.id, { whyThem: a.whyThem }); };
+    $('#cvCopy').onclick = async () => {
+      const r = P.build(a, profile, { why: $('#cvWhy').value, letter: $('#cvLetter').checked });
+      if (!r.ok) { $('#cvMsg').textContent = r.error; return; }
+      try { await navigator.clipboard.writeText(r.text); $('#cvMsg').textContent = 'Copied. Paste it into Claude or ChatGPT. When you send the tailored CV, set "CV tailored to this ad" to Yes below.'; }
+      catch (e) { $('#cvMsg').textContent = 'Could not copy: the browser blocked the clipboard. Try again after clicking on the page.'; }
+    };
   }
 
   // ---------- FOLLOW-UP ----------
@@ -475,6 +510,7 @@
         <div class="panel" id="plPanel"${trackOf(a) === 'intern' ? '' : ' hidden'}>${placementPanelHtml(a)}</div>
         <div class="panel" id="atsPanel" hidden></div>
         ${!isNew && trackOf(a) === 'intern' && S.everReached(a, A.OFFER) ? `<div class="panel" id="ckPanel">${checklistHtml(a)}</div>` : ''}
+        ${!isNew ? '<div class="panel" id="cvPanel"></div>' : ''}
         ${!isNew ? '<div class="panel" id="fuPanel"></div>' : ''}
         <div class="panel"><h2>Job</h2>
           <div class="form-grid">
@@ -515,7 +551,7 @@
       $('#ckPanel').innerHTML = checklistHtml(a); bindChecklist();
     });
     if ($('#ckPanel')) bindChecklist();
-    if (!isNew) renderFollowUp(a);
+    if (!isNew) { renderFollowUp(a); renderCvPrompt(a); }
     if (opts.focusFollowUp && $('#fuPanel')) { $('#fuPanel').scrollIntoView({ block: 'start' }); $('#fuBody') && $('#fuBody').focus(); }
     else $('#dTitle').focus();
 
@@ -598,6 +634,7 @@
         <label>Method${sel('dMethod', I.METHODS, ap.method || 'unknown')}</label>
         <label>Cover letter${sel('dCover', I.COVERS, ap.cover || 'unknown')}</label>
         <label class="full">CV sent<input type="text" id="dCv" value="${esc(ap.cv || '')}" placeholder="File name or version, e.g. CV IT Support v2"></label>
+        <label>CV tailored to this ad<select id="dCvT"><option value="" ${ap.cvTailored == null ? 'selected' : ''}>Not recorded</option><option value="yes" ${ap.cvTailored === true ? 'selected' : ''}>Yes</option><option value="no" ${ap.cvTailored === false ? 'selected' : ''}>No, the usual CV</option></select></label>
         <label>Ad age when you applied, days<input type="number" min="0" id="dPosted" value="${po.daysAgo == null ? '' : po.daysAgo}"></label>
         <label>Applicants before you<input type="number" min="0" id="dApplicants" value="${po.applicants == null ? '' : po.applicants}" placeholder="LinkedIn shows it"></label>
         <label class="full">Screening questions they asked<input type="text" id="dScreen" value="${esc(ap.screening || '')}" placeholder="e.g. years of experience, right to work, salary, notice"></label>
@@ -617,7 +654,7 @@
   function collectApply(a, status) {
     if (!$('#dMethod')) return {};
     const out = {
-      apply: { ...(a.apply || {}), method: $('#dMethod').value, cover: $('#dCover').value, cv: $('#dCv').value.trim(), screening: $('#dScreen').value.trim() },
+      apply: { ...(a.apply || {}), method: $('#dMethod').value, cover: $('#dCover').value, cv: $('#dCv').value.trim(), cvTailored: { yes: true, no: false }[$('#dCvT').value], screening: $('#dScreen').value.trim() },
       posting: { ...(a.posting || {}), daysAgo: numOrNull($('#dPosted').value), applicants: numOrNull($('#dApplicants').value) },
     };
     if (out.posting.daysAgo == null && out.posting.applicants == null && !a.posting) out.posting = null;
@@ -765,6 +802,11 @@
   // ---------- SKILLS AND SETTINGS ----------
   function renderSettings() {
     $('#pDays').value = profile.daysPerWeek; $('#pHours').value = profile.hoursPerWeek;
+    $('#pExp').value = profile.experienceYears == null ? 1 : profile.experienceYears;
+    $('#pComm').value = profile.commercialYears == null ? '' : profile.commercialYears;
+    $('#pDaily').value = profile.dailyLimit || 5;
+    $('#pIntern').checked = !!profile.showInternships;
+    $('#pFacts').value = profile.factBank || '';
     $('#pLicence').checked = !!profile.hasDrivingLicence; $('#pLangs').value = (profile.languages || []).join(', ');
     $('#pAuto').checked = profile.autoDetect !== false;
     $('#pStale').value = profile.autoNoResponseDays == null ? 30 : profile.autoNoResponseDays;
@@ -809,6 +851,11 @@
   }
   const saveProfileFields = async () => {
     profile.daysPerWeek = +$('#pDays').value || 5; profile.hoursPerWeek = +$('#pHours').value || 37.5;
+    const yrs = parseFloat($('#pExp').value); profile.experienceYears = isNaN(yrs) ? 1 : yrs;
+    const com = parseFloat($('#pComm').value); profile.commercialYears = isNaN(com) ? null : com;
+    profile.dailyLimit = Math.max(1, Math.min(50, parseInt($('#pDaily').value, 10) || 5));
+    profile.showInternships = $('#pIntern').checked; applyInternVisibility(); renderAll();
+    profile.factBank = $('#pFacts').value.trim();
     profile.hasDrivingLicence = $('#pLicence').checked;
     profile.languages = $('#pLangs').value.split(',').map(x => x.trim()).filter(Boolean);
     profile.autoDetect = $('#pAuto').checked;
@@ -824,7 +871,7 @@
     profile.home = $('#pHome').value.trim(); profile.maxCommuteKm = +$('#pCommute').value || 50;
     await S.saveProfile(profile);
   };
-  ['#pDays', '#pHours', '#pLicence', '#pLangs', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pHome', '#pCommute', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
+  ['#pExp', '#pComm', '#pDaily', '#pIntern', '#pFacts', '#pDays', '#pHours', '#pLicence', '#pLangs', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pHome', '#pCommute', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
   $('#resetSkills').onclick = async () => {
     if (!confirm(`Clear all ${skTrack === 'intern' ? 'internship' : 'job'} skill levels?`)) return;
     if (skTrack === 'intern') profile.intern.skills = {}; else profile.skills = { ...A.DEFAULT_SKILLS };
