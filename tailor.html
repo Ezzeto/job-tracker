@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Job Tracker — tailor CV</title>
+  <link rel="stylesheet" href="dashboard.css">
+  <link rel="stylesheet" href="tailor.css">
+</head>
+<body class="tailor">
+  <main>
+    <header class="top">
+      <div><h1>Tailor CV</h1><p class="sub" id="jobLine"></p></div>
+      <div class="btns"><button class="btn" id="dlDocx" disabled>Download Word</button><button class="btn primary" id="dlPdf" disabled>Download PDF</button></div>
+    </header>
+    <div id="empty" class="panel" hidden></div>
+    <div class="tl-grid" id="work" hidden>
+      <aside>
+        <div class="panel">
+          <h2>What changed</h2>
+          <div class="cover"><div><b id="cBefore">—</b><span>ad keywords in your CV before</span></div><div><b id="cAfter">—</b><span>after</span></div></div>
+          <p class="hint" id="moved"></p>
+          <label class="check"><input type="checkbox" id="oHeadline"> Use the job title as the headline</label>
+          <div id="addBox"></div>
+          <p class="hint" style="margin-top:10px">Nothing is invented: lines are only reordered so this ad's tools come first. Click any text on the right to edit it; × removes a bullet. Changing an option above resets your edits.</p>
+          <div class="btns"><button class="btn small" id="reset">Start again</button></div>
+          <p class="msg" id="msg" role="status"></p>
+        </div>
+        <div class="panel">
+          <h2>Keywords in this ad</h2>
+          <div class="tools" id="kw"></div>
+          <p class="hint" style="margin:10px 0 0"><span class="t s">in your CV</span> <span class="t b">added</span> <span class="t m">missing: not added, be ready to talk about it</span></p>
+        </div>
+      </aside>
+      <section class="page" id="page" aria-label="CV preview"></section>
+    </div>
+  </main>
+  <script src="lib/quality.js"></script>
+  <script src="lib/analyzer.js"></script>
+  <script src="lib/store.js"></script>
+  <script src="lib/cv.js"></script>
+  <script src="lib/tailor.js"></script>
+  <script src="lib/docx.js"></script>
+  <script src="lib/vendor/jspdf.umd.min.js"></script>
+  <script src="lib/cvpdf.js"></script>
+  <script src="tailor.js"></script>
+</body>
+</html>

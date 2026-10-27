@@ -77,9 +77,11 @@ A number alone said little: in a real backup of 100 applications, 96 scored 50% 
 - *Before you apply* the side panel says what to do with the verdict (tailor first, check the open questions, better not to apply) and counts what you sent today against a daily target (Settings, default 5). Nothing is blocked.
 - *After you apply* the panel warns when the job was marked Skip (press Undo if you only opened the form) and asks whether you changed your CV for it. *Why no interviews?* then compares replies by verdict and by tailored versus standard CV.
 - *Follow-ups are due after 4 working days*, not 7 calendar days.
-- *Copy CV prompt.* Each application has a *CV and cover letter* panel: it copies a prompt with the ad, your fact bank (Settings) and rules that forbid inventing anything, for you to paste into Claude or ChatGPT. A cover letter needs a sentence in your own words on why this employer. Nothing is sent from the extension.
+- *Copy prompt for an AI chat.* In an application's *CV for this job* panel: a prompt with the ad, your CV (or optional extra facts from Settings) and rules that forbid inventing anything, to paste into Claude or ChatGPT. A cover letter needs a sentence in your own words on why this employer. Nothing is sent from the extension.
 - *Internships are hidden* unless switched on in Settings; the records stay.
 - Salaries written as *£26-28,000* or *£26-28k* are read as £26,000–£28,000.
+
+**Tailor CV (3.4).** *Tailor CV* in the job panel (before you apply, nothing has to be saved) or in an application opens your CV from the CV & ATS page reordered for that ad: the ad's tools first in each skills line, the most relevant bullets first in each job, the job title as the headline (optional), and tools the ad asks for that you marked as known in Settings added on one *Also:* line (optional, highlighted). Wording is never changed and nothing is invented; tools you do not have are listed as gaps instead. Every line is editable, × removes a bullet, and the result downloads as Word (`lib/docx.js`, plain paragraphs that applicant tracking systems read well) or PDF with real text (`lib/cvpdf.js`, jsPDF). When you then press Apply on that job, the application is marked *CV tailored* with the file name.
 
 **Why no interviews (3.2).** Every new application records *how* you applied, taken from the button you pressed (*Easy Apply*, company website, job-board form; agency, email and referral by hand), the cover letter (default in Settings) and the CV file loaded in the CV tab, how old the ad was and how many people had applied (*Reposted 2 weeks ago · Over 100 people clicked apply*, *Posted 21 October*, JSON-LD `datePosted`), and which hard demands the ad makes (previous IT experience, years, full-time, degree, driving licence, certificates, clearance). When an application is rejected the drawer asks when and why, and guesses *CV screen* for a 'no' within 3 days. *Overview → Why no interviews?* shows reply and interview rates for each of these, the share of rejections that came within 3 days, and plain-language findings. *Applied* with no reply or follow-up for 30 days (Settings; 0 = never) becomes *No response* on its own. The new fields go to Google Sheets as eight extra columns (update `Code.gs` to version 12).
 
@@ -180,10 +182,13 @@ lib/extract.js        per-site selectors, JSON-LD, contacts
 lib/store.js          storage, tickets, URL normalisation, revisions
 lib/sync.js           Google Sheets push / pull
 lib/followup.js       follow-up templates
-lib/prompt.js         'Copy CV prompt': ad + fact bank + rules for an AI chat
+lib/prompt.js         prompt for an AI chat: ad + CV + no-invention rules
+lib/tailor.js         Tailor CV: parses the CV, reorders it for one ad
+lib/docx.js, cvpdf.js Word and PDF output for the tailored CV
+tailor.html/js/css    the Tailor CV page
 lib/cv.js             CV sections, skills from the CV, ATS check, keyword match
 lib/cvread.mjs        reads PDF (pdf.js) and Word (mammoth) files in the browser
-lib/vendor/           pdf.js 4.10 and mammoth, with their licences
+lib/vendor/           pdf.js 4.10, mammoth and jsPDF 2.5, with their licences
 lib/legacy.js         migration from the Russian-language 1.x versions
 google-sheets/Code.gs Apps Script web app and sheet formatting
 tests/                unit tests, helpers and the browser smoke test

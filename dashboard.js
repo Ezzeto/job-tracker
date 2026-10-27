@@ -388,17 +388,21 @@
     const v = a.chance && a.chance.verdict;
     const asks = P.wantsLetter(a.description);
     box.innerHTML = `
-      <div class="row-between"><h2>CV and cover letter</h2><span class="hint" style="margin:0">${v === 'skip' ? 'Marked Skip: probably not worth tailoring' : asks ? 'The ad asks for a cover letter' : 'No cover letter asked for'}</span></div>
-      <p class="hint">Copies a prompt with this ad, your fact bank and strict rules (no invented facts). Paste it into Claude or ChatGPT, then check every line before you send anything.</p>
-      <div class="form-grid">
-        <label class="full">Why this employer, in your own words (needed for a letter)<textarea id="cvWhy" rows="2" placeholder="e.g. You support three NHS trusts, and I want my first IT job to be one where the fix matters to someone's day.">${esc(a.whyThem || '')}</textarea></label>
-        <label class="check"><input type="checkbox" id="cvLetter" ${asks ? 'checked' : ''}> Also write a cover letter</label>
-      </div>
-      <div class="btns" style="margin-top:10px"><button class="btn primary" id="cvCopy">Copy CV prompt</button></div>
+      <div class="row-between"><h2>CV for this job</h2><span class="hint" style="margin:0">${v === 'skip' ? 'Marked Skip: probably not worth tailoring' : asks ? 'The ad asks for a cover letter' : 'No cover letter asked for'}</span></div>
+      <p class="hint">Your CV from the CV &amp; ATS page, reordered so this ad's tools come first. You can edit it, then download Word or PDF. Nothing is invented.</p>
+      <div class="btns"><a class="btn primary" href="tailor.html?app=${encodeURIComponent(a.id)}" target="_blank">Tailor CV</a></div>
+      <details class="howto" style="margin-top:12px"><summary>Or rewrite it with an AI chat (prompt to copy)</summary>
+        <div class="form-grid" style="margin-top:8px">
+          <label class="full">Why this employer, in your own words (needed for a letter)<textarea id="cvWhy" rows="2" placeholder="e.g. You support three NHS trusts, and I want my first IT job to be one where the fix matters to someone's day.">${esc(a.whyThem || '')}</textarea></label>
+          <label class="check"><input type="checkbox" id="cvLetter" ${asks ? 'checked' : ''}> Also write a cover letter</label>
+        </div>
+        <div class="btns" style="margin-top:10px"><button class="btn" id="cvCopy">Copy prompt</button></div>
+      </details>
       <p class="msg" id="cvMsg" role="status"></p>`;
     $('#cvWhy').onchange = async () => { a.whyThem = $('#cvWhy').value.trim(); await S.updateApp(a.id, { whyThem: a.whyThem }); };
     $('#cvCopy').onclick = async () => {
-      const r = P.build(a, profile, { why: $('#cvWhy').value, letter: $('#cvLetter').checked });
+      const cvText = ((await getCvs())[trackOf(a) === 'intern' ? 'intern' : 'job'] || {}).text || '';
+      const r = P.build(a, profile, { why: $('#cvWhy').value, letter: $('#cvLetter').checked, cvText });
       if (!r.ok) { $('#cvMsg').textContent = r.error; return; }
       try { await navigator.clipboard.writeText(r.text); $('#cvMsg').textContent = 'Copied. Paste it into Claude or ChatGPT. When you send the tailored CV, set "CV tailored to this ad" to Yes below.'; }
       catch (e) { $('#cvMsg').textContent = 'Could not copy: the browser blocked the clipboard. Try again after clicking on the page.'; }

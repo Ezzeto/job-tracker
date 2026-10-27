@@ -19,7 +19,7 @@ manifest.content_scripts.forEach(cs => cs.js.forEach(exists));
 // importScripts in the service worker and <script> tags in the pages
 const sw = fs.readFileSync(path.join(root, manifest.background.service_worker), 'utf8');
 (sw.match(/importScripts\(([^)]*)\)/) || ['', ''])[1].split(',').map(s => s.trim().replace(/['"]/g, '')).filter(Boolean).forEach(exists);
-for (const page of ['dashboard.html', 'popup.html']) {
+for (const page of ['dashboard.html', 'popup.html', 'tailor.html']) {
   const html = fs.readFileSync(path.join(root, page), 'utf8');
   [...html.matchAll(/<script\b[^>]*\ssrc="([^"]+)"/g)].forEach(m => exists(m[1]));
 }
