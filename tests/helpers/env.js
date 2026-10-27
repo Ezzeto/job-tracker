@@ -36,6 +36,8 @@ lib('sync.js');
 lib('cv.js');
 lib('recheck.js');
 lib('prompt.js');
+lib('tailor.js');
+lib('docx.js');
 
 module.exports = {
   A: globalThis.JT_Analyzer,
@@ -45,6 +47,8 @@ module.exports = {
   E: globalThis.JT_Extract,
   I: globalThis.JT_Insights,
   P: globalThis.JT_Prompt,
+  T: globalThis.JT_Tailor,
+  D: globalThis.JT_Docx,
   F: globalThis.JT_Follow,
   Sync: globalThis.JT_Sync,
   CV: globalThis.JT_CV,

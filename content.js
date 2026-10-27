@@ -225,6 +225,13 @@
       const skills = an.track === 'intern' ? profile.intern.skills : profile.skills;
       if (cv && cv.text && globalThis.JT_CV) atsMatch = JT_CV.jobMatch(cv.text, job, skills);
     } catch (e) { /* no CV loaded */ }
+    // A CV made on the Tailor CV page for this job in the last 30 days
+    let tailored = null;
+    try {
+      const { tailoredCvs = [] } = await S.get('tailoredCvs');
+      const key = job.url ? S.normUrl(job.url) : '';
+      tailored = key && tailoredCvs.slice().reverse().find(t => t.urlKey === key && Date.now() - Date.parse(t.at) < 30 * 864e5);
+    } catch (e) { /* nothing tailored */ }
     return {
       track: an.track, placement: an.placement, atsMatch,
       contacts: E.mergeContacts(job.contacts || [], pageContacts),
@@ -239,7 +246,8 @@
         method: I && how ? I.methodFromButton(how.text, job.platform, how.yes) : 'unknown',
         button: how && how.text ? how.text.slice(0, 40) : '',
         cover: (profile.applyDefaults && profile.applyDefaults.cover) || 'none',
-        cv: cvLabel,
+        cv: tailored ? tailored.file : cvLabel,
+        ...(tailored ? { cvTailored: true } : {}),
       },
     };
   }
@@ -442,7 +450,7 @@
     const box = (col, bg, head, body) => `<div class="ap" style="border-color:${col};background:${bg}"><div class="v" style="color:${col}">${head}</div><div style="font-size:12px">${body}</div></div>`;
     let out = '';
     if (v === 'skip') out += box('#8f2f26', '#fdf1f0', 'Better not to apply', 'Something above rules you out, so the CV screen will most likely say no. Spend the time on a Tailor CV or Apply job instead.');
-    else if (v === 'tailor') out += box('#1f5f8a', '#eef6fb', 'Tailor the CV first', 'Open the dashboard → this job → <b>Copy CV prompt</b>, or move the matching tools to the top of your CV by hand. Tick “CV tailored” after you apply.');
+    else if (v === 'tailor') out += box('#1f5f8a', '#eef6fb', 'Tailor the CV first', 'Press <b>Tailor CV</b> below: your CV reordered for this ad, as a Word or PDF file. The application is marked “CV tailored” when you apply.');
     else if (v === 'ask') out += box('#7a5510', '#fff8ec', 'Check the open questions first', 'Ask the recruiter or look them up before you send the CV: a quick message often gets a faster answer than the form.');
     if (day) {
       const over = day.n >= limit;
@@ -487,10 +495,13 @@
           <div style="display:flex;gap:6px;margin-top:8px"><button class="p" id="fbSave" style="flex:none;padding:6px 12px">Save</button></div>
         </div>
       </div>
-      <div class="ft"><button class="p" id="close">Got it</button><button class="s" id="hide" style="color:#5a6b7d;border-color:#cfd8e1">Hide on this page</button></div>`;
+      <div class="ft"><button class="p" id="tailor" title="Your CV reordered for this ad, as a Word or PDF file">Tailor CV</button><button class="s" id="close">Got it</button><button class="s" id="hide" style="color:#5a6b7d;border-color:#cfd8e1">Hide</button></div>`;
     root.appendChild(box);
     box.querySelector('.x').onclick = () => box.remove();
     box.querySelector('#close').onclick = () => box.remove();
+    box.querySelector('#tailor').onclick = () => {
+      chrome.runtime.sendMessage({ type: 'openTailor', job: { title: rec.title, company: rec.company, location: rec.location, url: rec.url || location.href, platform: rec.platform, track: rec.track, description: rec.description } });
+    };
     box.querySelector('#hide').onclick = () => { previewHidden = true; box.remove(); removeBadge(); };
     // A wrong verdict is kept with the ad text, so it can become a test for the next version
     box.querySelector('#wrong').onclick = () => { const f = box.querySelector('#fb'); f.hidden = !f.hidden; };

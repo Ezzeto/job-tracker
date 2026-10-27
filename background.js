@@ -75,6 +75,13 @@ async function markStale() {
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg && msg.type === 'openDashboard') { openDashboard(msg.hash); reply({ ok: true }); }
+  // 'Tailor CV' on a job page: keep the ad for the tailor page, then open it next to the job
+  if (msg && msg.type === 'openTailor' && msg.job) {
+    chrome.storage.local.set({ tailorJob: { ...msg.job, at: new Date().toISOString() } })
+      .then(() => chrome.tabs.create({ url: chrome.runtime.getURL('tailor.html?src=page'), index: _sender.tab ? _sender.tab.index + 1 : undefined }))
+      .then(() => reply({ ok: true }));
+    return true;
+  }
   if (msg && msg.type === 'syncNow') { JT_Sync.syncNow().then(reply); return true; }
   if (msg && msg.type === 'markStale') { markStale().then(n => reply({ ok: true, n })); return true; }
   if (msg && msg.type === 'syncTest') { JT_Sync.test(msg.cfg).then(reply); return true; }
