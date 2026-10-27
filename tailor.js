@@ -31,6 +31,46 @@
   $('#work').hidden = false; $('#dlDocx').disabled = false; $('#dlPdf').disabled = false;
 
   let opts = { headline: null, addTools: null };
+  let tab = q.get('tab') === 'letter' ? 'letter' : 'cv', L = null;
+  $('#why').value = (app && app.whyThem) || job.whyThem || '';
+  function setTab(t) {
+    tab = t;
+    document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
+    $('#page').hidden = t !== 'cv'; $('#cvSide').hidden = t !== 'cv'; $('#kwSide').hidden = t !== 'cv';
+    $('#lpage').hidden = t !== 'letter'; $('#letterSide').hidden = t !== 'letter'; $('#copyTxt').hidden = t !== 'letter';
+    document.querySelector('h1').textContent = t === 'cv' ? 'Tailor CV' : 'Cover letter';
+    if (t === 'letter') buildLetter();
+  }
+  document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+
+  // The letter is built from the tailored CV, so its lines come from your own CV
+  function buildLetter() {
+    L = T.letter(cur, job, profile, { why: $('#why').value, availability: $('#avail').value });
+    renderLetter();
+  }
+  function renderLetter() {
+    const lrefs = [];
+    const led = (v, set, tag, cls, del) => { lrefs.push(set); return `<${tag} class="${cls || ''}" contenteditable="true" spellcheck="true" data-lref="${lrefs.length - 1}">${esc(v)}</${tag}>`; };
+    $('#lpage').innerHTML = `<div class="l-name">${esc(cur.name)}</div>${cur.contact.map(c => `<div class="l-contact">${esc(c)}</div>`).join('')}
+      <div class="l-date">${esc(new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))}</div>
+      ${led(L.greeting, v => { L.greeting = v; }, 'p')}
+      ${L.paragraphs.map((p, i) => `<p><span contenteditable="true" spellcheck="true" data-lref="${lrefs.push(v => { L.paragraphs[i] = v; }) - 1}">${esc(p)}</span><button class="x" title="Remove" data-ldel="${i}">×</button></p>`).join('')}
+      ${led(L.signoff, v => { L.signoff = v; }, 'p', '')}${led(L.name, v => { L.name = v; }, 'div')}`;
+    $('#lpage').querySelectorAll('[data-lref]').forEach(el => el.addEventListener('input', () => { lrefs[+el.dataset.lref](el.innerText.replace(/\s*\n\s*/g, ' ').trim()); words(); }));
+    $('#lpage').querySelectorAll('[data-ldel]').forEach(b => b.onclick = () => { L.paragraphs.splice(+b.dataset.ldel, 1); renderLetter(); });
+    words();
+  }
+  const words = () => {
+    const n = L.paragraphs.join(' ').split(/\s+/).filter(Boolean).length;
+    $('#lWords').textContent = `${n} words${n > 250 ? ': a bit long, recruiters skim. Remove a paragraph with ×.' : n < 120 ? '' : ''}`;
+  };
+  let whyTimer = null;
+  ['#why', '#avail'].forEach(id => $(id).addEventListener('input', () => { clearTimeout(whyTimer); whyTimer = setTimeout(buildLetter, 400); }));
+  $('#why').addEventListener('change', async () => { if (app) await S.updateApp(app.id, { whyThem: $('#why').value.trim() }); });
+  $('#copyTxt').onclick = async () => {
+    try { await navigator.clipboard.writeText(T.letterText(L)); $('#lmsg').className = 'msg ok'; $('#lmsg').textContent = 'Copied: paste it into the application form.'; await remember('', true); }
+    catch (e) { $('#lmsg').className = 'msg err'; $('#lmsg').textContent = 'The browser blocked the clipboard: select the text and copy it by hand.'; }
+  };
   let cur = null, report = null;
 
   function build() {
@@ -98,22 +138,32 @@
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
   // Remember that this job got a tailored CV: the application is marked when you apply (or now, if it is saved)
-  async function remember(file) {
+  async function remember(file, cover) {
     const key = job.url ? S.normUrl(job.url) : '';
     const { tailoredCvs = [] } = await S.get('tailoredCvs');
-    const list = tailoredCvs.filter(t => !(key && t.urlKey === key)).concat([{ urlKey: key, appId: app ? app.id : '', title: job.title || '', company: job.company || '', file, at: new Date().toISOString() }]).slice(-100);
+    const old = tailoredCvs.find(t => key && t.urlKey === key) || {};
+    const rec = { ...old, urlKey: key, appId: app ? app.id : '', title: job.title || '', company: job.company || '', at: new Date().toISOString() };
+    if (cover) { rec.cover = true; if (file) rec.letterFile = file; } else rec.file = file;
+    const list = tailoredCvs.filter(t => !(key && t.urlKey === key)).concat([rec]).slice(-100);
     await S.set({ tailoredCvs: list });
     const saved = app || (key ? (await S.getApps()).find(a => a.urlKey === key) : null);
-    if (saved) await S.updateApp(saved.id, { apply: { ...(saved.apply || {}), cvTailored: true, cv: file } });
-    $('#msg').className = 'msg ok';
-    $('#msg').textContent = saved ? `Saved ${file}. The application is marked "CV tailored".` : `Saved ${file}. When you press Apply on the job page, the application is marked "CV tailored".`;
+    if (saved) await S.updateApp(saved.id, { apply: { ...(saved.apply || {}), ...(cover ? { cover: 'tailored' } : { cvTailored: true, cv: file }) } });
+    if (!file) return;
+    const out = cover ? $('#lmsg') : $('#msg');
+    out.className = 'msg ok';
+    out.textContent = saved ? `Saved ${file}. The application is updated.` : `Saved ${file}. When you press Apply on the job page, the application records it.`;
   }
-  const name = () => T.fileName(cur, job);
-  $('#dlDocx').onclick = async () => { const f = name() + '.docx'; save(JT_Docx.build(cur, { title: f }), f, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'); await remember(f); };
+  const name = () => tab === 'letter' ? T.fileName(cur, job).replace(' CV - ', ' Cover Letter - ') : T.fileName(cur, job);
+  $('#dlDocx').onclick = async () => {
+    const f = name() + '.docx';
+    save(tab === 'letter' ? JT_Docx.buildLetter(L, cur) : JT_Docx.build(cur, { title: f }), f, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    await remember(f, tab === 'letter');
+  };
   $('#dlPdf').onclick = async () => {
-    try { const f = name() + '.pdf'; save(JT_CvPdf.build(cur), f, 'application/pdf'); await remember(f); }
-    catch (e) { $('#msg').className = 'msg err'; $('#msg').textContent = 'Could not make the PDF: ' + e.message + '. The Word file still works.'; }
+    try { const f = name() + '.pdf'; save(tab === 'letter' ? JT_CvPdf.buildLetter(L, cur) : JT_CvPdf.build(cur), f, 'application/pdf'); await remember(f, tab === 'letter'); }
+    catch (e) { const out = tab === 'letter' ? $('#lmsg') : $('#msg'); out.className = 'msg err'; out.textContent = 'Could not make the PDF: ' + e.message + '. The Word file still works.'; }
   };
 
   build();
+  setTab(tab);
 })();

@@ -30,4 +30,17 @@ body.tailor{display:block}
 .page li .x:hover{color:var(--bad)}
 .page li.added{background:#e3eef7}
 .page p{margin:2px 0 4px}
+/* Tabs and the letter */
+.track-seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#fff}
+.track-seg button{border:0;background:none;padding:8px 14px;cursor:pointer;font-weight:550}
+.track-seg button[aria-selected=true]{background:var(--navy);color:#fff}
+.tl-grid .page.letter{font-size:14.5px;line-height:1.55;padding:48px 56px}
+.letter .l-name{font-size:19px;font-weight:700;color:#1f4e79}
+.letter .l-contact{font-size:11.5px;color:#555}
+.letter .l-date{margin:26px 0 16px}
+.letter p{margin:0 0 12px;position:relative}
+.letter p .x{position:absolute;right:-30px;top:0;border:0;background:none;color:#a0aab4;cursor:pointer;font-size:15px;visibility:hidden}
+.letter p:hover .x{visibility:visible}
+.tailor .lbl{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);margin-top:8px}
+.tailor .lbl textarea,.tailor .lbl input{border:1px solid var(--line);border-radius:6px;padding:7px 9px;color:var(--ink);background:#fff;width:100%}
 @media (max-width:980px){.tl-grid{grid-template-columns:1fr}.tl-grid aside{position:static}}

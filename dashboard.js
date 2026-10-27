@@ -389,8 +389,8 @@
     const asks = P.wantsLetter(a.description);
     box.innerHTML = `
       <div class="row-between"><h2>CV for this job</h2><span class="hint" style="margin:0">${v === 'skip' ? 'Marked Skip: probably not worth tailoring' : asks ? 'The ad asks for a cover letter' : 'No cover letter asked for'}</span></div>
-      <p class="hint">Your CV from the CV &amp; ATS page, reordered so this ad's tools come first. You can edit it, then download Word or PDF. Nothing is invented.</p>
-      <div class="btns"><a class="btn primary" href="tailor.html?app=${encodeURIComponent(a.id)}" target="_blank">Tailor CV</a></div>
+      <p class="hint">Your CV from the CV &amp; ATS page, reordered so this ad's tools come first, and a cover letter built from the same lines. Edit them, then download Word or PDF. Nothing is invented.</p>
+      <div class="btns"><a class="btn primary" href="tailor.html?app=${encodeURIComponent(a.id)}" target="_blank">Tailor CV</a><a class="btn" href="tailor.html?app=${encodeURIComponent(a.id)}&tab=letter" target="_blank">Cover letter</a></div>
       <details class="howto" style="margin-top:12px"><summary>Or rewrite it with an AI chat (prompt to copy)</summary>
         <div class="form-grid" style="margin-top:8px">
           <label class="full">Why this employer, in your own words (needed for a letter)<textarea id="cvWhy" rows="2" placeholder="e.g. You support three NHS trusts, and I want my first IT job to be one where the fix matters to someone's day.">${esc(a.whyThem || '')}</textarea></label>
