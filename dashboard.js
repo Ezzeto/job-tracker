@@ -57,7 +57,7 @@
     const h = location.hash.slice(1) || 'overview';
     let view = h.split('=')[0];
     if (view === 'app') view = 'apps';
-    if (!['overview', 'apps', 'followups', 'plan', 'offers', 'intern', 'cv', 'settings', 'data'].includes(view)) view = 'overview';
+    if (!['overview', 'apps', 'followups', 'plan', 'templates', 'offers', 'intern', 'cv', 'settings', 'data'].includes(view)) view = 'overview';
     $$('.view').forEach(v => { v.hidden = v.id !== 'view-' + view; });
     $$('.side a').forEach(a => a.classList.toggle('active', a.dataset.view === view));
     if (h.startsWith('app=')) { const a = apps.find(x => x.id === h.slice(4)); if (a) openDrawer(a); }
@@ -81,7 +81,7 @@
     $('#navOffers').textContent = apps.filter(a => S.everReached(a, A.OFFER)).length || '';
     $('#navIntern').textContent = apps.filter(a => trackOf(a) === 'intern').length || '';
     $('#navFu').textContent = JT_Follow.queue(ovApps()).due.filter(x => !x.late).length || '';
-    ({ intern: renderIntern, cv: renderCV, overview: renderOverview, apps: renderApps, followups: renderFollowups, plan: renderPlan, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
+    ({ intern: renderIntern, cv: renderCV, overview: renderOverview, apps: renderApps, followups: renderFollowups, plan: renderPlan, templates: renderTemplates, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
   }
 
   // ---------- OVERVIEW ----------
@@ -528,6 +528,48 @@
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { note(a.id, 'That does not look like an email address.'); return; }
       await S.updateApp(a.id, { contacts: (a.contacts || []).concat([{ type: 'email', value: v.toLowerCase(), name: '', source: 'added manually' }]) });
       apps = await S.getApps(); renderFollowups();
+    });
+  }
+
+  // ---------- TEMPLATES ----------
+  // Edited templates are kept under 'templates' in storage; the job boxes are kept for the session only
+  async function getTemplates() { const { templates } = await S.get('templates'); return templates || {}; }
+  async function renderTemplates() {
+    const T = JT_Templates, saved = await getTemplates(), all = T.merge(saved);
+    const job = () => ({ title: $('#tJob').value.trim(), company: $('#tCo').value.trim(), name: $('#tName').value.trim() });
+    $('#tplList').innerHTML = T.ORDER.map(k => {
+      const t = all[k];
+      return `<div class="panel tpl" data-tpl="${k}">
+        <div class="row-between"><h2>${esc(t.title)}</h2><span class="hint" style="margin:0" data-left="${k}"></span></div>
+        ${k === 'speculative' ? `<label>Subject<input type="text" data-subj="${k}" value="${esc(t.subject)}"></label>` : ''}
+        <textarea rows="${Math.min(18, Math.max(4, t.body.split('\n').length + 1))}" data-body="${k}" spellcheck="true">${esc(t.body)}</textarea>
+        <div class="btns" style="margin-top:8px"><button class="btn primary" data-copy="${k}">Copy</button>${k === 'speculative' ? `<button class="btn" data-mailt="${k}">Open in email</button>` : ''}<button class="btn" data-reset="${k}"${saved[k] ? '' : ' hidden'}>Reset to default</button></div>
+        <p class="msg" data-tmsg="${k}" role="status"></p></div>`;
+    }).join('');
+    const say = (k, t) => { $(`[data-tmsg="${k}"]`).textContent = t; };
+    const text = k => T.fill($(`[data-body="${k}"]`).value, job(), profile);
+    const left = k => { const l = T.leftovers(text(k)); $(`[data-left="${k}"]`).textContent = l.length ? `To fill in: ${l.join(' ')}` : ''; };
+    T.ORDER.forEach(left);
+    ['#tJob', '#tCo', '#tName'].forEach(id => $(id).oninput = () => T.ORDER.forEach(left));
+    const save = async k => {
+      const cur = await getTemplates();
+      cur[k] = { body: $(`[data-body="${k}"]`).value, ...($(`[data-subj="${k}"]`) ? { subject: $(`[data-subj="${k}"]`).value } : {}) };
+      await S.set({ templates: cur });
+      $(`[data-reset="${k}"]`).hidden = false;
+    };
+    $$('#tplList [data-body], #tplList [data-subj]').forEach(el => el.oninput = () => { const k = el.dataset.body || el.dataset.subj; left(k); clearTimeout(el._t); el._t = setTimeout(() => save(k), 400); });
+    $$('#tplList [data-copy]').forEach(b => b.onclick = async () => {
+      const k = b.dataset.copy;
+      try { await navigator.clipboard.writeText(text(k)); say(k, T.leftovers(text(k)).length ? 'Copied. Replace what is still in [brackets] before you send it.' : 'Copied.'); }
+      catch (e) { say(k, 'The browser blocked the clipboard: select the text and press Ctrl+C.'); }
+    });
+    $$('#tplList [data-mailt]').forEach(b => b.onclick = async () => {
+      const k = b.dataset.mailt;
+      if (await openMail(b, $('#tTo').value.trim(), T.fill($(`[data-subj="${k}"]`).value, job(), profile), text(k))) say(k, 'Opened. Attach your CV before you send it.');
+    });
+    $$('#tplList [data-reset]').forEach(b => b.onclick = async () => {
+      if (!confirm('Put this template back to the default text?')) return;
+      const cur = await getTemplates(); delete cur[b.dataset.reset]; await S.set({ templates: cur }); renderTemplates();
     });
   }
 
@@ -1066,6 +1108,19 @@
     $('#pGmailCheck').innerHTML = !list.length ? '' : `<div class="gm-check">${list.map(x => `<span class="fu-c">${esc(x)} <a class="btn small" href="${esc(JT_Follow.links.gmailInbox(x))}" target="_blank" rel="noopener">Check in Gmail</a> <a class="btn small" href="${esc(JT_Follow.links.gmailChooser(x))}" target="_blank" rel="noopener">Sign in to this account</a></span>`).join('')}</div>
       <p class="hint" style="margin:6px 0 0">Gmail can only switch to accounts signed in to this Chrome window. If <b>Check in Gmail</b> opens a different account or asks you to sign in: in Gmail, click your photo at the top right → <b>Add another account</b>. An account that lives in a different Chrome profile (another window with a different picture) cannot be reached from here.</p>`;
   }
+  $('#importSettings').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const r = JT_Templates.readSettings(JSON.parse(await f.text()));
+      Object.assign(profile, r.profile);
+      await S.saveProfile(profile);
+      if (Object.keys(r.templates).length) await S.set({ templates: { ...(await getTemplates()), ...r.templates } });
+      renderSettings();
+      $('#importMsg').textContent = `Imported: ${Object.keys(r.profile).length} settings, ${Object.keys(r.templates).length} templates.` + (r.skipped.length ? ` Skipped: ${r.skipped.join(', ')}.` : '') + ' Check the fields below, then press Recalculate fit for all applications.';
+      // A new language reloads the page; the message is lost then, which is fine
+    } catch (err) { $('#importMsg').textContent = "This file can't be used: " + err.message + '.'; }
+    e.target.value = '';
+  };
   const saveProfileFields = async () => {
     profile.daysPerWeek = +$('#pDays').value || 5; profile.hoursPerWeek = +$('#pHours').value || 37.5;
     const yrs = parseFloat($('#pExp').value); profile.experienceYears = isNaN(yrs) ? 1 : yrs;

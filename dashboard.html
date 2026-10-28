@@ -13,6 +13,7 @@
     <a href="#apps" data-view="apps">Applications <span class="count" id="navCount"></span></a>
     <a href="#followups" data-view="followups">Follow-ups <span class="count" id="navFu"></span></a>
     <a href="#plan" data-view="plan">Weekly plan</a>
+    <a href="#templates" data-view="templates">Templates</a>
     <a href="#offers" data-view="offers">Offers <span class="count" id="navOffers"></span></a>
     <a href="#intern" data-view="intern">Internships <span class="count" id="navIntern"></span></a>
     <a href="#cv" data-view="cv">CV &amp; ATS</a>
@@ -96,6 +97,21 @@
       </div>
     </section>
 
+    <!-- TEMPLATES -->
+    <section id="view-templates" class="view" hidden>
+      <header class="top"><h1>Templates</h1></header>
+      <p class="hint" style="margin:-6px 0 16px">Your letters and answers in one place. Fill in the job below and <b>Copy</b> puts the text on the clipboard with the job, the contact and your signature filled in. Edit any template: changes are saved as you type. Messages stay in English.</p>
+      <div class="panel"><h2>For this job</h2>
+        <div class="form-grid">
+          <label>Job title<input type="text" id="tJob" placeholder="IT Support Analyst"></label>
+          <label>Company<input type="text" id="tCo" placeholder="Acme Ltd"></label>
+          <label>Contact name (optional)<input type="text" id="tName" placeholder="Sarah"></label>
+          <label>Contact email (for the email template)<input type="email" id="tTo" placeholder="jobs@acme.co.uk"></label>
+        </div>
+      </div>
+      <div id="tplList"></div>
+    </section>
+
     <!-- OFFERS -->
     <section id="view-intern" class="view" hidden>
       <header class="top"><h1>Internships</h1><button class="btn primary" data-new-intern>New internship</button></header>
@@ -175,6 +191,8 @@
       </div>
       <div class="panel">
         <h2>Follow-ups: signature and email</h2>
+        <div class="settings-import"><label class="btn file">Import a settings file (JSON)<input type="file" id="importSettings" accept=".json,application/json" hidden></label><span class="hint" style="margin:0">Fills in these settings and the templates. Applications and skills are not touched.</span></div>
+        <p class="msg" id="importMsg" role="status"></p>
         <div class="form-grid">
           <label>Name in signature<input type="text" id="pSignName"></label>
           <label>Phone<input type="text" id="pSignPhone"></label>
@@ -270,6 +288,7 @@
   <script src="lib/insights.js"></script>
   <script src="lib/followup.js"></script>
   <script src="lib/plan.js"></script>
+  <script src="lib/templates.js"></script>
   <script src="lib/prompt.js"></script>
   <script src="lib/cv.js"></script>
   <script src="lib/vendor/mammoth.browser.min.js"></script>
