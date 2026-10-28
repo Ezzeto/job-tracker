@@ -22,3 +22,8 @@ test('every Russian entry is a non-empty string and no key has stray spaces', ()
     assert.ok(typeof v === 'string' && v.length, k);
   }
 });
+
+test('follow-up counters are translated', () => {
+  assert.equal(L.tr('Employer · sent: 1, last on 28 Oct 2026'), 'Работодатель · отправлено: 1, последний 28 Oct 2026');
+  assert.equal(L.tr('Follow-ups sent: 2'), 'Отправлено фоллоуапов: 2');
+});

@@ -303,7 +303,7 @@
         <td><span class="ticket">${esc(a.ticket)}</span></td>
         <td class="nowrap">${fitPill(a.chance)}${a.dupOf ? ` <span class="tag" title="Looks like the same job as ${esc(a.dupOf)}">dup</span>` : ''}${trackOf(a) === 'intern' ? ' ' + plBadge(a.placement) : ''}</td>
         <td class="job"><b title="${esc(a.title)}">${trackOf(a) === 'intern' ? '<span class="trk">Internship</span>' : ''}${esc(a.title || 'Untitled')}</b><span title="${esc([a.company, a.location].filter(Boolean).join(' · '))}">${esc([a.company, a.location].filter(Boolean).join(' · '))}</span></td>
-        <td><select class="st-select" data-st="${a.id}" aria-label="Status" style="background-image:radial-gradient(circle,${A.statusColor(a.status)} 60%,transparent 62%)">${stOpts(a.status)}</select></td>
+        <td class="nowrap"><select class="st-select" data-st="${a.id}" aria-label="Status" style="background-image:radial-gradient(circle,${A.statusColor(a.status)} 60%,transparent 62%)">${stOpts(a.status)}</select>${(a.followUps || []).length ? ` <span class="tag fu-tag" title="Follow-ups sent: ${a.followUps.length}, last on ${fmtDate(a.followUps[a.followUps.length - 1].at)}">✉ ${a.followUps.length}</span>` : ''}</td>
         <td class="nowrap">${fmtDate(a.appliedAt)}</td>
         <td>${fmtSal(a)}</td>
         <td class="c-plat">${esc(a.platform || '—')}</td>
@@ -414,6 +414,24 @@
   }
 
   // ---------- FOLLOW-UPS VIEW ----------
+  // Records a follow-up on an application: when, how and to whom. The first one sets a reminder a week later.
+  async function markFollowUp(a, { channel = 'email', to = '', at } = {}) {
+    const list = (a.followUps || []).concat([{ at: at || new Date().toISOString(), channel, to }]);
+    const next = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+    a.followUps = list;
+    if (list.length < 2) a.nextDate = next;
+    await S.updateApp(a.id, { followUps: list, nextDate: a.nextDate || '' });
+    apps = await S.getApps();
+    return list;
+  }
+  const emailOf = a => (JT_Extract.cleanContacts(a.contacts || []).find(c => c.type === 'email') || {}).value || '';
+  function openEmail(a) {
+    const F = JT_Follow, to = emailOf(a);
+    const c = JT_Extract.cleanContacts(a.contacts || []).find(x => x.type === 'email') || null;
+    const msg = F.build(a, 'email', c, profile);
+    window.open((F.links[profile.mailClient] || F.links.gmail)(to, msg.subject, msg.body), '_blank');
+  }
+
   // Everything waiting for a reply in one list: who to write to, where to find them, one button to write
   function contactChips(a, list) {
     return JT_Extract.cleanContacts(list).map(c => {
@@ -446,8 +464,10 @@
       ${late && (i === 0 || !q.due[i - 1].late) ? '<h3 class="sub3">Over two weeks old: one short check-in at most, newer applications come first</h3>' : ''}
       <div class="fu-card">
         <div class="row-between">${head(a, n ? 'second follow-up' : 'first follow-up')}
-          <div class="btns"><button class="btn small primary" data-fu="${a.id}">Write follow-up</button><button class="btn small" data-nr="${a.id}" title="Closed or not worth chasing">No response</button></div></div>
+          <div class="btns"><button class="btn small primary" data-mail="${a.id}">${emailOf(a) ? 'Email' : 'Email (add the address)'}</button><button class="btn small" data-sent="${a.id}">Mark as sent</button><button class="btn small" data-fu="${a.id}">Edit message</button><button class="btn small" data-nr="${a.id}" title="Closed or not worth chasing">No response</button></div></div>
         <div class="fu-who">${contacts.length ? `<span class="fu-lbl">Write to:</span>${contactChips(a, contacts)}` : `<span class="fu-lbl">No contact in the ad. Find one:</span>${findLinks(a)}`}</div>
+        ${emailOf(a) ? '' : `<div class="fu-addmail"><input type="email" data-addmail="${a.id}" placeholder="Paste the recruiter's or company's email" aria-label="Email"><button class="btn small" data-savemail="${a.id}">Save email</button></div>`}
+        <p class="msg fu-note" data-note="${a.id}" role="status"></p>
       </div>`).join('') : '<p class="empty">Nothing to send today. Applications show up here 4 working days after you apply.</p>';
     $('#fuSoon').innerHTML = q.soon.length ? q.soon.slice(0, 25).map(({ a, n, inDays, contacts }) => `
       <div class="att">${head(a, `${n ? 'second' : 'first'} follow-up in ${inDays} working day${inDays === 1 ? '' : 's'}${contacts.length ? ` · ${contacts.length} contact${contacts.length === 1 ? '' : 's'}` : ''}`)}
@@ -459,6 +479,23 @@
     $$('#view-followups [data-fu]').forEach(b => b.onclick = () => openDrawer(find(b.dataset.fu), { focusFollowUp: true }));
     $$('#view-followups [data-open]').forEach(b => b.onclick = () => openDrawer(find(b.dataset.open)));
     $$('#view-followups [data-nr]').forEach(b => b.onclick = async () => { await S.updateApp(b.dataset.nr, { status: 'noresponse' }); });
+    const note = (id, t) => { const el = $(`#view-followups [data-note="${id}"]`); if (el) el.textContent = t; };
+    $$('#view-followups [data-mail]').forEach(b => b.onclick = () => {
+      const a = find(b.dataset.mail);
+      openEmail(a);
+      note(a.id, emailOf(a) ? 'Email opened in a new tab. After you press Send there, come back and press Mark as sent.' : 'Email opened without an address: add it in the To field. After sending, press Mark as sent.');
+    });
+    $$('#view-followups [data-sent]').forEach(b => b.onclick = async () => {
+      const a = find(b.dataset.sent);
+      await markFollowUp(a, { channel: 'email', to: emailOf(a) });
+      renderFollowups();
+    });
+    $$('#view-followups [data-savemail]').forEach(b => b.onclick = async () => {
+      const a = find(b.dataset.savemail), v = $(`#view-followups [data-addmail="${a.id}"]`).value.trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { note(a.id, 'That does not look like an email address.'); return; }
+      await S.updateApp(a.id, { contacts: (a.contacts || []).concat([{ type: 'email', value: v.toLowerCase(), name: '', source: 'added manually' }]) });
+      apps = await S.getApps(); renderFollowups();
+    });
   }
 
   // ---------- WEEKLY PLAN ----------
@@ -531,7 +568,8 @@
     const contacts = JT_Extract.cleanContacts(a.contacts || []);
     const fu = a.followUps || [];
     const agency = F.isAgency(a);
-    let channel = box.dataset.channel || (contacts.some(c => c.type === 'email') ? 'email' : contacts.some(c => c.type === 'linkedin') ? 'linkedin' : agency && contacts.some(c => c.type === 'phone') ? 'call' : 'email');
+    // Email by default: it needs no LinkedIn subscription and every company has an address somewhere
+    let channel = box.dataset.channel || 'email';
     const forChannel = ch => contacts.filter(c => ch === 'email' ? c.type === 'email' : ch === 'linkedin' ? c.type === 'linkedin' : ch === 'call' ? c.type === 'phone' : false);
     const options = forChannel(channel);
     const sel = options[+box.dataset.to || 0] || options[0] || contacts.find(c => c.name) || null;
@@ -551,13 +589,14 @@
       ${options.length > 1 ? `<label>To<select id="fuTo">${options.map((c, i) => `<option value="${i}" ${c === sel ? 'selected' : ''}>${esc((c.name ? c.name + ' — ' : '') + (c.type === 'linkedin' ? 'LinkedIn' : c.value))}</option>`).join('')}</select></label>` : ''}
       ${channel === 'email' ? `<label>Subject<input type="text" id="fuSubj" value="${esc(msg.subject)}"></label>` : ''}
       <label>${channel === 'call' ? 'What to say on the phone' : 'Message'}<textarea id="fuBody" rows="${channel === 'linkedin' ? 5 : 11}">${esc(msg.body)}</textarea></label>
-      ${channel === 'linkedin' ? '<p class="hint" style="margin:4px 0 0" id="fuLen"></p>' : ''}
+      ${channel === 'linkedin' ? '<p class="hint" style="margin:4px 0 0" id="fuLen"></p><p class="hint" style="margin:4px 0 0">Without LinkedIn Premium a note with an invitation is limited to a few a month, and messages only go to people you are connected with. Email is usually the easier way.</p>' : ''}
       <div class="btns" style="margin-top:10px">
         ${channel === 'email' ? `<button class="btn primary" id="fuSend">${profile.mailClient === 'outlook' ? 'Open in Outlook' : profile.mailClient === 'mailto' ? 'Open in mail app' : 'Open in Gmail'}</button>` : ''}
         ${channel === 'linkedin' ? `<button class="btn primary" id="fuLi">${sel ? 'Copy and open profile' : 'Copy and find a recruiter'}</button>` : ''}
         ${channel === 'call' && sel ? `<a class="btn primary" href="tel:${esc(sel.value.replace(/\s/g, ''))}">Call ${esc(sel.value)}</a>` : ''}
         <button class="btn" id="fuCopy">Copy text</button>
         <button class="btn" id="fuDone">Mark as sent</button>
+        <label class="fu-when">on<input type="date" id="fuWhen" value="${new Date().toISOString().slice(0, 10)}" max="${new Date().toISOString().slice(0, 10)}"></label>
       </div>
       <p class="msg" id="fuMsg" role="status"></p>
       ${fu.length ? `<ul class="timeline" style="margin-top:10px">${fu.map(f => `<li style="--c:#1f6fa8">Follow-up · ${esc({ email: 'Email', linkedin: 'LinkedIn', call: 'Call' }[f.channel] || f.channel)}${f.to ? ' · ' + esc(f.to) : ''}<span>${fmtDate(f.at)}</span></li>`).join('')}</ul>` : ''}`;
@@ -594,15 +633,25 @@
       say(sel ? 'Copied. On LinkedIn press Connect → Add a note, or Message, and paste (Ctrl+V).' : 'Copied. Find the company\'s recruiter in the results, add them to this list and send the message.');
     };
     $('#fuDone').onclick = async () => {
-      const list = (a.followUps || []).concat([{ at: new Date().toISOString(), channel, to: sel ? (sel.name || sel.value) : '' }]);
-      const next = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
-      a.followUps = list;
-      await S.updateApp(a.id, { followUps: list, nextDate: list.length < 2 ? next : (a.nextDate || '') });
-      apps = await S.getApps();
-      if ($('#dNext') && list.length < 2) $('#dNext').value = next;
-      renderFollowUp(a);
+      const day = $('#fuWhen') && $('#fuWhen').value;
+      const list = await markFollowUp(a, { channel, to: sel ? (sel.name || sel.value) : '', at: day && day !== new Date().toISOString().slice(0, 10) ? new Date(day + 'T12:00:00').toISOString() : undefined });
+      if ($('#dNext') && list.length < 2) $('#dNext').value = a.nextDate;
+      renderFollowUp(a); renderFuBar(a);
       $('#fuMsg').textContent = list.length < 2 ? 'Marked. You\'ll be reminded about a second follow-up in a week.' : 'Marked. If there is still no reply, set the status to No response.';
     };
+  }
+
+  // Top of an application: how many follow-ups went out, and one click to record or write the next
+  function renderFuBar(a) {
+    const bar = $('#fuBar');
+    if (!bar) return;
+    const fu = a.followUps || [];
+    const last = fu[fu.length - 1];
+    bar.innerHTML = `<span><b>Follow-ups sent: ${fu.length}</b>${last ? ` · <span>last on ${fmtDate(last.at)}${last.to ? ' to ' + esc(last.to) : ''}</span>` : ''}</span>
+      <span class="btns"><button class="btn small primary" id="fuBarMail">Email</button><button class="btn small" id="fuBarSent">Mark as sent today</button><button class="btn small" id="fuBarGo">Message and contacts ↓</button></span>`;
+    $('#fuBarMail').onclick = () => openEmail(a);
+    $('#fuBarSent').onclick = async () => { await markFollowUp(a, { channel: 'email', to: emailOf(a) }); if ($('#dNext') && a.followUps.length < 2) $('#dNext').value = a.nextDate; renderFuBar(a); renderFollowUp(a); };
+    $('#fuBarGo').onclick = () => $('#fuPanel').scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 
   function detailsHtml(a) {
@@ -623,6 +672,7 @@
     d.innerHTML = `
       <div class="dr-head">${a.ticket ? `<span class="ticket">${esc(a.ticket)}</span>` : ''}<h2>${isNew ? 'New application' : esc(a.title || 'Untitled')}</h2><button class="x" aria-label="Close">×</button></div>
       <div class="dr-body">
+        ${!isNew ? '<div class="fu-bar" id="fuBar"></div>' : ''}
         <div class="panel"><h2>Fit against your skills</h2><div id="anBox">${analysisHtml(a)}</div></div>
         <div class="panel" id="plPanel"${trackOf(a) === 'intern' ? '' : ' hidden'}>${placementPanelHtml(a)}</div>
         <div class="panel" id="atsPanel" hidden></div>
@@ -668,7 +718,7 @@
       $('#ckPanel').innerHTML = checklistHtml(a); bindChecklist();
     });
     if ($('#ckPanel')) bindChecklist();
-    if (!isNew) { renderFollowUp(a); renderCvPrompt(a); }
+    if (!isNew) { renderFollowUp(a); renderCvPrompt(a); renderFuBar(a); }
     if (opts.focusFollowUp && $('#fuPanel')) { $('#fuPanel').scrollIntoView({ block: 'start' }); $('#fuBody') && $('#fuBody').focus(); }
     else $('#dTitle').focus();
 
