@@ -28,7 +28,7 @@ const APPS = [{ id: 'g1', ticket: 'APP-0001', title: 'IT Support Analyst', compa
 
   await page.goto(base + '#settings'); await wait(800);
   await page.fill('#pGmail', `${A}, ${B}`); await page.press('#pGmail', 'Tab'); await wait(400);
-  check(await page.locator('#pGmailCheck a').count() === 2, 'a Check in Gmail link for each address');
+  check(await page.locator('#pGmailCheck a').count() === 4, 'Check in Gmail and Sign in links for each address');
 
   const send = async (pick, where) => {
     await page.goto(base + '#followups'); await wait(900);
@@ -36,7 +36,7 @@ const APPS = [{ id: 'g1', ticket: 'APP-0001', title: 'IT Support Analyst', compa
     const [tab] = await Promise.all([ctx.waitForEvent('page'), page.locator(`.acct-menu [data-acct="${pick}"]`).click()]);
     await wait(300);
     const u = new URL(tab.url()); await tab.close();
-    check(u.pathname === `/mail/u/${encodeURIComponent(pick)}/` && u.searchParams.get('authuser') === pick, `${where}: compose opens as ${pick}`);
+    check(u.pathname === '/mail/' && u.searchParams.get('authuser') === pick, `${where}: compose opens with authuser=${pick}`);
     check(u.searchParams.get('to') === 'jobs@acme.example', `${where}: addressed to the contact`);
   };
   await send(B, 'first send');

@@ -1063,7 +1063,7 @@
   // account or asks to sign in, that account is not signed in to this Chrome profile
   function renderGmailCheck() {
     const list = profile.gmailAccounts || [];
-    $('#pGmailCheck').innerHTML = !list.length ? '' : `<div class="gm-check">${list.map(x => `<span class="fu-c">${esc(x)} <a class="btn small" href="${esc(JT_Follow.links.gmailInbox(x))}" target="_blank" rel="noopener">Check in Gmail</a></span>`).join('')}</div>
+    $('#pGmailCheck').innerHTML = !list.length ? '' : `<div class="gm-check">${list.map(x => `<span class="fu-c">${esc(x)} <a class="btn small" href="${esc(JT_Follow.links.gmailInbox(x))}" target="_blank" rel="noopener">Check in Gmail</a> <a class="btn small" href="${esc(JT_Follow.links.gmailChooser(x))}" target="_blank" rel="noopener">Sign in to this account</a></span>`).join('')}</div>
       <p class="hint" style="margin:6px 0 0">Gmail can only switch to accounts signed in to this Chrome window. If <b>Check in Gmail</b> opens a different account or asks you to sign in: in Gmail, click your photo at the top right → <b>Add another account</b>. An account that lives in a different Chrome profile (another window with a different picture) cannot be reached from here.</p>`;
   }
   const saveProfileFields = async () => {
