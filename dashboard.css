@@ -306,3 +306,5 @@ a.fu-c.fu-link:hover{border-color:var(--blue)}
 .acct-menu p{margin:2px 8px 6px;font-size:12px;color:var(--muted)}
 .acct-menu button{border:0;background:none;text-align:left;padding:7px 10px;border-radius:6px;font:inherit;font-size:13.5px;color:var(--ink);cursor:pointer}
 .acct-menu button:hover,.acct-menu button:focus{background:var(--blue-soft);outline:none}
+.gm-check{display:flex;flex-wrap:wrap;gap:6px}
+.gm-check .fu-c{padding:3px 4px 3px 10px}

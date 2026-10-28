@@ -1016,6 +1016,7 @@
     $('#pSignName').value = profile.signName || ''; $('#pSignPhone').value = profile.signPhone || '';
     $('#pSignLi').value = profile.signLinkedIn || ''; $('#pMail').value = profile.mailClient || 'gmail';
     $('#pGmail').value = (profile.gmailAccounts || []).join(', ');
+    renderGmailCheck();
     $('#pPitch').value = profile.pitch || ''; $('#pHighlights').value = profile.highlights || '';
     $('#pAreas').value = (profile.areas || []).join(', ');
     $('#pHome').value = profile.home || ''; $('#pHome').placeholder = (A.homeOf(profile) || {}).name || "Bishop's Stortford";
@@ -1058,6 +1059,13 @@
       await S.saveProfile(profile);
     });
   }
+  // Each address with a button that opens its inbox the way a follow-up would: if Gmail shows another
+  // account or asks to sign in, that account is not signed in to this Chrome profile
+  function renderGmailCheck() {
+    const list = profile.gmailAccounts || [];
+    $('#pGmailCheck').innerHTML = !list.length ? '' : `<div class="gm-check">${list.map(x => `<span class="fu-c">${esc(x)} <a class="btn small" href="${esc(JT_Follow.links.gmailInbox(x))}" target="_blank" rel="noopener">Check in Gmail</a></span>`).join('')}</div>
+      <p class="hint" style="margin:6px 0 0">Gmail can only switch to accounts signed in to this Chrome window. If <b>Check in Gmail</b> opens a different account or asks you to sign in: in Gmail, click your photo at the top right → <b>Add another account</b>. An account that lives in a different Chrome profile (another window with a different picture) cannot be reached from here.</p>`;
+  }
   const saveProfileFields = async () => {
     profile.daysPerWeek = +$('#pDays').value || 5; profile.hoursPerWeek = +$('#pHours').value || 37.5;
     const yrs = parseFloat($('#pExp').value); profile.experienceYears = isNaN(yrs) ? 1 : yrs;
@@ -1077,7 +1085,8 @@
     profile.listScan = $('#pList').checked;
     profile.signName = $('#pSignName').value.trim(); profile.signPhone = $('#pSignPhone').value.trim();
     profile.signLinkedIn = $('#pSignLi').value.trim(); profile.mailClient = $('#pMail').value;
-    profile.gmailAccounts = $('#pGmail').value.split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+    profile.gmailAccounts = [...new Set($('#pGmail').value.split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)))];
+    renderGmailCheck();
     profile.pitch = $('#pPitch').value.trim(); profile.highlights = $('#pHighlights').value.trim();
     profile.areas = $('#pAreas').value.split(',').map(x => x.trim()).filter(Boolean);
     profile.home = $('#pHome').value.trim(); profile.maxCommuteKm = +$('#pCommute').value || 50;
