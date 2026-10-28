@@ -79,6 +79,12 @@ test('the education hook needs a school or students, not a word like "education"
 });
 
 test('a Gmail link can name the account to send from', () => {
-  assert.match(F.links.gmail('a@b.co', 'Hi', 'Body', 'me.work@gmail.com'), /^https:\/\/mail\.google\.com\/mail\/u\/me\.work%40gmail\.com\/\?view=cm&fs=1&to=a%40b\.co/);
+  const u = new URL(F.links.gmail('a@b.co', 'Hi', 'Body', 'me.work@gmail.com'));
+  assert.equal(u.pathname, '/mail/u/me.work%40gmail.com/');
+  assert.equal(u.searchParams.get('authuser'), 'me.work@gmail.com');
+  assert.equal(u.searchParams.get('view'), 'cm');
+  assert.equal(u.searchParams.get('to'), 'a@b.co');
+  assert.equal(u.searchParams.get('su'), 'Hi');
+  assert.equal(new URL(F.links.gmailInbox('x@gmail.com')).searchParams.get('authuser'), 'x@gmail.com');
   assert.match(F.links.gmail('a@b.co', 'Hi', 'Body'), /^https:\/\/mail\.google\.com\/mail\/\?view=cm/);
 });
