@@ -301,3 +301,8 @@ a.fu-c.fu-link:hover{border-color:var(--blue)}
 .fu-when{flex-direction:row;align-items:center;gap:6px}
 .fu-bar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;background:var(--blue-soft);border:1px solid #c8dbea;border-radius:var(--r);padding:10px 12px;margin-bottom:12px;font-size:13.5px}
 .fu-tag{background:var(--blue-soft);color:var(--navy)}
+
+.acct-menu{position:absolute;z-index:1000;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(23,50,74,.18);padding:6px;min-width:220px;display:flex;flex-direction:column}
+.acct-menu p{margin:2px 8px 6px;font-size:12px;color:var(--muted)}
+.acct-menu button{border:0;background:none;text-align:left;padding:7px 10px;border-radius:6px;font:inherit;font-size:13.5px;color:var(--ink);cursor:pointer}
+.acct-menu button:hover,.acct-menu button:focus{background:var(--blue-soft);outline:none}

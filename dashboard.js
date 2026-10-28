@@ -425,11 +425,44 @@
     return list;
   }
   const emailOf = a => (JT_Extract.cleanContacts(a.contacts || []).find(c => c.type === 'email') || {}).value || '';
-  function openEmail(a) {
+  // Opens the email in the chosen client. With several Gmail accounts a small menu next to the button
+  // asks which one to send from; the last one used is listed first.
+  function sendFrom(anchor) {
+    const list = (profile.gmailAccounts || []).filter(Boolean);
+    if ((profile.mailClient || 'gmail') !== 'gmail' || list.length < 2) return Promise.resolve(list[0] || '');
+    const last = profile.lastGmail && list.includes(profile.lastGmail) ? profile.lastGmail : list[0];
+    const ordered = [last].concat(list.filter(x => x !== last));
+    return new Promise(resolve => {
+      $$('.acct-menu').forEach(m => m.remove());
+      const menu = document.createElement('div');
+      menu.className = 'acct-menu';
+      menu.setAttribute('role', 'menu');
+      menu.innerHTML = `<p>Send from</p>${ordered.map(x => `<button type="button" role="menuitem" data-acct="${esc(x)}">${esc(x)}</button>`).join('')}`;
+      document.body.appendChild(menu);
+      const r = anchor.getBoundingClientRect();
+      menu.style.top = (window.scrollY + r.bottom + 4) + 'px';
+      menu.style.left = Math.max(8, Math.min(window.scrollX + r.left, window.scrollX + document.documentElement.clientWidth - menu.offsetWidth - 8)) + 'px';
+      const done = v => { menu.remove(); document.removeEventListener('mousedown', outside, true); document.removeEventListener('keydown', esc_); resolve(v); };
+      const outside = e => { if (!menu.contains(e.target)) done(null); };
+      const esc_ = e => { if (e.key === 'Escape') done(null); };
+      menu.querySelectorAll('[data-acct]').forEach(b => b.onclick = async () => { profile.lastGmail = b.dataset.acct; await S.saveProfile(profile); done(b.dataset.acct); });
+      setTimeout(() => { document.addEventListener('mousedown', outside, true); document.addEventListener('keydown', esc_); }, 0);
+      menu.querySelector('button').focus();
+    });
+  }
+  async function openMail(anchor, to, subject, body) {
+    const F = JT_Follow;
+    // null: the menu was closed without choosing. The browser still allows the new tab, the choice comes within a second of the click.
+    const account = await sendFrom(anchor);
+    if (account === null) return false;
+    window.open((F.links[profile.mailClient] || F.links.gmail)(to, subject, body, account), '_blank');
+    return true;
+  }
+  function openEmail(a, anchor) {
     const F = JT_Follow, to = emailOf(a);
     const c = JT_Extract.cleanContacts(a.contacts || []).find(x => x.type === 'email') || null;
     const msg = F.build(a, 'email', c, profile);
-    window.open((F.links[profile.mailClient] || F.links.gmail)(to, msg.subject, msg.body), '_blank');
+    return openMail(anchor, to, msg.subject, msg.body);
   }
 
   // Everything waiting for a reply in one list: who to write to, where to find them, one button to write
@@ -480,9 +513,9 @@
     $$('#view-followups [data-open]').forEach(b => b.onclick = () => openDrawer(find(b.dataset.open)));
     $$('#view-followups [data-nr]').forEach(b => b.onclick = async () => { await S.updateApp(b.dataset.nr, { status: 'noresponse' }); });
     const note = (id, t) => { const el = $(`#view-followups [data-note="${id}"]`); if (el) el.textContent = t; };
-    $$('#view-followups [data-mail]').forEach(b => b.onclick = () => {
+    $$('#view-followups [data-mail]').forEach(b => b.onclick = async () => {
       const a = find(b.dataset.mail);
-      openEmail(a);
+      if (!await openEmail(a, b)) return;
       note(a.id, emailOf(a) ? 'Email opened in a new tab. After you press Send there, come back and press Mark as sent.' : 'Email opened without an address: add it in the To field. After sending, press Mark as sent.');
     });
     $$('#view-followups [data-sent]').forEach(b => b.onclick = async () => {
@@ -621,10 +654,9 @@
     };
     $('#fuBody').oninput = upd; upd();
     $('#fuCopy').onclick = async () => { await copy(); say('Copied.'); };
-    if ($('#fuSend')) $('#fuSend').onclick = () => {
+    if ($('#fuSend')) $('#fuSend').onclick = async () => {
       const to = sel && sel.type === 'email' ? sel.value : '';
-      const url = (F.links[profile.mailClient] || F.links.gmail)(to, subj(), body());
-      window.open(url, '_blank');
+      if (!await openMail($('#fuSend'), to, subj(), body())) return;
       say(to ? 'Email opened. Check it, press Send, then mark it as sent here.' : 'No address yet: add the recipient in the email. After sending, mark it as sent here.');
     };
     if ($('#fuLi')) $('#fuLi').onclick = async () => {
@@ -649,7 +681,7 @@
     const last = fu[fu.length - 1];
     bar.innerHTML = `<span><b>Follow-ups sent: ${fu.length}</b>${last ? ` · <span>last on ${fmtDate(last.at)}${last.to ? ' to ' + esc(last.to) : ''}</span>` : ''}</span>
       <span class="btns"><button class="btn small primary" id="fuBarMail">Email</button><button class="btn small" id="fuBarSent">Mark as sent today</button><button class="btn small" id="fuBarGo">Message and contacts ↓</button></span>`;
-    $('#fuBarMail').onclick = () => openEmail(a);
+    $('#fuBarMail').onclick = () => openEmail(a, $('#fuBarMail'));
     $('#fuBarSent').onclick = async () => { await markFollowUp(a, { channel: 'email', to: emailOf(a) }); if ($('#dNext') && a.followUps.length < 2) $('#dNext').value = a.nextDate; renderFuBar(a); renderFollowUp(a); };
     $('#fuBarGo').onclick = () => $('#fuPanel').scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
@@ -983,6 +1015,7 @@
     $('#pList').checked = profile.listScan !== false;
     $('#pSignName').value = profile.signName || ''; $('#pSignPhone').value = profile.signPhone || '';
     $('#pSignLi').value = profile.signLinkedIn || ''; $('#pMail').value = profile.mailClient || 'gmail';
+    $('#pGmail').value = (profile.gmailAccounts || []).join(', ');
     $('#pPitch').value = profile.pitch || ''; $('#pHighlights').value = profile.highlights || '';
     $('#pAreas').value = (profile.areas || []).join(', ');
     $('#pHome').value = profile.home || ''; $('#pHome').placeholder = (A.homeOf(profile) || {}).name || "Bishop's Stortford";
@@ -1044,6 +1077,7 @@
     profile.listScan = $('#pList').checked;
     profile.signName = $('#pSignName').value.trim(); profile.signPhone = $('#pSignPhone').value.trim();
     profile.signLinkedIn = $('#pSignLi').value.trim(); profile.mailClient = $('#pMail').value;
+    profile.gmailAccounts = $('#pGmail').value.split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
     profile.pitch = $('#pPitch').value.trim(); profile.highlights = $('#pHighlights').value.trim();
     profile.areas = $('#pAreas').value.split(',').map(x => x.trim()).filter(Boolean);
     profile.home = $('#pHome').value.trim(); profile.maxCommuteKm = +$('#pCommute').value || 50;
@@ -1052,7 +1086,7 @@
     // and doing it earlier put the old values back into the boxes still to be read
     if (internChanged) { applyInternVisibility(); renderAll(); }
   };
-  ['#pExp', '#pComm', '#pDaily', '#pIntern', '#pFacts', '#pDays', '#pHours', '#pLicence', '#pRtw', '#pLangs', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pHome', '#pCommute', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
+  ['#pExp', '#pComm', '#pDaily', '#pIntern', '#pFacts', '#pDays', '#pHours', '#pLicence', '#pRtw', '#pLangs', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pHome', '#pCommute', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pGmail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
   $('#resetSkills').onclick = async () => {
     if (!confirm(`Clear all ${skTrack === 'intern' ? 'internship' : 'job'} skill levels?`)) return;
     if (skTrack === 'intern') profile.intern.skills = {}; else profile.skills = { ...A.DEFAULT_SKILLS };
