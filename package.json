@@ -1,6 +1,6 @@
 {
   "name": "job-tracker-extension",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "private": true,
   "description": "Chrome extension that records job applications, scores fit against your skills and syncs with Google Sheets.",
   "license": "MIT",
