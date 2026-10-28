@@ -907,7 +907,8 @@
     const yrs = parseFloat($('#pExp').value); profile.experienceYears = isNaN(yrs) ? 1 : yrs;
     const com = parseFloat($('#pComm').value); profile.commercialYears = isNaN(com) ? null : com;
     profile.dailyLimit = Math.max(1, Math.min(50, parseInt($('#pDaily').value, 10) || 5));
-    profile.showInternships = $('#pIntern').checked; applyInternVisibility(); renderAll();
+    const internChanged = profile.showInternships !== $('#pIntern').checked;
+    profile.showInternships = $('#pIntern').checked;
     profile.factBank = $('#pFacts').value.trim();
     profile.hasDrivingLicence = $('#pLicence').checked;
     profile.timeLimitedRtw = $('#pRtw').checked;
@@ -924,6 +925,9 @@
     profile.areas = $('#pAreas').value.split(',').map(x => x.trim()).filter(Boolean);
     profile.home = $('#pHome').value.trim(); profile.maxCommuteKm = +$('#pCommute').value || 50;
     await S.saveProfile(profile);
+    // Re-render only after every field is read: renderAll redraws this form from the profile,
+    // and doing it earlier put the old values back into the boxes still to be read
+    if (internChanged) { applyInternVisibility(); renderAll(); }
   };
   ['#pExp', '#pComm', '#pDaily', '#pIntern', '#pFacts', '#pDays', '#pHours', '#pLicence', '#pRtw', '#pLangs', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pHome', '#pCommute', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
   $('#resetSkills').onclick = async () => {
