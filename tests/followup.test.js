@@ -79,11 +79,9 @@ test('the education hook needs a school or students, not a word like "education"
 });
 
 test('a Gmail link can name the account to send from', () => {
-  const link = F.links.gmail('a@b.co', 'Hi', 'Body', 'me.work@gmail.com');
-  // An encoded @ (%40) in the path makes Gmail answer 404
-  assert.match(link, /^https:\/\/mail\.google\.com\/mail\/u\/me\.work@gmail\.com\/\?authuser=/);
-  const u = new URL(link);
-  assert.equal(u.pathname, '/mail/u/me.work@gmail.com/');
+  const u = new URL(F.links.gmail('a@b.co', 'Hi', 'Body', 'me.work@gmail.com'));
+  // No address in the path: /mail/u/<address>/ made Gmail answer 'Temporary Error (404)'
+  assert.equal(u.pathname, '/mail/');
   assert.equal(u.searchParams.get('authuser'), 'me.work@gmail.com');
   assert.equal(u.searchParams.get('view'), 'cm');
   assert.equal(u.searchParams.get('to'), 'a@b.co');
