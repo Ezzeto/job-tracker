@@ -57,7 +57,7 @@
     const h = location.hash.slice(1) || 'overview';
     let view = h.split('=')[0];
     if (view === 'app') view = 'apps';
-    if (!['overview', 'apps', 'followups', 'offers', 'intern', 'cv', 'settings', 'data'].includes(view)) view = 'overview';
+    if (!['overview', 'apps', 'followups', 'plan', 'offers', 'intern', 'cv', 'settings', 'data'].includes(view)) view = 'overview';
     $$('.view').forEach(v => { v.hidden = v.id !== 'view-' + view; });
     $$('.side a').forEach(a => a.classList.toggle('active', a.dataset.view === view));
     if (h.startsWith('app=')) { const a = apps.find(x => x.id === h.slice(4)); if (a) openDrawer(a); }
@@ -78,7 +78,7 @@
     $('#navOffers').textContent = apps.filter(a => S.everReached(a, A.OFFER)).length || '';
     $('#navIntern').textContent = apps.filter(a => trackOf(a) === 'intern').length || '';
     $('#navFu').textContent = JT_Follow.queue(ovApps()).due.filter(x => !x.late).length || '';
-    ({ intern: renderIntern, cv: renderCV, overview: renderOverview, apps: renderApps, followups: renderFollowups, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
+    ({ intern: renderIntern, cv: renderCV, overview: renderOverview, apps: renderApps, followups: renderFollowups, plan: renderPlan, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
   }
 
   // ---------- OVERVIEW ----------
@@ -456,6 +456,67 @@
     $$('#view-followups [data-fu]').forEach(b => b.onclick = () => openDrawer(find(b.dataset.fu), { focusFollowUp: true }));
     $$('#view-followups [data-open]').forEach(b => b.onclick = () => openDrawer(find(b.dataset.open)));
     $$('#view-followups [data-nr]').forEach(b => b.onclick = async () => { await S.updateApp(b.dataset.nr, { status: 'noresponse' }); });
+  }
+
+  // ---------- WEEKLY PLAN ----------
+  // Ticks and the pasted AI plan are kept per week under 'plans' in storage: { '2026-10-26': { done, ai, aiDone } }
+  const lang = () => profile.lang === 'ru' ? 'ru' : 'en';
+  async function getWeekPlan(key) { const { plans } = await S.get('plans'); return { plans: plans || {}, w: { done: {}, ai: '', aiDone: {}, ...((plans || {})[key] || {}) } }; }
+  async function saveWeekPlan(key, w) {
+    const { plans } = await S.get('plans');
+    const all = { ...(plans || {}), [key]: w };
+    // Keep the last 12 weeks
+    Object.keys(all).sort().slice(0, -12).forEach(k => delete all[k]);
+    await S.set({ plans: all });
+  }
+  function weekStats(r) {
+    const row = (l, v, note) => `<div class="pl-stat"><span>${esc(l)}</span><b>${v}</b>${note ? `<i>${esc(note)}</i>` : ''}</div>`;
+    return row('Applications', `${r.applied} / ${r.target}`) +
+      row('CV tailored', r.tailored, r.applied ? pct(r.tailored, r.applied) : '') +
+      row('Cover letters', r.letters) +
+      row('Follow-ups sent', r.followUps) +
+      row('Replies', r.replies) +
+      row('Interviews', r.interviews) +
+      row('Rejections', r.rejections, r.fastRejections ? `${r.fastRejections} within 3 days` : '') +
+      (r.skip ? row('Applied to Skip jobs', r.skip) : '') +
+      (r.missing.length ? `<p class="hint" style="margin:8px 0 0">Asked for, you marked None: <b>${r.missing.map(([k, v]) => `${esc(k)} (${v})`).join(', ')}</b></p>` : '');
+  }
+  async function renderPlan() {
+    const P = JT_Plan, key = P.weekKey();
+    const start = P.weekStart(), end = new Date(start.getTime() + 6 * 864e5);
+    const day = d => d.toLocaleDateString(lang() === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'short' });
+    $('#planWeek').textContent = `${day(start)} – ${day(end)}`;
+    const live = ovApps();
+    const { last, items } = P.autoPlan(live, profile, null, lang());
+    $('#planLast').innerHTML = weekStats(last);
+    $('#planNow').innerHTML = weekStats(P.report(live, profile, null, 0));
+    const { w } = await getWeekPlan(key);
+    const box = (id, text, why, done, attr) => `<label class="pl-task${done ? ' done' : ''}"><input type="checkbox" ${attr}="${esc(id)}" ${done ? 'checked' : ''}><span>${esc(text)}${why ? `<i>${esc(why)}</i>` : ''}</span></label>`;
+    $('#planAuto').innerHTML = items.map(i => box(i.id, i.text, i.why, w.done[i.id], 'data-auto')).join('');
+    $('#planAutoN').textContent = `${items.filter(i => w.done[i.id]).length} / ${items.length}`;
+    const ai = P.parsePlan(w.ai);
+    const tasks = ai.filter(x => x.text);
+    $('#planAi').innerHTML = ai.map((x, i) => x.heading ? `<h3 class="sub3">${esc(x.heading)}</h3>` : box(String(i), x.text, '', w.aiDone[i], 'data-ai')).join('');
+    $('#planAiN').textContent = tasks.length ? `${tasks.filter(x => w.aiDone[ai.indexOf(x)]).length} / ${tasks.length}` : '';
+    $('#planAiText').hidden = !!tasks.length;
+    $('#planAiUse').textContent = tasks.length ? 'Paste a new plan' : 'Use this plan';
+    $$('#planAuto [data-auto]').forEach(cb => cb.onchange = async () => { w.done[cb.dataset.auto] = cb.checked; await saveWeekPlan(key, w); renderPlan(); });
+    $$('#planAi [data-ai]').forEach(cb => cb.onchange = async () => { w.aiDone[cb.dataset.ai] = cb.checked; await saveWeekPlan(key, w); renderPlan(); });
+    $('#planPrompt').onclick = async () => {
+      const text = P.aiPrompt(live, profile, null, lang());
+      try { await navigator.clipboard.writeText(text); $('#planMsg').textContent = 'Copied. Paste it into Claude or ChatGPT, then paste the answer below.'; }
+      catch (e) { $('#planAiText').hidden = false; $('#planAiText').value = text; $('#planAiText').select(); $('#planMsg').textContent = 'The browser blocked the clipboard: the prompt is in the box, copy it with Ctrl+C.'; }
+    };
+    $('#planAiUse').onclick = async () => {
+      if (tasks.length) { $('#planAiText').hidden = false; $('#planAiText').value = w.ai; $('#planAiText').focus(); $('#planAiUse').textContent = 'Use this plan'; $('#planAiUse').onclick = useAi; return; }
+      useAi();
+    };
+    async function useAi() {
+      const text = $('#planAiText').value.trim();
+      if (!P.parsePlan(text).some(x => x.text)) { $('#planMsg').textContent = 'No tasks found: paste a list with one task per line.'; return; }
+      w.ai = text; w.aiDone = {}; await saveWeekPlan(key, w); $('#planMsg').textContent = ''; renderPlan();
+    }
+    $('#planAiClear').onclick = async () => { w.ai = ''; w.aiDone = {}; $('#planAiText').value = ''; await saveWeekPlan(key, w); renderPlan(); };
   }
 
   // ---------- FOLLOW-UP ----------
@@ -873,6 +934,15 @@
     $('#pAreas').value = (profile.areas || []).join(', ');
     $('#pHome').value = profile.home || ''; $('#pHome').placeholder = (A.homeOf(profile) || {}).name || "Bishop's Stortford";
     $('#pCommute').value = profile.maxCommuteKm || 50;
+    const wd = profile.workDays || [];
+    $('#pWorkDays').innerHTML = JT_Plan.DAYS.en.map((d, i) => `<button type="button" class="chip" data-wd="${i}" aria-pressed="${wd.includes(i)}">${d.slice(0, 3)}</button>`).join('');
+    $$('#pWorkDays .chip').forEach(ch => ch.onclick = async () => {
+      ch.setAttribute('aria-pressed', ch.getAttribute('aria-pressed') !== 'true');
+      profile.workDays = $$('#pWorkDays .chip[aria-pressed=true]').map(x => +x.dataset.wd);
+      // The day count follows the ticked days, so the score and the plan agree
+      if (profile.workDays.length) { profile.daysPerWeek = profile.workDays.length; $('#pDays').value = profile.daysPerWeek; }
+      await S.saveProfile(profile);
+    });
     const targets = profile.targetCategories || [];
     $('#pTargets').innerHTML = A.CATEGORY_NAMES.filter(c => c !== 'Other').map(c => `<button type="button" class="chip" data-target="${esc(c)}" aria-pressed="${targets.includes(c)}">${esc(c)}</button>`).join('');
     $$('#pTargets .chip').forEach(ch => ch.onclick = async () => {

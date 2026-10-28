@@ -12,6 +12,7 @@
     <a href="#overview" data-view="overview">Overview</a>
     <a href="#apps" data-view="apps">Applications <span class="count" id="navCount"></span></a>
     <a href="#followups" data-view="followups">Follow-ups <span class="count" id="navFu"></span></a>
+    <a href="#plan" data-view="plan">Weekly plan</a>
     <a href="#offers" data-view="offers">Offers <span class="count" id="navOffers"></span></a>
     <a href="#intern" data-view="intern">Internships <span class="count" id="navIntern"></span></a>
     <a href="#cv" data-view="cv">CV &amp; ATS</a>
@@ -74,6 +75,26 @@
       </div>
     </section>
 
+    <!-- WEEKLY PLAN -->
+    <section id="view-plan" class="view" hidden>
+      <header class="top"><h1>Weekly plan</h1><span class="hint" style="margin:0" id="planWeek"></span></header>
+      <div class="grid2">
+        <div class="panel"><h2>Last week</h2><div id="planLast"></div></div>
+        <div class="panel"><h2>This week so far</h2><div id="planNow"></div></div>
+      </div>
+      <div class="panel"><div class="row-between"><h2>Plan for this week</h2><span class="hint" style="margin:0" id="planAutoN"></span></div>
+        <p class="hint">Worked out from last week's numbers and what is waiting now. Tick tasks off as you go; the list starts again every Monday.</p>
+        <div id="planAuto"></div></div>
+      <div class="panel"><div class="row-between"><h2>Plan from an AI chat</h2><span class="hint" style="margin:0" id="planAiN"></span></div>
+        <p class="hint">1. Copy the prompt: it holds last week's numbers. 2. Paste it into Claude or ChatGPT. 3. Paste the answer here and press <b>Use this plan</b>.</p>
+        <div class="btns" style="margin-bottom:10px"><button class="btn" id="planPrompt">Copy prompt for an AI chat</button></div>
+        <div id="planAi"></div>
+        <textarea id="planAiText" rows="8" style="width:100%" placeholder="Monday:&#10;- Send 5 applications to 1st line roles posted in the last 24 hours&#10;- Follow up with 2 recruiters"></textarea>
+        <div class="btns" style="margin-top:8px"><button class="btn primary" id="planAiUse">Use this plan</button><button class="btn" id="planAiClear">Clear</button></div>
+        <p class="msg" id="planMsg" role="status"></p>
+      </div>
+    </section>
+
     <!-- OFFERS -->
     <section id="view-intern" class="view" hidden>
       <header class="top"><h1>Internships</h1><button class="btn primary" data-new-intern>New internship</button></header>
@@ -131,6 +152,7 @@
         <div class="form-grid">
           <label>Days per week<input type="number" id="pDays" min="1" max="7"></label>
           <label>Hours per week<input type="number" id="pHours" min="1" max="60"></label>
+          <div class="full"><label>Days you can work (used in the weekly plan)</label><div class="chips" id="pWorkDays"></div></div>
           <label>Years of IT experience you can show, freelance included<input type="number" id="pExp" min="0" max="40" step="0.5"></label>
           <label>Years in a paid IT job with an employer (leave empty to use the figure on the left)<input type="number" id="pComm" min="0" max="40" step="0.5" placeholder="e.g. 0"></label>
           <label>Careful applications a day (the side panel counts them)<input type="number" id="pDaily" min="1" max="50"></label>
@@ -243,6 +265,7 @@
   <script src="lib/extract.js"></script>
   <script src="lib/insights.js"></script>
   <script src="lib/followup.js"></script>
+  <script src="lib/plan.js"></script>
   <script src="lib/prompt.js"></script>
   <script src="lib/cv.js"></script>
   <script src="lib/vendor/mammoth.browser.min.js"></script>

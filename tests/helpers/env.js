@@ -38,6 +38,7 @@ lib('recheck.js');
 lib('prompt.js');
 lib('tailor.js');
 lib('docx.js');
+lib('plan.js');
 
 module.exports = {
   A: globalThis.JT_Analyzer,
@@ -50,6 +51,7 @@ module.exports = {
   T: globalThis.JT_Tailor,
   D: globalThis.JT_Docx,
   F: globalThis.JT_Follow,
+  Plan: globalThis.JT_Plan,
   Sync: globalThis.JT_Sync,
   CV: globalThis.JT_CV,
   R: globalThis.JT_Recheck,
