@@ -12,11 +12,13 @@
     <a href="#overview" data-view="overview">Overview</a>
     <a href="#apps" data-view="apps">Applications <span class="count" id="navCount"></span></a>
     <a href="#followups" data-view="followups">Follow-ups <span class="count" id="navFu"></span></a>
+    <a href="#plan" data-view="plan">Weekly plan</a>
     <a href="#offers" data-view="offers">Offers <span class="count" id="navOffers"></span></a>
     <a href="#intern" data-view="intern">Internships <span class="count" id="navIntern"></span></a>
     <a href="#cv" data-view="cv">CV &amp; ATS</a>
     <a href="#settings" data-view="settings">Skills &amp; settings</a>
     <a href="#data" data-view="data">Data</a>
+    <label class="side-lang"><span>Language</span><select id="langSel"><option value="en">English</option><option value="ru">Русский</option></select></label>
     <div class="side-foot">All data stays in this browser unless you connect a Google Sheet.</div>
   </nav>
 
@@ -71,6 +73,26 @@
       <div class="grid2">
         <div class="panel"><h2>Coming up</h2><div id="fuSoon"></div></div>
         <div class="panel"><h2>Both follow-ups sent</h2><p class="hint">No reply a week after the second message: mark it as no response and move on.</p><div id="fuDone"></div></div>
+      </div>
+    </section>
+
+    <!-- WEEKLY PLAN -->
+    <section id="view-plan" class="view" hidden>
+      <header class="top"><h1>Weekly plan</h1><span class="hint" style="margin:0" id="planWeek"></span></header>
+      <div class="grid2">
+        <div class="panel"><h2>Last week</h2><div id="planLast"></div></div>
+        <div class="panel"><h2>This week so far</h2><div id="planNow"></div></div>
+      </div>
+      <div class="panel"><div class="row-between"><h2>Plan for this week</h2><span class="hint" style="margin:0" id="planAutoN"></span></div>
+        <p class="hint">Worked out from last week's numbers and what is waiting now. Tick tasks off as you go; the list starts again every Monday.</p>
+        <div id="planAuto"></div></div>
+      <div class="panel"><div class="row-between"><h2>Plan from an AI chat</h2><span class="hint" style="margin:0" id="planAiN"></span></div>
+        <p class="hint">1. Copy the prompt: it holds last week's numbers. 2. Paste it into Claude or ChatGPT. 3. Paste the answer here and press <b>Use this plan</b>.</p>
+        <div class="btns" style="margin-bottom:10px"><button class="btn" id="planPrompt">Copy prompt for an AI chat</button></div>
+        <div id="planAi"></div>
+        <textarea id="planAiText" rows="8" style="width:100%" placeholder="Monday:&#10;- Send 5 applications to 1st line roles posted in the last 24 hours&#10;- Follow up with 2 recruiters"></textarea>
+        <div class="btns" style="margin-top:8px"><button class="btn primary" id="planAiUse">Use this plan</button><button class="btn" id="planAiClear">Clear</button></div>
+        <p class="msg" id="planMsg" role="status"></p>
       </div>
     </section>
 
@@ -131,6 +153,7 @@
         <div class="form-grid">
           <label>Days per week<input type="number" id="pDays" min="1" max="7"></label>
           <label>Hours per week<input type="number" id="pHours" min="1" max="60"></label>
+          <div class="full"><label>Days you can work (used in the weekly plan)</label><div class="chips" id="pWorkDays"></div></div>
           <label>Years of IT experience you can show, freelance included<input type="number" id="pExp" min="0" max="40" step="0.5"></label>
           <label>Years in a paid IT job with an employer (leave empty to use the figure on the left)<input type="number" id="pComm" min="0" max="40" step="0.5" placeholder="e.g. 0"></label>
           <label>Careful applications a day (the side panel counts them)<input type="number" id="pDaily" min="1" max="50"></label>
@@ -146,7 +169,7 @@
           <div class="full"><label>Roles you are aiming for (other role types score lower; none ticked means all count)</label><div class="chips" id="pTargets"></div></div>
           <label class="full">Languages besides English, comma-separated (a bonus when an ad asks for one)<input type="text" id="pLangs" placeholder="Ukrainian, Polish"></label>
           <label class="full">Where you can work: towns and areas, comma-separated (jobs elsewhere score lower; leave empty to skip)<textarea id="pAreas" rows="2" placeholder="London, Hertfordshire, Cambridge"></textarea></label>
-          <label>Home town (for the journey check)<input id="pHome" placeholder="Bishop's Stortford"></label>
+          <label>Home town (for the journey check)<input type="text" id="pHome" placeholder="Bishop's Stortford"></label>
           <label>Longest journey, km in a straight line<input type="number" id="pCommute" min="5" max="300" placeholder="50"></label>
         </div>
       </div>
@@ -157,6 +180,7 @@
           <label>Phone<input type="text" id="pSignPhone"></label>
           <label>LinkedIn<input type="text" id="pSignLi"></label>
           <label>Open emails in<select id="pMail"><option value="gmail">Gmail (browser)</option><option value="outlook">Outlook (browser)</option><option value="mailto">Default mail app</option></select></label>
+          <label class="full">Gmail accounts to send from, comma-separated (with two or more you choose one each time)<input type="text" id="pGmail" placeholder="you@gmail.com, you.work@gmail.com"></label>
           <label class="full">Short pitch for LinkedIn notes<input type="text" id="pPitch" placeholder="Second-year Computing with AI student building Python and FastAPI projects"></label>
           <label class="full">One or two sentences about you for emails and calls<textarea id="pHighlights" rows="2" placeholder="I build Python back ends with FastAPI and PostgreSQL, and bring seven years of hands-on IT support."></textarea></label>
         </div>
@@ -235,6 +259,7 @@
   <div class="scrim" id="scrim" hidden></div>
   <aside class="drawer" id="drawer" hidden aria-label="Application" role="dialog"></aside>
 
+  <script src="lib/i18n.js"></script>
   <script src="lib/quality.js"></script>
   <script src="lib/analyzer.js"></script>
   <script src="lib/store.js"></script>
@@ -243,6 +268,7 @@
   <script src="lib/extract.js"></script>
   <script src="lib/insights.js"></script>
   <script src="lib/followup.js"></script>
+  <script src="lib/plan.js"></script>
   <script src="lib/prompt.js"></script>
   <script src="lib/cv.js"></script>
   <script src="lib/vendor/mammoth.browser.min.js"></script>

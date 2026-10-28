@@ -277,3 +277,32 @@ body.no-intern #skTrack { display: none; }
 a.fu-c.fu-link{padding:3px 10px;color:var(--ink);text-decoration:none}
 a.fu-c.fu-link:hover{border-color:var(--blue)}
 .fu-setup{border-left:4px solid var(--blue);background:var(--blue-soft)}
+
+/* Weekly plan */
+.pl-stat{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.pl-stat:last-of-type{border-bottom:0}
+.pl-stat b{font-variant-numeric:tabular-nums;text-align:right}
+.pl-stat i{grid-column:1/-1;font-style:normal;font-size:12px;color:var(--muted)}
+.pl-task{display:flex;flex-direction:row;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);color:var(--ink);font-size:14px;cursor:pointer}
+.pl-task:last-child{border-bottom:0}
+.pl-task input{margin-top:3px;flex:none}
+.pl-task span{display:flex;flex-direction:column;gap:2px}
+.pl-task i{font-style:normal;font-size:12.5px;color:var(--muted)}
+.pl-task.done span{text-decoration:line-through;color:var(--muted)}
+
+.side-lang{margin-top:auto;flex-direction:row;align-items:center;gap:8px;padding:0 10px 10px;color:#b9c7d4;font-size:12.5px}
+.side-lang select{background:var(--navy2);color:#fff;border:1px solid #3a5a74;border-radius:6px;padding:3px 6px;font:inherit}
+.side-lang + .side-foot{margin-top:0}
+
+.fu-addmail{display:flex;gap:6px;margin-top:8px;max-width:520px}
+.fu-addmail input{flex:1}
+.fu-note{margin:6px 0 0}
+.fu-note:empty{display:none}
+.fu-when{flex-direction:row;align-items:center;gap:6px}
+.fu-bar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;background:var(--blue-soft);border:1px solid #c8dbea;border-radius:var(--r);padding:10px 12px;margin-bottom:12px;font-size:13.5px}
+.fu-tag{background:var(--blue-soft);color:var(--navy)}
+
+.acct-menu{position:absolute;z-index:1000;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(23,50,74,.18);padding:6px;min-width:220px;display:flex;flex-direction:column}
+.acct-menu p{margin:2px 8px 6px;font-size:12px;color:var(--muted)}
+.acct-menu button{border:0;background:none;text-align:left;padding:7px 10px;border-radius:6px;font:inherit;font-size:13.5px;color:var(--ink);cursor:pointer}
+.acct-menu button:hover,.acct-menu button:focus{background:var(--blue-soft);outline:none}

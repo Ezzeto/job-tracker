@@ -311,6 +311,7 @@
     host = document.createElement('div');
     host.id = 'job-tracker-host';
     shadow = host.attachShadow({ mode: 'open' });
+    if (globalThis.JT_I18n) JT_I18n.watch(shadow);
     shadow.innerHTML = `<style>${CSS}</style><div id="root"></div>`;
     document.documentElement.appendChild(host);
   }

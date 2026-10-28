@@ -77,3 +77,8 @@ test('the education hook needs a school or students, not a word like "education"
   const s = F.build({ title: 'IT Technician', company: 'Oak Academy', appliedAt: '2026-10-01T12:00:00Z', description: 'Support staff and students across the trust.' }, 'email', null, {});
   assert.match(s.body, /education setting/);
 });
+
+test('a Gmail link can name the account to send from', () => {
+  assert.match(F.links.gmail('a@b.co', 'Hi', 'Body', 'me.work@gmail.com'), /^https:\/\/mail\.google\.com\/mail\/u\/me\.work%40gmail\.com\/\?view=cm&fs=1&to=a%40b\.co/);
+  assert.match(F.links.gmail('a@b.co', 'Hi', 'Body'), /^https:\/\/mail\.google\.com\/mail\/\?view=cm/);
+});

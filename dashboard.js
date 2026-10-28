@@ -57,13 +57,16 @@
     const h = location.hash.slice(1) || 'overview';
     let view = h.split('=')[0];
     if (view === 'app') view = 'apps';
-    if (!['overview', 'apps', 'followups', 'offers', 'intern', 'cv', 'settings', 'data'].includes(view)) view = 'overview';
+    if (!['overview', 'apps', 'followups', 'plan', 'offers', 'intern', 'cv', 'settings', 'data'].includes(view)) view = 'overview';
     $$('.view').forEach(v => { v.hidden = v.id !== 'view-' + view; });
     $$('.side a').forEach(a => a.classList.toggle('active', a.dataset.view === view));
     if (h.startsWith('app=')) { const a = apps.find(x => x.id === h.slice(4)); if (a) openDrawer(a); }
     renderView(view);
   }
   window.addEventListener('hashchange', route);
+  // Interface language: i18n.js reloads the page when it changes
+  $('#langSel').value = profile.lang === 'ru' ? 'ru' : 'en';
+  $('#langSel').onchange = async () => { profile.lang = $('#langSel').value; await S.saveProfile(profile); };
   $$('[data-new]').forEach(b => b.onclick = () => openDrawer(null));
 
   function renderAll() {
@@ -78,7 +81,7 @@
     $('#navOffers').textContent = apps.filter(a => S.everReached(a, A.OFFER)).length || '';
     $('#navIntern').textContent = apps.filter(a => trackOf(a) === 'intern').length || '';
     $('#navFu').textContent = JT_Follow.queue(ovApps()).due.filter(x => !x.late).length || '';
-    ({ intern: renderIntern, cv: renderCV, overview: renderOverview, apps: renderApps, followups: renderFollowups, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
+    ({ intern: renderIntern, cv: renderCV, overview: renderOverview, apps: renderApps, followups: renderFollowups, plan: renderPlan, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
   }
 
   // ---------- OVERVIEW ----------
@@ -300,7 +303,7 @@
         <td><span class="ticket">${esc(a.ticket)}</span></td>
         <td class="nowrap">${fitPill(a.chance)}${a.dupOf ? ` <span class="tag" title="Looks like the same job as ${esc(a.dupOf)}">dup</span>` : ''}${trackOf(a) === 'intern' ? ' ' + plBadge(a.placement) : ''}</td>
         <td class="job"><b title="${esc(a.title)}">${trackOf(a) === 'intern' ? '<span class="trk">Internship</span>' : ''}${esc(a.title || 'Untitled')}</b><span title="${esc([a.company, a.location].filter(Boolean).join(' · '))}">${esc([a.company, a.location].filter(Boolean).join(' · '))}</span></td>
-        <td><select class="st-select" data-st="${a.id}" aria-label="Status" style="background-image:radial-gradient(circle,${A.statusColor(a.status)} 60%,transparent 62%)">${stOpts(a.status)}</select></td>
+        <td class="nowrap"><select class="st-select" data-st="${a.id}" aria-label="Status" style="background-image:radial-gradient(circle,${A.statusColor(a.status)} 60%,transparent 62%)">${stOpts(a.status)}</select>${(a.followUps || []).length ? ` <span class="tag fu-tag" title="Follow-ups sent: ${a.followUps.length}, last on ${fmtDate(a.followUps[a.followUps.length - 1].at)}">✉ ${a.followUps.length}</span>` : ''}</td>
         <td class="nowrap">${fmtDate(a.appliedAt)}</td>
         <td>${fmtSal(a)}</td>
         <td class="c-plat">${esc(a.platform || '—')}</td>
@@ -411,6 +414,57 @@
   }
 
   // ---------- FOLLOW-UPS VIEW ----------
+  // Records a follow-up on an application: when, how and to whom. The first one sets a reminder a week later.
+  async function markFollowUp(a, { channel = 'email', to = '', at } = {}) {
+    const list = (a.followUps || []).concat([{ at: at || new Date().toISOString(), channel, to }]);
+    const next = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+    a.followUps = list;
+    if (list.length < 2) a.nextDate = next;
+    await S.updateApp(a.id, { followUps: list, nextDate: a.nextDate || '' });
+    apps = await S.getApps();
+    return list;
+  }
+  const emailOf = a => (JT_Extract.cleanContacts(a.contacts || []).find(c => c.type === 'email') || {}).value || '';
+  // Opens the email in the chosen client. With several Gmail accounts a small menu next to the button
+  // asks which one to send from; the last one used is listed first.
+  function sendFrom(anchor) {
+    const list = (profile.gmailAccounts || []).filter(Boolean);
+    if ((profile.mailClient || 'gmail') !== 'gmail' || list.length < 2) return Promise.resolve(list[0] || '');
+    const last = profile.lastGmail && list.includes(profile.lastGmail) ? profile.lastGmail : list[0];
+    const ordered = [last].concat(list.filter(x => x !== last));
+    return new Promise(resolve => {
+      $$('.acct-menu').forEach(m => m.remove());
+      const menu = document.createElement('div');
+      menu.className = 'acct-menu';
+      menu.setAttribute('role', 'menu');
+      menu.innerHTML = `<p>Send from</p>${ordered.map(x => `<button type="button" role="menuitem" data-acct="${esc(x)}">${esc(x)}</button>`).join('')}`;
+      document.body.appendChild(menu);
+      const r = anchor.getBoundingClientRect();
+      menu.style.top = (window.scrollY + r.bottom + 4) + 'px';
+      menu.style.left = Math.max(8, Math.min(window.scrollX + r.left, window.scrollX + document.documentElement.clientWidth - menu.offsetWidth - 8)) + 'px';
+      const done = v => { menu.remove(); document.removeEventListener('mousedown', outside, true); document.removeEventListener('keydown', esc_); resolve(v); };
+      const outside = e => { if (!menu.contains(e.target)) done(null); };
+      const esc_ = e => { if (e.key === 'Escape') done(null); };
+      menu.querySelectorAll('[data-acct]').forEach(b => b.onclick = async () => { profile.lastGmail = b.dataset.acct; await S.saveProfile(profile); done(b.dataset.acct); });
+      setTimeout(() => { document.addEventListener('mousedown', outside, true); document.addEventListener('keydown', esc_); }, 0);
+      menu.querySelector('button').focus();
+    });
+  }
+  async function openMail(anchor, to, subject, body) {
+    const F = JT_Follow;
+    // null: the menu was closed without choosing. The browser still allows the new tab, the choice comes within a second of the click.
+    const account = await sendFrom(anchor);
+    if (account === null) return false;
+    window.open((F.links[profile.mailClient] || F.links.gmail)(to, subject, body, account), '_blank');
+    return true;
+  }
+  function openEmail(a, anchor) {
+    const F = JT_Follow, to = emailOf(a);
+    const c = JT_Extract.cleanContacts(a.contacts || []).find(x => x.type === 'email') || null;
+    const msg = F.build(a, 'email', c, profile);
+    return openMail(anchor, to, msg.subject, msg.body);
+  }
+
   // Everything waiting for a reply in one list: who to write to, where to find them, one button to write
   function contactChips(a, list) {
     return JT_Extract.cleanContacts(list).map(c => {
@@ -443,8 +497,10 @@
       ${late && (i === 0 || !q.due[i - 1].late) ? '<h3 class="sub3">Over two weeks old: one short check-in at most, newer applications come first</h3>' : ''}
       <div class="fu-card">
         <div class="row-between">${head(a, n ? 'second follow-up' : 'first follow-up')}
-          <div class="btns"><button class="btn small primary" data-fu="${a.id}">Write follow-up</button><button class="btn small" data-nr="${a.id}" title="Closed or not worth chasing">No response</button></div></div>
+          <div class="btns"><button class="btn small primary" data-mail="${a.id}">${emailOf(a) ? 'Email' : 'Email (add the address)'}</button><button class="btn small" data-sent="${a.id}">Mark as sent</button><button class="btn small" data-fu="${a.id}">Edit message</button><button class="btn small" data-nr="${a.id}" title="Closed or not worth chasing">No response</button></div></div>
         <div class="fu-who">${contacts.length ? `<span class="fu-lbl">Write to:</span>${contactChips(a, contacts)}` : `<span class="fu-lbl">No contact in the ad. Find one:</span>${findLinks(a)}`}</div>
+        ${emailOf(a) ? '' : `<div class="fu-addmail"><input type="email" data-addmail="${a.id}" placeholder="Paste the recruiter's or company's email" aria-label="Email"><button class="btn small" data-savemail="${a.id}">Save email</button></div>`}
+        <p class="msg fu-note" data-note="${a.id}" role="status"></p>
       </div>`).join('') : '<p class="empty">Nothing to send today. Applications show up here 4 working days after you apply.</p>';
     $('#fuSoon').innerHTML = q.soon.length ? q.soon.slice(0, 25).map(({ a, n, inDays, contacts }) => `
       <div class="att">${head(a, `${n ? 'second' : 'first'} follow-up in ${inDays} working day${inDays === 1 ? '' : 's'}${contacts.length ? ` · ${contacts.length} contact${contacts.length === 1 ? '' : 's'}` : ''}`)}
@@ -456,6 +512,84 @@
     $$('#view-followups [data-fu]').forEach(b => b.onclick = () => openDrawer(find(b.dataset.fu), { focusFollowUp: true }));
     $$('#view-followups [data-open]').forEach(b => b.onclick = () => openDrawer(find(b.dataset.open)));
     $$('#view-followups [data-nr]').forEach(b => b.onclick = async () => { await S.updateApp(b.dataset.nr, { status: 'noresponse' }); });
+    const note = (id, t) => { const el = $(`#view-followups [data-note="${id}"]`); if (el) el.textContent = t; };
+    $$('#view-followups [data-mail]').forEach(b => b.onclick = async () => {
+      const a = find(b.dataset.mail);
+      if (!await openEmail(a, b)) return;
+      note(a.id, emailOf(a) ? 'Email opened in a new tab. After you press Send there, come back and press Mark as sent.' : 'Email opened without an address: add it in the To field. After sending, press Mark as sent.');
+    });
+    $$('#view-followups [data-sent]').forEach(b => b.onclick = async () => {
+      const a = find(b.dataset.sent);
+      await markFollowUp(a, { channel: 'email', to: emailOf(a) });
+      renderFollowups();
+    });
+    $$('#view-followups [data-savemail]').forEach(b => b.onclick = async () => {
+      const a = find(b.dataset.savemail), v = $(`#view-followups [data-addmail="${a.id}"]`).value.trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { note(a.id, 'That does not look like an email address.'); return; }
+      await S.updateApp(a.id, { contacts: (a.contacts || []).concat([{ type: 'email', value: v.toLowerCase(), name: '', source: 'added manually' }]) });
+      apps = await S.getApps(); renderFollowups();
+    });
+  }
+
+  // ---------- WEEKLY PLAN ----------
+  // Ticks and the pasted AI plan are kept per week under 'plans' in storage: { '2026-10-26': { done, ai, aiDone } }
+  const lang = () => profile.lang === 'ru' ? 'ru' : 'en';
+  async function getWeekPlan(key) { const { plans } = await S.get('plans'); return { plans: plans || {}, w: { done: {}, ai: '', aiDone: {}, ...((plans || {})[key] || {}) } }; }
+  async function saveWeekPlan(key, w) {
+    const { plans } = await S.get('plans');
+    const all = { ...(plans || {}), [key]: w };
+    // Keep the last 12 weeks
+    Object.keys(all).sort().slice(0, -12).forEach(k => delete all[k]);
+    await S.set({ plans: all });
+  }
+  function weekStats(r) {
+    const row = (l, v, note) => `<div class="pl-stat"><span>${esc(l)}</span><b>${v}</b>${note ? `<i>${esc(note)}</i>` : ''}</div>`;
+    return row('Applications', `${r.applied} / ${r.target}`) +
+      row('CV tailored', r.tailored, r.applied ? pct(r.tailored, r.applied) : '') +
+      row('Cover letters', r.letters) +
+      row('Follow-ups sent', r.followUps) +
+      row('Replies', r.replies) +
+      row('Interviews', r.interviews) +
+      row('Rejections', r.rejections, r.fastRejections ? `${r.fastRejections} within 3 days` : '') +
+      (r.skip ? row('Applied to Skip jobs', r.skip) : '') +
+      (r.missing.length ? `<p class="hint" style="margin:8px 0 0">Asked for, you marked None: <b>${r.missing.map(([k, v]) => `${esc(k)} (${v})`).join(', ')}</b></p>` : '');
+  }
+  async function renderPlan() {
+    const P = JT_Plan, key = P.weekKey();
+    const start = P.weekStart(), end = new Date(start.getTime() + 6 * 864e5);
+    const day = d => d.toLocaleDateString(lang() === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'short' });
+    $('#planWeek').textContent = `${day(start)} – ${day(end)}`;
+    const live = ovApps();
+    const { last, items } = P.autoPlan(live, profile, null, lang());
+    $('#planLast').innerHTML = weekStats(last);
+    $('#planNow').innerHTML = weekStats(P.report(live, profile, null, 0));
+    const { w } = await getWeekPlan(key);
+    const box = (id, text, why, done, attr) => `<label class="pl-task${done ? ' done' : ''}"><input type="checkbox" ${attr}="${esc(id)}" ${done ? 'checked' : ''}><span>${esc(text)}${why ? `<i>${esc(why)}</i>` : ''}</span></label>`;
+    $('#planAuto').innerHTML = items.map(i => box(i.id, i.text, i.why, w.done[i.id], 'data-auto')).join('');
+    $('#planAutoN').textContent = `${items.filter(i => w.done[i.id]).length} / ${items.length}`;
+    const ai = P.parsePlan(w.ai);
+    const tasks = ai.filter(x => x.text);
+    $('#planAi').innerHTML = ai.map((x, i) => x.heading ? `<h3 class="sub3">${esc(x.heading)}</h3>` : box(String(i), x.text, '', w.aiDone[i], 'data-ai')).join('');
+    $('#planAiN').textContent = tasks.length ? `${tasks.filter(x => w.aiDone[ai.indexOf(x)]).length} / ${tasks.length}` : '';
+    $('#planAiText').hidden = !!tasks.length;
+    $('#planAiUse').textContent = tasks.length ? 'Paste a new plan' : 'Use this plan';
+    $$('#planAuto [data-auto]').forEach(cb => cb.onchange = async () => { w.done[cb.dataset.auto] = cb.checked; await saveWeekPlan(key, w); renderPlan(); });
+    $$('#planAi [data-ai]').forEach(cb => cb.onchange = async () => { w.aiDone[cb.dataset.ai] = cb.checked; await saveWeekPlan(key, w); renderPlan(); });
+    $('#planPrompt').onclick = async () => {
+      const text = P.aiPrompt(live, profile, null, lang());
+      try { await navigator.clipboard.writeText(text); $('#planMsg').textContent = 'Copied. Paste it into Claude or ChatGPT, then paste the answer below.'; }
+      catch (e) { $('#planAiText').hidden = false; $('#planAiText').value = text; $('#planAiText').select(); $('#planMsg').textContent = 'The browser blocked the clipboard: the prompt is in the box, copy it with Ctrl+C.'; }
+    };
+    $('#planAiUse').onclick = async () => {
+      if (tasks.length) { $('#planAiText').hidden = false; $('#planAiText').value = w.ai; $('#planAiText').focus(); $('#planAiUse').textContent = 'Use this plan'; $('#planAiUse').onclick = useAi; return; }
+      useAi();
+    };
+    async function useAi() {
+      const text = $('#planAiText').value.trim();
+      if (!P.parsePlan(text).some(x => x.text)) { $('#planMsg').textContent = 'No tasks found: paste a list with one task per line.'; return; }
+      w.ai = text; w.aiDone = {}; await saveWeekPlan(key, w); $('#planMsg').textContent = ''; renderPlan();
+    }
+    $('#planAiClear').onclick = async () => { w.ai = ''; w.aiDone = {}; $('#planAiText').value = ''; await saveWeekPlan(key, w); renderPlan(); };
   }
 
   // ---------- FOLLOW-UP ----------
@@ -467,7 +601,8 @@
     const contacts = JT_Extract.cleanContacts(a.contacts || []);
     const fu = a.followUps || [];
     const agency = F.isAgency(a);
-    let channel = box.dataset.channel || (contacts.some(c => c.type === 'email') ? 'email' : contacts.some(c => c.type === 'linkedin') ? 'linkedin' : agency && contacts.some(c => c.type === 'phone') ? 'call' : 'email');
+    // Email by default: it needs no LinkedIn subscription and every company has an address somewhere
+    let channel = box.dataset.channel || 'email';
     const forChannel = ch => contacts.filter(c => ch === 'email' ? c.type === 'email' : ch === 'linkedin' ? c.type === 'linkedin' : ch === 'call' ? c.type === 'phone' : false);
     const options = forChannel(channel);
     const sel = options[+box.dataset.to || 0] || options[0] || contacts.find(c => c.name) || null;
@@ -487,13 +622,14 @@
       ${options.length > 1 ? `<label>To<select id="fuTo">${options.map((c, i) => `<option value="${i}" ${c === sel ? 'selected' : ''}>${esc((c.name ? c.name + ' — ' : '') + (c.type === 'linkedin' ? 'LinkedIn' : c.value))}</option>`).join('')}</select></label>` : ''}
       ${channel === 'email' ? `<label>Subject<input type="text" id="fuSubj" value="${esc(msg.subject)}"></label>` : ''}
       <label>${channel === 'call' ? 'What to say on the phone' : 'Message'}<textarea id="fuBody" rows="${channel === 'linkedin' ? 5 : 11}">${esc(msg.body)}</textarea></label>
-      ${channel === 'linkedin' ? '<p class="hint" style="margin:4px 0 0" id="fuLen"></p>' : ''}
+      ${channel === 'linkedin' ? '<p class="hint" style="margin:4px 0 0" id="fuLen"></p><p class="hint" style="margin:4px 0 0">Without LinkedIn Premium a note with an invitation is limited to a few a month, and messages only go to people you are connected with. Email is usually the easier way.</p>' : ''}
       <div class="btns" style="margin-top:10px">
         ${channel === 'email' ? `<button class="btn primary" id="fuSend">${profile.mailClient === 'outlook' ? 'Open in Outlook' : profile.mailClient === 'mailto' ? 'Open in mail app' : 'Open in Gmail'}</button>` : ''}
         ${channel === 'linkedin' ? `<button class="btn primary" id="fuLi">${sel ? 'Copy and open profile' : 'Copy and find a recruiter'}</button>` : ''}
         ${channel === 'call' && sel ? `<a class="btn primary" href="tel:${esc(sel.value.replace(/\s/g, ''))}">Call ${esc(sel.value)}</a>` : ''}
         <button class="btn" id="fuCopy">Copy text</button>
         <button class="btn" id="fuDone">Mark as sent</button>
+        <label class="fu-when">on<input type="date" id="fuWhen" value="${new Date().toISOString().slice(0, 10)}" max="${new Date().toISOString().slice(0, 10)}"></label>
       </div>
       <p class="msg" id="fuMsg" role="status"></p>
       ${fu.length ? `<ul class="timeline" style="margin-top:10px">${fu.map(f => `<li style="--c:#1f6fa8">Follow-up · ${esc({ email: 'Email', linkedin: 'LinkedIn', call: 'Call' }[f.channel] || f.channel)}${f.to ? ' · ' + esc(f.to) : ''}<span>${fmtDate(f.at)}</span></li>`).join('')}</ul>` : ''}`;
@@ -518,10 +654,9 @@
     };
     $('#fuBody').oninput = upd; upd();
     $('#fuCopy').onclick = async () => { await copy(); say('Copied.'); };
-    if ($('#fuSend')) $('#fuSend').onclick = () => {
+    if ($('#fuSend')) $('#fuSend').onclick = async () => {
       const to = sel && sel.type === 'email' ? sel.value : '';
-      const url = (F.links[profile.mailClient] || F.links.gmail)(to, subj(), body());
-      window.open(url, '_blank');
+      if (!await openMail($('#fuSend'), to, subj(), body())) return;
       say(to ? 'Email opened. Check it, press Send, then mark it as sent here.' : 'No address yet: add the recipient in the email. After sending, mark it as sent here.');
     };
     if ($('#fuLi')) $('#fuLi').onclick = async () => {
@@ -530,15 +665,25 @@
       say(sel ? 'Copied. On LinkedIn press Connect → Add a note, or Message, and paste (Ctrl+V).' : 'Copied. Find the company\'s recruiter in the results, add them to this list and send the message.');
     };
     $('#fuDone').onclick = async () => {
-      const list = (a.followUps || []).concat([{ at: new Date().toISOString(), channel, to: sel ? (sel.name || sel.value) : '' }]);
-      const next = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
-      a.followUps = list;
-      await S.updateApp(a.id, { followUps: list, nextDate: list.length < 2 ? next : (a.nextDate || '') });
-      apps = await S.getApps();
-      if ($('#dNext') && list.length < 2) $('#dNext').value = next;
-      renderFollowUp(a);
+      const day = $('#fuWhen') && $('#fuWhen').value;
+      const list = await markFollowUp(a, { channel, to: sel ? (sel.name || sel.value) : '', at: day && day !== new Date().toISOString().slice(0, 10) ? new Date(day + 'T12:00:00').toISOString() : undefined });
+      if ($('#dNext') && list.length < 2) $('#dNext').value = a.nextDate;
+      renderFollowUp(a); renderFuBar(a);
       $('#fuMsg').textContent = list.length < 2 ? 'Marked. You\'ll be reminded about a second follow-up in a week.' : 'Marked. If there is still no reply, set the status to No response.';
     };
+  }
+
+  // Top of an application: how many follow-ups went out, and one click to record or write the next
+  function renderFuBar(a) {
+    const bar = $('#fuBar');
+    if (!bar) return;
+    const fu = a.followUps || [];
+    const last = fu[fu.length - 1];
+    bar.innerHTML = `<span><b>Follow-ups sent: ${fu.length}</b>${last ? ` · <span>last on ${fmtDate(last.at)}${last.to ? ' to ' + esc(last.to) : ''}</span>` : ''}</span>
+      <span class="btns"><button class="btn small primary" id="fuBarMail">Email</button><button class="btn small" id="fuBarSent">Mark as sent today</button><button class="btn small" id="fuBarGo">Message and contacts ↓</button></span>`;
+    $('#fuBarMail').onclick = () => openEmail(a, $('#fuBarMail'));
+    $('#fuBarSent').onclick = async () => { await markFollowUp(a, { channel: 'email', to: emailOf(a) }); if ($('#dNext') && a.followUps.length < 2) $('#dNext').value = a.nextDate; renderFuBar(a); renderFollowUp(a); };
+    $('#fuBarGo').onclick = () => $('#fuPanel').scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 
   function detailsHtml(a) {
@@ -559,6 +704,7 @@
     d.innerHTML = `
       <div class="dr-head">${a.ticket ? `<span class="ticket">${esc(a.ticket)}</span>` : ''}<h2>${isNew ? 'New application' : esc(a.title || 'Untitled')}</h2><button class="x" aria-label="Close">×</button></div>
       <div class="dr-body">
+        ${!isNew ? '<div class="fu-bar" id="fuBar"></div>' : ''}
         <div class="panel"><h2>Fit against your skills</h2><div id="anBox">${analysisHtml(a)}</div></div>
         <div class="panel" id="plPanel"${trackOf(a) === 'intern' ? '' : ' hidden'}>${placementPanelHtml(a)}</div>
         <div class="panel" id="atsPanel" hidden></div>
@@ -604,7 +750,7 @@
       $('#ckPanel').innerHTML = checklistHtml(a); bindChecklist();
     });
     if ($('#ckPanel')) bindChecklist();
-    if (!isNew) { renderFollowUp(a); renderCvPrompt(a); }
+    if (!isNew) { renderFollowUp(a); renderCvPrompt(a); renderFuBar(a); }
     if (opts.focusFollowUp && $('#fuPanel')) { $('#fuPanel').scrollIntoView({ block: 'start' }); $('#fuBody') && $('#fuBody').focus(); }
     else $('#dTitle').focus();
 
@@ -869,10 +1015,20 @@
     $('#pList').checked = profile.listScan !== false;
     $('#pSignName').value = profile.signName || ''; $('#pSignPhone').value = profile.signPhone || '';
     $('#pSignLi').value = profile.signLinkedIn || ''; $('#pMail').value = profile.mailClient || 'gmail';
+    $('#pGmail').value = (profile.gmailAccounts || []).join(', ');
     $('#pPitch').value = profile.pitch || ''; $('#pHighlights').value = profile.highlights || '';
     $('#pAreas').value = (profile.areas || []).join(', ');
     $('#pHome').value = profile.home || ''; $('#pHome').placeholder = (A.homeOf(profile) || {}).name || "Bishop's Stortford";
     $('#pCommute').value = profile.maxCommuteKm || 50;
+    const wd = profile.workDays || [];
+    $('#pWorkDays').innerHTML = JT_Plan.DAYS.en.map((d, i) => `<button type="button" class="chip" data-wd="${i}" aria-pressed="${wd.includes(i)}">${d.slice(0, 3)}</button>`).join('');
+    $$('#pWorkDays .chip').forEach(ch => ch.onclick = async () => {
+      ch.setAttribute('aria-pressed', ch.getAttribute('aria-pressed') !== 'true');
+      profile.workDays = $$('#pWorkDays .chip[aria-pressed=true]').map(x => +x.dataset.wd);
+      // The day count follows the ticked days, so the score and the plan agree
+      if (profile.workDays.length) { profile.daysPerWeek = profile.workDays.length; $('#pDays').value = profile.daysPerWeek; }
+      await S.saveProfile(profile);
+    });
     const targets = profile.targetCategories || [];
     $('#pTargets').innerHTML = A.CATEGORY_NAMES.filter(c => c !== 'Other').map(c => `<button type="button" class="chip" data-target="${esc(c)}" aria-pressed="${targets.includes(c)}">${esc(c)}</button>`).join('');
     $$('#pTargets .chip').forEach(ch => ch.onclick = async () => {
@@ -907,7 +1063,8 @@
     const yrs = parseFloat($('#pExp').value); profile.experienceYears = isNaN(yrs) ? 1 : yrs;
     const com = parseFloat($('#pComm').value); profile.commercialYears = isNaN(com) ? null : com;
     profile.dailyLimit = Math.max(1, Math.min(50, parseInt($('#pDaily').value, 10) || 5));
-    profile.showInternships = $('#pIntern').checked; applyInternVisibility(); renderAll();
+    const internChanged = profile.showInternships !== $('#pIntern').checked;
+    profile.showInternships = $('#pIntern').checked;
     profile.factBank = $('#pFacts').value.trim();
     profile.hasDrivingLicence = $('#pLicence').checked;
     profile.timeLimitedRtw = $('#pRtw').checked;
@@ -920,12 +1077,16 @@
     profile.listScan = $('#pList').checked;
     profile.signName = $('#pSignName').value.trim(); profile.signPhone = $('#pSignPhone').value.trim();
     profile.signLinkedIn = $('#pSignLi').value.trim(); profile.mailClient = $('#pMail').value;
+    profile.gmailAccounts = $('#pGmail').value.split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
     profile.pitch = $('#pPitch').value.trim(); profile.highlights = $('#pHighlights').value.trim();
     profile.areas = $('#pAreas').value.split(',').map(x => x.trim()).filter(Boolean);
     profile.home = $('#pHome').value.trim(); profile.maxCommuteKm = +$('#pCommute').value || 50;
     await S.saveProfile(profile);
+    // Re-render only after every field is read: renderAll redraws this form from the profile,
+    // and doing it earlier put the old values back into the boxes still to be read
+    if (internChanged) { applyInternVisibility(); renderAll(); }
   };
-  ['#pExp', '#pComm', '#pDaily', '#pIntern', '#pFacts', '#pDays', '#pHours', '#pLicence', '#pRtw', '#pLangs', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pHome', '#pCommute', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
+  ['#pExp', '#pComm', '#pDaily', '#pIntern', '#pFacts', '#pDays', '#pHours', '#pLicence', '#pRtw', '#pLangs', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pHome', '#pCommute', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pGmail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
   $('#resetSkills').onclick = async () => {
     if (!confirm(`Clear all ${skTrack === 'intern' ? 'internship' : 'job'} skill levels?`)) return;
     if (skTrack === 'intern') profile.intern.skills = {}; else profile.skills = { ...A.DEFAULT_SKILLS };
