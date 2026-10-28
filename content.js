@@ -246,8 +246,9 @@
         method: I && how ? I.methodFromButton(how.text, job.platform, how.yes) : 'unknown',
         button: how && how.text ? how.text.slice(0, 40) : '',
         cover: (profile.applyDefaults && profile.applyDefaults.cover) || 'none',
-        cv: tailored ? tailored.file : cvLabel,
-        ...(tailored ? { cvTailored: true } : {}),
+        cv: tailored && tailored.file ? tailored.file : cvLabel,
+        ...(tailored && tailored.file ? { cvTailored: true } : {}),
+        ...(tailored && tailored.cover ? { cover: 'tailored' } : {}),
       },
     };
   }
@@ -495,7 +496,7 @@
           <div style="display:flex;gap:6px;margin-top:8px"><button class="p" id="fbSave" style="flex:none;padding:6px 12px">Save</button></div>
         </div>
       </div>
-      <div class="ft"><button class="p" id="tailor" title="Your CV reordered for this ad, as a Word or PDF file">Tailor CV</button><button class="s" id="close">Got it</button><button class="s" id="hide" style="color:#5a6b7d;border-color:#cfd8e1">Hide</button></div>`;
+      <div class="ft"><button class="p" id="tailor" title="Your CV reordered for this ad, and a cover letter, as Word or PDF files">Tailor CV + letter</button><button class="s" id="close">Got it</button><button class="s" id="hide" style="color:#5a6b7d;border-color:#cfd8e1">Hide</button></div>`;
     root.appendChild(box);
     box.querySelector('.x').onclick = () => box.remove();
     box.querySelector('#close').onclick = () => box.remove();

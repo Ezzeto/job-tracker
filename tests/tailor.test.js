@@ -94,3 +94,30 @@ test('the AI prompt uses the uploaded CV when there is no fact bank', () => {
   assert.ok(r.ok);
   assert.match(r.text, /Alex Example/);
 });
+
+test('the cover letter is built only from your CV lines, in the first person', () => {
+  const cv = T.parse(CV);
+  const L = T.letter(cv, JOB, {}, { why: 'You look after schools, and on-site support is what I enjoy most', availability: '' });
+  const text = T.letterText(L);
+  assert.match(L.paragraphs[0], /^I'm applying for the 1st Line Support Engineer role at Acme Ltd\. Since 2021 I have worked as a freelance IT Support\./);
+  assert.equal(L.paragraphs[1], 'You look after schools, and on-site support is what I enjoy most.');
+  assert.ok(L.used.length >= 2);
+  L.used.forEach(b => assert.ok(text.includes(b.slice(1, 40)), b));
+  assert.doesNotMatch(text, /ServiceNow/);
+  assert.match(text, /Kind regards,\nAlex Example$/);
+  const words = L.paragraphs.join(' ').split(/\s+/).length;
+  assert.ok(words < 260, String(words));
+});
+
+test('only verb-led bullets become sentences', () => {
+  assert.equal(T.asSentence('Fix printers and Wi-Fi.'), 'I fix printers and Wi-Fi.');
+  assert.equal(T.asSentence('Migrated email to Gmail'), 'I migrated email to Gmail.');
+  assert.equal(T.asSentence('REST API for tickets'), '');
+});
+
+test('the Word cover letter holds the paragraphs', () => {
+  const cv = T.parse(CV);
+  const s = Buffer.from(D.buildLetter(T.letter(cv, JOB, {}, {}), cv)).toString('utf8');
+  assert.match(s, /Dear Hiring Manager,/);
+  assert.match(s, /Kind regards,/);
+});
