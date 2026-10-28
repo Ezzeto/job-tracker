@@ -249,6 +249,7 @@
     host = document.createElement('div');
     host.id = 'job-tracker-filter';
     shadow = host.attachShadow({ mode: 'open' });
+    if (globalThis.JT_I18n) JT_I18n.watch(shadow);
     shadow.innerHTML = `<style>
       :host{all:initial}
       [hidden]{display:none!important}

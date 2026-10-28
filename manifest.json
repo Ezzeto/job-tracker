@@ -45,6 +45,7 @@
         "lib/extract.js",
         "lib/insights.js",
         "lib/cv.js",
+        "lib/i18n.js",
         "content.js",
         "listscan.js"
       ],
@@ -79,6 +80,7 @@
         "lib/extract.js",
         "lib/insights.js",
         "lib/cv.js",
+        "lib/i18n.js",
         "content.js",
         "listscan.js"
       ],

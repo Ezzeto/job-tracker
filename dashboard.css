@@ -289,3 +289,7 @@ a.fu-c.fu-link:hover{border-color:var(--blue)}
 .pl-task span{display:flex;flex-direction:column;gap:2px}
 .pl-task i{font-style:normal;font-size:12.5px;color:var(--muted)}
 .pl-task.done span{text-decoration:line-through;color:var(--muted)}
+
+.side-lang{margin-top:auto;flex-direction:row;align-items:center;gap:8px;padding:0 10px 10px;color:#b9c7d4;font-size:12.5px}
+.side-lang select{background:var(--navy2);color:#fff;border:1px solid #3a5a74;border-radius:6px;padding:3px 6px;font:inherit}
+.side-lang + .side-foot{margin-top:0}

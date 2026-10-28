@@ -64,6 +64,9 @@
     renderView(view);
   }
   window.addEventListener('hashchange', route);
+  // Interface language: i18n.js reloads the page when it changes
+  $('#langSel').value = profile.lang === 'ru' ? 'ru' : 'en';
+  $('#langSel').onchange = async () => { profile.lang = $('#langSel').value; await S.saveProfile(profile); };
   $$('[data-new]').forEach(b => b.onclick = () => openDrawer(null));
 
   function renderAll() {

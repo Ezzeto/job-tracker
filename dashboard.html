@@ -18,6 +18,7 @@
     <a href="#cv" data-view="cv">CV &amp; ATS</a>
     <a href="#settings" data-view="settings">Skills &amp; settings</a>
     <a href="#data" data-view="data">Data</a>
+    <label class="side-lang"><span>Language</span><select id="langSel"><option value="en">English</option><option value="ru">Русский</option></select></label>
     <div class="side-foot">All data stays in this browser unless you connect a Google Sheet.</div>
   </nav>
 
@@ -168,7 +169,7 @@
           <div class="full"><label>Roles you are aiming for (other role types score lower; none ticked means all count)</label><div class="chips" id="pTargets"></div></div>
           <label class="full">Languages besides English, comma-separated (a bonus when an ad asks for one)<input type="text" id="pLangs" placeholder="Ukrainian, Polish"></label>
           <label class="full">Where you can work: towns and areas, comma-separated (jobs elsewhere score lower; leave empty to skip)<textarea id="pAreas" rows="2" placeholder="London, Hertfordshire, Cambridge"></textarea></label>
-          <label>Home town (for the journey check)<input id="pHome" placeholder="Bishop's Stortford"></label>
+          <label>Home town (for the journey check)<input type="text" id="pHome" placeholder="Bishop's Stortford"></label>
           <label>Longest journey, km in a straight line<input type="number" id="pCommute" min="5" max="300" placeholder="50"></label>
         </div>
       </div>
@@ -257,6 +258,7 @@
   <div class="scrim" id="scrim" hidden></div>
   <aside class="drawer" id="drawer" hidden aria-label="Application" role="dialog"></aside>
 
+  <script src="lib/i18n.js"></script>
   <script src="lib/quality.js"></script>
   <script src="lib/analyzer.js"></script>
   <script src="lib/store.js"></script>
