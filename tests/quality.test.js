@@ -326,3 +326,13 @@ test('a London office far from home asks about the journey; a hybrid one only no
   const home = A.analyze({ ...job('IT Support Engineer', '- 1 year of IT support'), location: 'Croydon' }, { ...p, home: 'Croydon' });
   assert.ok(!home.chance.gates.asks.some(a => a.key === 'commute'), 'home set explicitly');
 });
+
+test('a time-limited right to work is ruled out only when the ad says so and the profile is set', () => {
+  const ad = job('IT Support Analyst', '- Applicants must have the unrestricted right to work in the UK. Unfortunately, we cannot offer visa sponsorship or consider candidates with time-limited work permission for this position.');
+  assert.ok(A.analyze(ad, profile({ timeLimitedRtw: true })).chance.gates.blocks.some(b => b.key === 'rtw'));
+  assert.ok(!A.analyze(ad, profile()).chance.gates.blocks.some(b => b.key === 'rtw'));
+  const soft = job('IT Support Analyst', '- You must have the unrestricted right to work in the UK.');
+  const g = A.analyze(soft, profile({ timeLimitedRtw: true })).chance.gates;
+  assert.ok(!g.blocks.some(b => b.key === 'rtw'));
+  assert.ok(g.asks.some(b => b.key === 'rtw'));
+});

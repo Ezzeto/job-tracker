@@ -11,6 +11,7 @@
     <div class="brand"><span class="logo" aria-hidden="true"></span><span>Job Tracker</span></div>
     <a href="#overview" data-view="overview">Overview</a>
     <a href="#apps" data-view="apps">Applications <span class="count" id="navCount"></span></a>
+    <a href="#followups" data-view="followups">Follow-ups <span class="count" id="navFu"></span></a>
     <a href="#offers" data-view="offers">Offers <span class="count" id="navOffers"></span></a>
     <a href="#intern" data-view="intern">Internships <span class="count" id="navIntern"></span></a>
     <a href="#cv" data-view="cv">CV &amp; ATS</a>
@@ -31,7 +32,7 @@
       </div>
       <div class="grid2">
         <div class="panel"><h2>What employers ask for most</h2><p class="hint">Colour shows your level: green confident, amber basic, red none.</p><div id="toolsTop"></div></div>
-        <div class="panel"><h2>Needs attention</h2><div id="attention"></div></div>
+        <div class="panel"><div class="row-between"><h2>Needs attention</h2><a href="#followups" class="btn small">All follow-ups</a></div><div id="attention"></div></div>
       </div>
       <div class="panel"><h2>Why no interviews?</h2><p class="hint">Reply and interview rate split by how you applied, the CV and letter you sent, how old the ad was, how many had applied before you and what the ad demanded.</p><div id="why"></div></div>
       <div class="panel"><h2>Does the verdict work?</h2><p class="hint">Reply and interview rate for each verdict.</p><div id="calibration"></div></div>
@@ -59,6 +60,18 @@
         </table>
       </div>
       <p class="empty-state" id="appsEmpty" hidden></p>
+    </section>
+
+    <!-- FOLLOW-UPS -->
+    <section id="view-followups" class="view" hidden>
+      <header class="top"><h1>Follow-ups</h1></header>
+      <p class="hint" style="margin:-6px 0 16px">A short message to the recruiter or hiring manager gets your CV read. The first one is due 4 working days after you apply, a second one 5 working days later, then stop. Press <b>Write follow-up</b>: the message is ready, you check it, send it from Gmail or LinkedIn, then press <b>Mark as sent</b>.</p>
+      <div id="fuSetup"></div>
+      <div class="panel"><div class="row-between"><h2>Send today</h2><span class="hint" style="margin:0" id="fuDueN"></span></div><div id="fuDue"></div></div>
+      <div class="grid2">
+        <div class="panel"><h2>Coming up</h2><div id="fuSoon"></div></div>
+        <div class="panel"><h2>Both follow-ups sent</h2><p class="hint">No reply a week after the second message: mark it as no response and move on.</p><div id="fuDone"></div></div>
+      </div>
     </section>
 
     <!-- OFFERS -->
@@ -123,6 +136,7 @@
           <label>Careful applications a day (the side panel counts them)<input type="number" id="pDaily" min="1" max="50"></label>
           <label class="check"><input type="checkbox" id="pIntern"> Show internships and placements</label>
           <label class="check"><input type="checkbox" id="pLicence"> I have a full UK driving licence</label>
+          <label class="check"><input type="checkbox" id="pRtw"> My right to work has an end date (Ukraine scheme, Graduate visa): flag ads that rule it out</label>
           <label class="check"><input type="checkbox" id="pAuto"> Save automatically when I press Apply</label>
           <label>Mark 'Applied' as 'No response' after, days (0 = never)<input type="number" id="pStale" min="0" max="180"></label>
           <label>Cover letter I usually send<select id="pCover"></select></label>

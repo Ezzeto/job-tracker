@@ -69,3 +69,14 @@ test('a site that answers 403 is left alone for hours instead of being retried',
     assert.ok(await E.blockedUntil('www.totaljobs.com') > Date.now() + 5 * 3600e3);
   } finally { globalThis.fetch = realFetch; }
 });
+
+test('cleanContacts drops junk names and adjustment mailboxes and strips LinkedIn badges', () => {
+  const out = E.cleanContacts([
+    { type: 'name', value: 'Hybrid Working', name: 'Hybrid Working' },
+    { type: 'email', value: 'disability-accomodations@qualcomm.com', name: '' },
+    { type: 'linkedin', value: 'https://www.linkedin.com/in/a/', name: 'Robert James Hunt, SHRM-CP • 3rd+' },
+    { type: 'linkedin', value: 'https://www.linkedin.com/in/b/', name: 'Marc Martínez i Daunis’ profile' },
+    { type: 'name', value: 'Sruthi Soman', name: 'Sruthi Soman' },
+  ]);
+  assert.deepEqual(out.map(c => c.name), ['Robert James Hunt', 'Marc Martínez i Daunis', 'Sruthi Soman']);
+});

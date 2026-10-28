@@ -57,7 +57,7 @@
     const h = location.hash.slice(1) || 'overview';
     let view = h.split('=')[0];
     if (view === 'app') view = 'apps';
-    if (!['overview', 'apps', 'offers', 'intern', 'cv', 'settings', 'data'].includes(view)) view = 'overview';
+    if (!['overview', 'apps', 'followups', 'offers', 'intern', 'cv', 'settings', 'data'].includes(view)) view = 'overview';
     $$('.view').forEach(v => { v.hidden = v.id !== 'view-' + view; });
     $$('.side a').forEach(a => a.classList.toggle('active', a.dataset.view === view));
     if (h.startsWith('app=')) { const a = apps.find(x => x.id === h.slice(4)); if (a) openDrawer(a); }
@@ -77,7 +77,8 @@
     $('#navCount').textContent = apps.length || '';
     $('#navOffers').textContent = apps.filter(a => S.everReached(a, A.OFFER)).length || '';
     $('#navIntern').textContent = apps.filter(a => trackOf(a) === 'intern').length || '';
-    ({ intern: renderIntern, cv: renderCV, overview: renderOverview, apps: renderApps, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
+    $('#navFu').textContent = JT_Follow.queue(ovApps()).due.filter(x => !x.late).length || '';
+    ({ intern: renderIntern, cv: renderCV, overview: renderOverview, apps: renderApps, followups: renderFollowups, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
   }
 
   // ---------- OVERVIEW ----------
@@ -409,13 +410,61 @@
     };
   }
 
+  // ---------- FOLLOW-UPS VIEW ----------
+  // Everything waiting for a reply in one list: who to write to, where to find them, one button to write
+  function contactChips(a, list) {
+    return JT_Extract.cleanContacts(list).map(c => {
+      const label = esc(c.name ? c.name : c.value);
+      if (c.type === 'linkedin') return `<a class="fu-c fu-link" href="${esc(c.value)}" target="_blank" rel="noopener"><b>in</b> ${label}</a>`;
+      if (c.type === 'email') return `<span class="fu-c"><b>✉</b> ${esc(c.value)}</span>`;
+      return `<a class="fu-c fu-link" href="tel:${esc(String(c.value).replace(/\s/g, ''))}"><b>☎</b> ${esc(c.name ? c.name + ' · ' : '')}${esc(c.value)}</a>`;
+    }).join('');
+  }
+  function findLinks(a) {
+    const F = JT_Follow, co = a.company || '';
+    if (!co) return '<span class="hint" style="margin:0">Add the company name to search for contacts.</span>';
+    const agency = F.isAgency(a);
+    return [
+      `<a class="btn small" href="${esc(F.links.linkedinPeople(co, agency ? 'IT recruitment consultant' : 'talent acquisition'))}" target="_blank" rel="noopener">${agency ? 'Agency consultants' : 'Recruiters'} on LinkedIn</a>`,
+      agency ? '' : `<a class="btn small" href="${esc(F.links.linkedinPeople(co, 'IT manager'))}" target="_blank" rel="noopener">IT manager on LinkedIn</a>`,
+      `<a class="btn small" href="${esc(F.links.googleEmail(co))}" target="_blank" rel="noopener">Careers email (Google)</a>`,
+    ].join('');
+  }
+  function renderFollowups() {
+    const F = JT_Follow;
+    const q = F.queue(ovApps());
+    const missing = [!profile.signName && 'your name', !profile.signPhone && 'phone', !profile.pitch && 'a short pitch', !profile.highlights && 'one or two sentences about you'].filter(Boolean);
+    $('#fuSetup').innerHTML = missing.length ? `<div class="panel fu-setup"><b>Fill in once so every message is signed and says who you are:</b> ${esc(missing.join(', '))}. <a href="#settings" class="btn small primary" style="margin-left:8px">Open settings</a></div>` : '';
+    const fresh = q.due.filter(x => !x.late);
+    $('#fuDueN').textContent = q.due.length ? `${fresh.length} fresh · ${q.due.length - fresh.length} older · ${q.due.filter(x => x.contacts.length).length} with a contact` : '';
+    const ago = a => { const d = daysSince(a.appliedAt); return d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`; };
+    const head = (a, extra) => `<div class="what"><b>${a.ticket ? `<span class="ticket">${esc(a.ticket)}</span> ` : ''}${esc(a.title || 'Untitled')}${a.company ? ' — ' + esc(a.company) : ''}</b><span>${F.isAgency(a) ? 'Agency' : 'Employer'} · applied ${ago(a)}${extra ? ' · ' + extra : ''}</span></div>`;
+    $('#fuDue').innerHTML = q.due.length ? q.due.map(({ a, n, contacts, late }, i) => `
+      ${late && (i === 0 || !q.due[i - 1].late) ? '<h3 class="sub3">Over two weeks old: one short check-in at most, newer applications come first</h3>' : ''}
+      <div class="fu-card">
+        <div class="row-between">${head(a, n ? 'second follow-up' : 'first follow-up')}
+          <div class="btns"><button class="btn small primary" data-fu="${a.id}">Write follow-up</button><button class="btn small" data-nr="${a.id}" title="Closed or not worth chasing">No response</button></div></div>
+        <div class="fu-who">${contacts.length ? `<span class="fu-lbl">Write to:</span>${contactChips(a, contacts)}` : `<span class="fu-lbl">No contact in the ad. Find one:</span>${findLinks(a)}`}</div>
+      </div>`).join('') : '<p class="empty">Nothing to send today. Applications show up here 4 working days after you apply.</p>';
+    $('#fuSoon').innerHTML = q.soon.length ? q.soon.slice(0, 25).map(({ a, n, inDays, contacts }) => `
+      <div class="att">${head(a, `${n ? 'second' : 'first'} follow-up in ${inDays} working day${inDays === 1 ? '' : 's'}${contacts.length ? ` · ${contacts.length} contact${contacts.length === 1 ? '' : 's'}` : ''}`)}
+      <div class="btns"><button class="btn small" data-open="${a.id}">Open</button></div></div>`).join('') + (q.soon.length > 25 ? `<p class="empty">and ${q.soon.length - 25} more</p>` : '') : '<p class="empty">Nothing coming up.</p>';
+    $('#fuDone').innerHTML = q.done.length ? q.done.map(({ a, days }) => `
+      <div class="att">${head(a, `last message ${days} day${days === 1 ? '' : 's'} ago`)}
+      <div class="btns">${days >= 7 ? `<button class="btn small" data-nr="${a.id}">Mark as no response</button>` : ''}<button class="btn small" data-open="${a.id}">Open</button></div></div>`).join('') : '<p class="empty">None yet.</p>';
+    const find = id => apps.find(a => a.id === id);
+    $$('#view-followups [data-fu]').forEach(b => b.onclick = () => openDrawer(find(b.dataset.fu), { focusFollowUp: true }));
+    $$('#view-followups [data-open]').forEach(b => b.onclick = () => openDrawer(find(b.dataset.open)));
+    $$('#view-followups [data-nr]').forEach(b => b.onclick = async () => { await S.updateApp(b.dataset.nr, { status: 'noresponse' }); });
+  }
+
   // ---------- FOLLOW-UP ----------
   const TYPE_ICON = { email: '✉', phone: '☎', linkedin: 'in', name: '👤' };
   function renderFollowUp(a) {
     const F = globalThis.JT_Follow;
     const box = $('#fuPanel');
     if (!box || !F) return;
-    const contacts = a.contacts || [];
+    const contacts = JT_Extract.cleanContacts(a.contacts || []);
     const fu = a.followUps || [];
     const agency = F.isAgency(a);
     let channel = box.dataset.channel || (contacts.some(c => c.type === 'email') ? 'email' : contacts.some(c => c.type === 'linkedin') ? 'linkedin' : agency && contacts.some(c => c.type === 'phone') ? 'call' : 'email');
@@ -425,7 +474,7 @@
     const msg = F.build(a, channel, sel, profile);
     box.innerHTML = `
       <div class="row-between"><h2>Follow-up</h2><span class="hint" style="margin:0">${agency ? 'Agency' : 'Employer'} · sent: ${fu.length}${fu.length ? `, last on ${fmtDate(fu[fu.length - 1].at)}` : ''}</span></div>
-      <div class="fu-contacts">${contacts.length ? contacts.map((c, i) => `<span class="fu-c" title="${esc(c.source || '')}"><b>${TYPE_ICON[c.type] || '•'}</b> ${esc(c.name && c.type !== 'name' ? c.name + ' · ' : '')}${esc(c.type === 'linkedin' ? 'LinkedIn' : c.value)}<button data-rm="${i}" aria-label="Remove contact">×</button></span>`).join('') : '<p class="empty" style="margin:0">No contacts found in the ad. Add one: the recruiter named in the ad, the agency email or a LinkedIn profile link.</p>'}</div>
+      <div class="fu-contacts">${contacts.length ? contacts.map((c, i) => `<span class="fu-c" title="${esc(c.source || '')}"><b>${TYPE_ICON[c.type] || '•'}</b> ${esc(c.name && c.type !== 'name' ? c.name + ' · ' : '')}${esc(c.type === 'linkedin' ? 'LinkedIn' : c.value)}<button data-rm="${i}" aria-label="Remove contact">×</button></span>`).join('') : `<p class="empty" style="margin:0 0 6px">No contacts found in the ad. Find the recruiter or hiring manager and add them below (paste a LinkedIn profile link or an email):</p><div class="btns">${findLinks(a)}</div>`}</div>
       <div class="fu-add">
         <select id="fuType" aria-label="Contact type"><option value="email">Email</option><option value="linkedin">LinkedIn</option><option value="phone">Phone</option><option value="name">Name only</option></select>
         <input type="text" id="fuVal" placeholder="email, link or phone" aria-label="Contact">
@@ -811,7 +860,7 @@
     $('#pDaily').value = profile.dailyLimit || 5;
     $('#pIntern').checked = !!profile.showInternships;
     $('#pFacts').value = profile.factBank || '';
-    $('#pLicence').checked = !!profile.hasDrivingLicence; $('#pLangs').value = (profile.languages || []).join(', ');
+    $('#pLicence').checked = !!profile.hasDrivingLicence; $('#pRtw').checked = !!profile.timeLimitedRtw; $('#pLangs').value = (profile.languages || []).join(', ');
     $('#pAuto').checked = profile.autoDetect !== false;
     $('#pStale').value = profile.autoNoResponseDays == null ? 30 : profile.autoNoResponseDays;
     $('#pCover').innerHTML = I.COVERS.filter(c => c.id !== 'unknown').map(c => `<option value="${c.id}" ${c.id === ((profile.applyDefaults && profile.applyDefaults.cover) || 'none') ? 'selected' : ''}>${esc(c.label)}</option>`).join('');
@@ -861,6 +910,7 @@
     profile.showInternships = $('#pIntern').checked; applyInternVisibility(); renderAll();
     profile.factBank = $('#pFacts').value.trim();
     profile.hasDrivingLicence = $('#pLicence').checked;
+    profile.timeLimitedRtw = $('#pRtw').checked;
     profile.languages = $('#pLangs').value.split(',').map(x => x.trim()).filter(Boolean);
     profile.autoDetect = $('#pAuto').checked;
     profile.autoNoResponseDays = Math.max(0, Math.min(180, parseInt($('#pStale').value, 10) || 0));
@@ -875,7 +925,7 @@
     profile.home = $('#pHome').value.trim(); profile.maxCommuteKm = +$('#pCommute').value || 50;
     await S.saveProfile(profile);
   };
-  ['#pExp', '#pComm', '#pDaily', '#pIntern', '#pFacts', '#pDays', '#pHours', '#pLicence', '#pLangs', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pHome', '#pCommute', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
+  ['#pExp', '#pComm', '#pDaily', '#pIntern', '#pFacts', '#pDays', '#pHours', '#pLicence', '#pRtw', '#pLangs', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pHome', '#pCommute', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
   $('#resetSkills').onclick = async () => {
     if (!confirm(`Clear all ${skTrack === 'intern' ? 'internship' : 'job'} skill levels?`)) return;
     if (skTrack === 'intern') profile.intern.skills = {}; else profile.skills = { ...A.DEFAULT_SKILLS };
