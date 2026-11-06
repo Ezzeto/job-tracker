@@ -113,7 +113,7 @@ table.apps{width:100%;border-collapse:collapse;font-size:13.5px}
 .form-grid .full{grid-column:1/-1}
 label{font-size:12.5px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
 label.check{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:13.5px}
-input[type=text],input[type=url],input[type=number],input[type=date],select,textarea{border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:#fff;color:var(--ink);font-size:14px;width:100%}
+input[type=text],input[type=email],input[type=url],input[type=number],input[type=date],select,textarea{border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:#fff;color:var(--ink);font-size:14px;width:100%}
 textarea{resize:vertical;min-height:60px}
 .chips{display:flex;flex-wrap:wrap;gap:5px}
 .chip{border:1px solid var(--line);background:#fff;border-radius:14px;padding:3px 10px;font-size:12.5px;cursor:pointer;color:var(--ink)}
@@ -308,3 +308,8 @@ a.fu-c.fu-link:hover{border-color:var(--blue)}
 .acct-menu button:hover,.acct-menu button:focus{background:var(--blue-soft);outline:none}
 .gm-check{display:flex;flex-wrap:wrap;gap:6px}
 .gm-check .fu-c{padding:3px 4px 3px 10px}
+
+/* Templates */
+.tpl textarea{width:100%;font:inherit;font-size:13.5px;line-height:1.5}
+.tpl label{margin-bottom:8px}
+.settings-import{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 12px}

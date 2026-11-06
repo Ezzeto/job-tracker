@@ -39,6 +39,7 @@ lib('prompt.js');
 lib('tailor.js');
 lib('docx.js');
 lib('plan.js');
+lib('templates.js');
 
 module.exports = {
   A: globalThis.JT_Analyzer,
@@ -52,6 +53,7 @@ module.exports = {
   D: globalThis.JT_Docx,
   F: globalThis.JT_Follow,
   Plan: globalThis.JT_Plan,
+  Tpl: globalThis.JT_Templates,
   Sync: globalThis.JT_Sync,
   CV: globalThis.JT_CV,
   R: globalThis.JT_Recheck,
