@@ -18,3 +18,4 @@ job-tracker-*.csv
 
 # Python
 __pycache__/
+dist-app/

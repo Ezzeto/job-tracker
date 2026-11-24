@@ -1351,6 +1351,17 @@
     gsMsg(r.ok ? r.msg : r.error, r.ok);
   };
   chrome.storage.onChanged.addListener(ch => { if (ch.syncState) renderSyncState(); });
+  // Phone app: a link with the sheet address and token after #, so it never reaches a server
+  S.get('phoneUrl').then(({ phoneUrl }) => { $('#phoneUrl').value = phoneUrl || 'https://ezzeto.github.io/job-tracker/'; });
+  $('#phoneUrl').addEventListener('change', () => S.set({ phoneUrl: $('#phoneUrl').value.trim() }));
+  $('#phoneCopy').onclick = async () => {
+    const cfg = readCfg(), base = $('#phoneUrl').value.trim();
+    if (!cfg.url || !cfg.token) { $('#phoneMsg').textContent = 'Connect the Google Sheet above first.'; return; }
+    if (!/^https:\/\//.test(base)) { $('#phoneMsg').textContent = 'Enter the phone app address (https://…).'; return; }
+    const code = btoa(unescape(encodeURIComponent(JSON.stringify({ u: cfg.url, t: cfg.token })))).replace(/\+/g, '-').replace(/\//g, '_');
+    const link = base.replace(/#.*$/, '').replace(/\/?$/, '/') + '#connect=' + code;
+    try { await navigator.clipboard.writeText(link); $('#phoneMsg').textContent = 'Copied. Open it on your phone.'; } catch (e) { $('#phoneMsg').textContent = link; }
+  };
   renderSheetCfg();
   (async () => { const c = await JT_Sync_cfg(); if (c.url && c.token && c.auto !== false) chrome.runtime.sendMessage({ type: 'syncNow' }); })();
 
