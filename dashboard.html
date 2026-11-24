@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Job Tracker — dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Unbounded:wght@500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
   <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
@@ -231,6 +233,16 @@
           <p class="hint" style="margin:0">Delete applications here in the extension: a row deleted in the sheet comes back on the next sync. You can add an application in the sheet: fill in Job title and Company on an empty row and it appears in the tracker.</p>
         </details>
       </div>
+      <div class="panel" id="phonePanel">
+        <h2>Phone app</h2>
+        <p class="hint">Paste a job link or ad on your phone: it is scored with these skills, added to your sheet, and statuses change in one tap. It uses the Google Sheet above (script version 13 or newer).</p>
+        <div class="form-grid">
+          <label class="full">Phone app address<input type="url" id="phoneUrl" placeholder="https://ezzeto.github.io/job-tracker/"></label>
+        </div>
+        <div class="btns" style="margin-top:12px"><button class="btn primary" id="phoneCopy">Copy connection link</button></div>
+        <p class="msg" id="phoneMsg" role="status"></p>
+        <p class="hint" style="margin:0">Open the copied link on your phone (send it to yourself in a chat or email): the app connects to your sheet by itself. The link holds your sync token, so send it only to yourself.</p>
+      </div>
       <div class="panel">
         <div class="track-seg" id="skTrack" role="group" aria-label="Skills profile" style="margin-bottom:10px"><button data-t="job">Jobs</button><button data-t="intern">Internships</button></div>
         <div class="row-between"><h2>My skills</h2>
@@ -284,6 +296,7 @@
   <script src="lib/store.js"></script>
   <script src="lib/recheck.js"></script>
   <script src="lib/legacy.js"></script>
+  <script src="lib/migrate.js"></script>
   <script src="lib/extract.js"></script>
   <script src="lib/insights.js"></script>
   <script src="lib/followup.js"></script>

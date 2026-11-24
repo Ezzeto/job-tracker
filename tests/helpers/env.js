@@ -40,6 +40,8 @@ lib('tailor.js');
 lib('docx.js');
 lib('plan.js');
 lib('templates.js');
+lib('migrate.js');
+lib('market.js');
 
 module.exports = {
   A: globalThis.JT_Analyzer,
@@ -57,5 +59,7 @@ module.exports = {
   Sync: globalThis.JT_Sync,
   CV: globalThis.JT_CV,
   R: globalThis.JT_Recheck,
+  M: globalThis.JT_Migrate,
+  Mk: globalThis.JT_Market,
   resetStorage: storage.reset,
 };

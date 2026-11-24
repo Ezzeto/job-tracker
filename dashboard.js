@@ -5,6 +5,25 @@
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // A status change shows Undo for 10 seconds; undo marks the event in the history and puts the old status back
+  let toastTimer = null;
+  function undoToast(text, onUndo) {
+    let t = document.querySelector('.jt-toast');
+    if (!t) { t = document.createElement('div'); t.className = 'jt-toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+    t.innerHTML = '';
+    const sp = document.createElement('span'); sp.textContent = text; t.appendChild(sp);
+    if (onUndo) { const b = document.createElement('button'); b.textContent = 'Undo'; b.onclick = () => { t.hidden = true; onUndo(); }; t.appendChild(b); }
+    t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, onUndo ? 10000 : 2500);
+  }
+  async function changeStatus(id, status) {
+    const a = await S.updateApp(id, { status });
+    if (!a) return;
+    const ev = (a.history || []).slice().reverse().find(h => h.status === status && !h.undone);
+    undoToast(`${a.company || a.title || a.ticket}: ${A.statusLabel(status)}`, ev ? async () => { await S.undoEvent(id, ev.id); undoToast('Undone'); } : null);
+  }
+  const EV_LABEL = { followUps: 'Follow-up recorded', nextDate: 'Next step changed', outcome: 'Outcome changed', contactChannel: 'Contact channel changed', noChannel: 'No channel', snoozeUntil: 'Snoozed', closed: 'Closed', edit: 'Edited' };
+  const BY_LABEL = { auto: 'automatic', sheet: 'from the sheet', gmail: 'from Gmail' };
   const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   const money = n => (n == null || isNaN(n)) ? '—' : '£' + Math.round(n).toLocaleString('en-GB');
   const pct = (a, b) => b ? Math.round(a / b * 100) + '%' : '—';
@@ -34,8 +53,8 @@
   const skillsFor = t => t === 'intern' ? profile.intern.skills : profile.skills;
   let ovTrack = 'all', skTrack = 'job';
   const PL_ICON = { ok: ['✓', 'var(--good)'], warn: ['!', 'var(--mid)'], fail: ['✕', 'var(--bad)'], unknown: ['?', 'var(--muted)'], info: ['i', 'var(--blue)'] };
-  const PL_HEAD = { ok: 'Fits your placement rules', warn: 'Placement rules: check with the employer', fail: 'Breaks your placement rules' };
-  const plBadge = pl => pl ? `<span class="apb ap-${pl.verdict}" title="${esc(PL_HEAD[pl.verdict])}">rules ${({ ok: '✓', warn: '?', fail: '✕' })[pl.verdict]}</span>` : '';
+  const PL_HEAD = { ok: 'Fits your placement rules', warn: 'Placement rules: check with the employer', unknown: 'Placement rules: the ad does not say, ask', fail: 'Breaks your placement rules' };
+  const plBadge = pl => pl ? `<span class="apb ap-${pl.verdict}" title="${esc(PL_HEAD[pl.verdict])}">rules ${({ ok: '✓', warn: '!', unknown: '?', fail: '✕' })[pl.verdict]}</span>` : '';
   const daysTo = iso => Math.ceil((new Date(iso + 'T23:59:59') - Date.now()) / 864e5);
   const longDate = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
 
@@ -97,7 +116,7 @@
       { lbl: 'Applied', n: total, conv: total ? 'all time' : 'press Apply on a job site', c: '#5a6b7d' },
       { lbl: 'Responses', n: responded, conv: `${pct(responded, total)} of applications`, c: '#1f7fb0' },
       { lbl: 'Interviews', n: interviews, conv: `${pct(interviews, responded)} of responses`, c: '#7a4fc0' },
-      { lbl: 'Offers', n: offers, conv: `${pct(offers, interviews)} of interviews`, c: '#23905a' },
+      { lbl: 'Offers', n: offers, conv: `${pct(offers, interviews)} of interviews`, c: '#0f9d63' },
     ];
     $('#pipeline').innerHTML = stages.map(s => `
       <div class="stage"><div class="lbl">${s.lbl}</div><div class="num">${s.n}</div>
@@ -140,17 +159,17 @@
     const max = Math.ceil(Math.max(4, ...buckets.map(b => b.n)) / 2) * 2;
     const W = 560, H = 200, pad = 26, bw = (W - pad) / weeks;
     let svg = `<svg viewBox="0 0 ${W} ${H + 24}" width="100%" role="img" aria-label="Applications per week">`;
-    [0, .5, 1].forEach(f => { const y = H - f * (H - 10); svg += `<line x1="${pad}" x2="${W}" y1="${y}" y2="${y}" stroke="#e3e9ef"/><text x="0" y="${y + 4}" font-size="11" fill="#5a6b7d">${Math.round(max * f)}</text>`; });
+    [0, .5, 1].forEach(f => { const y = H - f * (H - 10); svg += `<line x1="${pad}" x2="${W}" y1="${y}" y2="${y}" stroke="#e3e6ef"/><text x="0" y="${y + 4}" font-size="11" fill="#5a6b7d">${Math.round(max * f)}</text>`; });
     buckets.forEach((b, i) => {
       const x = pad + i * bw + 6, w = bw - 12;
       const h = b.n / max * (H - 10), hr = b.r / max * (H - 10);
-      svg += `<rect x="${x}" y="${H - h}" width="${w}" height="${h}" rx="3" fill="#b9d3e8"><title>${b.n} applied</title></rect>`;
-      svg += `<rect x="${x}" y="${H - hr}" width="${w}" height="${hr}" rx="3" fill="#1f6fa8"><title>${b.r} with a response</title></rect>`;
+      svg += `<rect x="${x}" y="${H - h}" width="${w}" height="${h}" rx="3" fill="#c3ccff"><title>${b.n} applied</title></rect>`;
+      svg += `<rect x="${x}" y="${H - hr}" width="${w}" height="${hr}" rx="3" fill="#2b45e8"><title>${b.r} with a response</title></rect>`;
       if (b.n) svg += `<text x="${x + w / 2}" y="${H - h - 5}" font-size="11" text-anchor="middle" fill="#1c2733">${b.n}</text>`;
       svg += `<text x="${x + w / 2}" y="${H + 16}" font-size="10.5" text-anchor="middle" fill="#5a6b7d">${b.s.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</text>`;
     });
     svg += '</svg>';
-    $('#weekly').innerHTML = svg + `<div class="legend"><span style="--c:#b9d3e8">Applied</span><span style="--c:#1f6fa8">Got a response</span></div>`;
+    $('#weekly').innerHTML = svg + `<div class="legend"><span style="--c:#c3ccff">Applied</span><span style="--c:#2b45e8">Got a response</span></div>`;
   }
 
   function renderPlatforms() {
@@ -161,9 +180,9 @@
     const max = rows[0][1].n;
     $('#platforms').innerHTML = rows.map(([p, v]) => `
       <div class="hbar"><span class="name" title="${esc(p)}">${esc(p)}</span>
-      <span class="track"><i style="width:${v.r / max * 100}%;background:#1f6fa8"></i><i style="width:${(v.n - v.r) / max * 100}%;background:#b9d3e8"></i></span>
+      <span class="track"><i style="width:${v.r / max * 100}%;background:#2b45e8"></i><i style="width:${(v.n - v.r) / max * 100}%;background:#c3ccff"></i></span>
       <span class="v">${v.n} · ${pct(v.r, v.n)}</span></div>`).join('') +
-      `<div class="legend"><span style="--c:#1f6fa8">Response</span><span style="--c:#b9d3e8">No response</span><span style="--c:transparent">right: total · response rate</span></div>`;
+      `<div class="legend"><span style="--c:#2b45e8">Response</span><span style="--c:#c3ccff">No response</span><span style="--c:transparent">right: total · response rate</span></div>`;
   }
 
   // Does the verdict mean anything? Replies and interviews per verdict, from your own history
@@ -177,7 +196,7 @@
     if (!rows.length) { box.innerHTML = '<p class="empty">After a few weeks this shows whether Apply jobs really answer more often than Skip jobs.</p>'; return; }
     const max = Math.max(...rows.map(x => x.n));
     box.innerHTML = rows.map(x => `<div class="hbar"><span class="name">${esc(A.VERDICTS[x.v].label)}</span>
-      <span class="track"><i style="width:${x.r / max * 100}%;background:#1f6fa8"></i><i style="width:${(x.n - x.r) / max * 100}%;background:#b9d3e8"></i></span>
+      <span class="track"><i style="width:${x.r / max * 100}%;background:#2b45e8"></i><i style="width:${(x.n - x.r) / max * 100}%;background:#c3ccff"></i></span>
       <span class="v">${x.n} · ${pct(x.r, x.n)} reply · ${pct(x.i, x.n)} interview</span></div>`).join('') +
       `<p class="hint" style="margin:8px 0 0">Applications older than two weeks. If Skip replies as often as Apply, the rules need changing: tell me which ads were wrong.</p>`;
   }
@@ -227,7 +246,7 @@
     const rows = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 12);
     if (!rows.length) { $('#toolsTop').innerHTML = '<p class="empty">After your first applications this lists the skills worth brushing up before interviews.</p>'; return; }
     const max = rows[0][1];
-    const col = t => ({ strong: '#5fb487', basic: '#e0ae4a', none: '#d9776c' })[profile.skills[t] || 'none'];
+    const col = t => ({ strong: '#5fb487', basic: '#f2c25c', none: '#f08a8c' })[profile.skills[t] || 'none'];
     const miss = Object.entries(cnt).filter(([t]) => (profile.skills[t] || 'none') === 'none').sort((a, b) => b[1] - a[1]).slice(0, 4).map(([t]) => t);
     $('#toolsTop').innerHTML = rows.map(([t, n]) => `
       <div class="hbar"><span class="name" title="${esc(t)}">${esc(t)}</span><span class="track"><i style="width:${n / max * 100}%;background:${col(t)}"></i></span><span class="v">${n}×</span></div>`).join('') +
@@ -311,16 +330,16 @@
         <td class="c-cat nowrap">${esc(SHORT_CAT[a.category] || a.category || '—')}</td>
       </tr>`).join('');
     $$('#appsBody tr').forEach(tr => tr.onclick = e => { if (e.target.closest('select')) return; openDrawer(apps.find(a => a.id === tr.dataset.id)); });
-    $$('#appsBody .st-select').forEach(s => { s.onclick = e => e.stopPropagation(); s.onchange = () => S.updateApp(s.dataset.st, { status: s.value }); });
+    $$('#appsBody .st-select').forEach(s => { s.onclick = e => e.stopPropagation(); s.onchange = () => changeStatus(s.dataset.st, s.value); });
   }
 
   // ---------- DRAWER ----------
-  const V_COL = { apply: '#23905a', tailor: '#2f7fb5', ask: '#b47a12', skip: '#c0463b', incomplete: '#7a8794' };
+  const V_COL = { apply: '#0f9d63', tailor: '#2f7fb5', ask: '#c98200', skip: '#e0393e', incomplete: '#7a8794' };
   function ring(score, ch) {
     const unknown = ch && ch.verdict === 'incomplete';
-    const r = 36, c = 2 * Math.PI * r, col = ch && ch.verdict ? V_COL[ch.verdict] : score >= 70 ? '#23905a' : score >= 50 ? '#b47a12' : '#c0463b';
+    const r = 36, c = 2 * Math.PI * r, col = ch && ch.verdict ? V_COL[ch.verdict] : score >= 70 ? '#0f9d63' : score >= 50 ? '#c98200' : '#e0393e';
     const label = ch ? A.display(ch).text : score + '%';
-    return `<svg class="score-ring" viewBox="0 0 84 84" role="img" aria-label="Fit ${esc(label)}"><circle cx="42" cy="42" r="${r}" fill="none" stroke="#e3e9ef" stroke-width="8"/>
+    return `<svg class="score-ring" viewBox="0 0 84 84" role="img" aria-label="Fit ${esc(label)}"><circle cx="42" cy="42" r="${r}" fill="none" stroke="#e3e6ef" stroke-width="8"/>
       ${unknown ? '' : `<circle cx="42" cy="42" r="${r}" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${c * score / 100} ${c}" transform="rotate(-90 42 42)"/>`}
       <text x="42" y="48" text-anchor="middle" font-size="19" font-weight="700" fill="${col}">${esc(label)}</text></svg>`;
   }
@@ -328,7 +347,7 @@
     const g = c.gates || { blocks: [], asks: [] };
     const q = c.quality && !c.quality.ok ? c.quality.issues.filter(i => i.hard) : [];
     if (!q.length && !g.blocks.length && !g.asks.length) return '';
-    return `<ul class="aplist gates">${q.map(i => `<li><i style="color:#7a8794">?</i><span>${esc(i.text)}</span></li>`).join('')}${g.blocks.map(b => `<li><i style="color:#c0463b">✕</i><span>${esc(b.text)}</span></li>`).join('')}${g.asks.map(b => `<li><i style="color:#b47a12">!</i><span>${esc(b.text)}</span></li>`).join('')}</ul>`;
+    return `<ul class="aplist gates">${q.map(i => `<li><i style="color:#7a8794">?</i><span>${esc(i.text)}</span></li>`).join('')}${g.blocks.map(b => `<li><i style="color:#e0393e">✕</i><span>${esc(b.text)}</span></li>`).join('')}${g.asks.map(b => `<li><i style="color:#c98200">!</i><span>${esc(b.text)}</span></li>`).join('')}</ul>`;
   }
 
   function analysisHtml(a) {
@@ -338,7 +357,7 @@
     const conf = c.verdict && c.verdict !== 'incomplete' ? ({ high: ' · confident', medium: ' · fairly sure', low: ' · rough guess' })[c.confidence] || '' : '';
     return `<div class="score-card">${ring(c.score, c)}<div style="flex:1"><b style="color:${c.verdict ? V_COL[c.verdict] : 'inherit'}">${esc(c.verdict ? d.label : 'Fit: ' + c.label)}</b><span class="hint">${esc(conf)}</span>${c.verdict ? `<div class="hint" style="margin:2px 0 0">${esc(c.verdict === 'incomplete' ? d.hint + ', or paste the description below and press Re-analyse' : d.hint)}</div>` : ''}
       ${gatesHtml(c)}
-      <ul class="reasons">${(c.verdict === 'incomplete' ? [] : c.reasons).map(r => `<li><span>${esc(r.text)}</span><span class="d" style="color:${r.delta == null ? '#5a6b7d' : r.delta > 0 ? '#23905a' : r.delta < 0 ? '#c0463b' : '#5a6b7d'}">${r.delta == null ? 'base' : r.delta > 0 ? '+' + r.delta : r.delta === 0 ? 'tip' : r.delta}</span></li>`).join('')}</ul></div></div>
+      <ul class="reasons">${(c.verdict === 'incomplete' ? [] : c.reasons).map(r => `<li><span>${esc(r.text)}</span><span class="d" style="color:${r.delta == null ? '#5a6b7d' : r.delta > 0 ? '#0f9d63' : r.delta < 0 ? '#e0393e' : '#5a6b7d'}">${r.delta == null ? 'base' : r.delta > 0 ? '+' + r.delta : r.delta === 0 ? 'tip' : r.delta}</span></li>`).join('')}</ul></div></div>
       <div class="tools">${c.matched.map(t => `<span class="t s">${esc(t)}</span>`).join('')}${c.basic.map(t => `<span class="t b">${esc(t)}</span>`).join('')}${c.missing.map(t => `<span class="t m">${esc(t)}</span>`).join('')}</div>
       ${c.missing.length ? `<p class="hint" style="margin:8px 0 0">Prepare for the interview: ${c.missing.map(esc).join(', ')}.</p>` : ''}`;
   }
@@ -674,7 +693,7 @@
         <label class="fu-when">on<input type="date" id="fuWhen" value="${new Date().toISOString().slice(0, 10)}" max="${new Date().toISOString().slice(0, 10)}"></label>
       </div>
       <p class="msg" id="fuMsg" role="status"></p>
-      ${fu.length ? `<ul class="timeline" style="margin-top:10px">${fu.map(f => `<li style="--c:#1f6fa8">Follow-up · ${esc({ email: 'Email', linkedin: 'LinkedIn', call: 'Call' }[f.channel] || f.channel)}${f.to ? ' · ' + esc(f.to) : ''}<span>${fmtDate(f.at)}</span></li>`).join('')}</ul>` : ''}`;
+      ${fu.length ? `<ul class="timeline" style="margin-top:10px">${fu.map(f => `<li style="--c:#2b45e8">Follow-up · ${esc({ email: 'Email', linkedin: 'LinkedIn', call: 'Call' }[f.channel] || f.channel)}${f.to ? ' · ' + esc(f.to) : ''}<span>${fmtDate(f.at)}</span></li>`).join('')}</ul>` : ''}`;
 
     const saveContacts = async list => { a.contacts = list; await S.updateApp(a.id, { contacts: list }); apps = await S.getApps(); renderFollowUp(a); };
     box.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => saveContacts(contacts.filter((_, i) => i !== +b.dataset.rm)));
@@ -777,7 +796,7 @@
         <div class="panel"><div class="row-between"><h2>Job description</h2><button class="btn small" id="dReanalyze">Re-analyse</button></div>
           <textarea id="dDesc" rows="8" placeholder="Paste the job ad here if it was not captured automatically">${esc(a.description)}</textarea>
         </div>
-        ${!isNew ? `<div class="panel"><h2>History</h2><ul class="timeline">${(a.history || []).map(h => `<li style="--c:${A.statusColor(h.status)}">${esc(A.statusLabel(h.status))}<span>${fmtDate(h.at)}</span></li>`).join('')}</ul></div>` : ''}
+        ${!isNew ? `<div class="panel"><h2>History</h2><ul class="timeline">${(a.history || []).map(h => `<li style="--c:${h.status ? A.statusColor(h.status) : '#9aa1bd'}${h.undone ? ';opacity:.45;text-decoration:line-through' : ''}">${esc(h.status ? A.statusLabel(h.status) : EV_LABEL[h.type] || h.type)}<span>${fmtDate(h.at)}${h.by && h.by !== 'me' ? ' · ' + esc(BY_LABEL[h.by] || h.by) : ''}</span>${h.id && !h.undone ? ` <button class="btn small" data-undo-ev="${esc(h.id)}" style="margin-left:6px">Undo</button>` : ''}</li>`).join('')}</ul></div>` : ''}
       </div>
       <div class="dr-foot">
         <div class="btns">${!isNew ? '<button class="btn danger" id="dDelete">Delete</button>' : ''}${!isNew && S.everReached(a, A.OFFER) ? '<button class="btn" id="dOffer">Compare offers</button>' : ''}</div>
@@ -801,6 +820,10 @@
     $('#dStatus').addEventListener('change', showOutcome); showOutcome();
     const close = () => { d.hidden = true; $('#scrim').hidden = true; current = null; if (location.hash.startsWith('#app=')) history.replaceState(null, '', '#apps'); };
     d.querySelector('.x').onclick = close; $('#dCancel').onclick = close; $('#scrim').onclick = close;
+    d.querySelectorAll('[data-undo-ev]').forEach(b => b.onclick = async () => {
+      const upd = await S.undoEvent(a.id, b.dataset.undoEv);
+      if (upd) { undoToast('Undone'); openDrawer(upd, opts); }
+    });
     d.onkeydown = e => { if (e.key === 'Escape') close(); };
 
     const collect = () => {
@@ -1351,6 +1374,17 @@
     gsMsg(r.ok ? r.msg : r.error, r.ok);
   };
   chrome.storage.onChanged.addListener(ch => { if (ch.syncState) renderSyncState(); });
+  // Phone app: a link with the sheet address and token after #, so it never reaches a server
+  S.get('phoneUrl').then(({ phoneUrl }) => { $('#phoneUrl').value = phoneUrl || 'https://ezzeto.github.io/job-tracker/'; });
+  $('#phoneUrl').addEventListener('change', () => S.set({ phoneUrl: $('#phoneUrl').value.trim() }));
+  $('#phoneCopy').onclick = async () => {
+    const cfg = readCfg(), base = $('#phoneUrl').value.trim();
+    if (!cfg.url || !cfg.token) { $('#phoneMsg').textContent = 'Connect the Google Sheet above first.'; return; }
+    if (!/^https:\/\//.test(base)) { $('#phoneMsg').textContent = 'Enter the phone app address (https://…).'; return; }
+    const code = btoa(unescape(encodeURIComponent(JSON.stringify({ u: cfg.url, t: cfg.token })))).replace(/\+/g, '-').replace(/\//g, '_');
+    const link = base.replace(/#.*$/, '').replace(/\/?$/, '/') + '#connect=' + code;
+    try { await navigator.clipboard.writeText(link); $('#phoneMsg').textContent = 'Copied. Open it on your phone.'; } catch (e) { $('#phoneMsg').textContent = link; }
+  };
   renderSheetCfg();
   (async () => { const c = await JT_Sync_cfg(); if (c.url && c.token && c.auto !== false) chrome.runtime.sendMessage({ type: 'syncNow' }); })();
 
@@ -1452,10 +1486,14 @@
       const incoming = data.apps.filter(a => a && a.id && !ids.has(a.id));
       if (data.profile) JT_Legacy.migrateProfile(data.profile); // backups from versions before 2.0
       incoming.forEach(a => JT_Legacy.migrateApp(a, A, data.profile || profile));
-      const merged = cur.concat(incoming);
-      await S.set({ apps: merged, counter: Math.max(data.counter || 0, (await S.get('counter')).counter || 0) });
-      if (data.profile) await S.saveProfile(data.profile);
-      $('#dataMsg').textContent = `Restored: ${merged.length - cur.length} applications added.`;
+      // Older backups (schema 1) are brought up to date together with what is already here,
+      // so a link saved in both becomes one record; a copy of the current data is kept first
+      const st = await S.get(['counter', 'pendingDeletes', 'backups']);
+      await S.set({ backups: [{ at: new Date().toISOString(), reason: 'before restore', apps: cur, profile, counter: st.counter }, ...(st.backups || [])].slice(0, 3) });
+      const r = JT_Migrate.migrateV2({ apps: cur.concat(incoming), profile: data.profile || profile, counter: Math.max(data.counter || 0, st.counter || 0), pendingDeletes: st.pendingDeletes });
+      await S.set({ apps: r.apps, counter: r.counter, pendingDeletes: r.pendingDeletes, schema: r.schema });
+      if (data.profile) await S.saveProfile(r.profile);
+      $('#dataMsg').textContent = `Restored: ${r.apps.length - cur.length} applications added · ${r.report.merged.length} duplicates merged.`;
     } catch (err) {
       $('#dataMsg').textContent = 'This file can\'t be used: ' + err.message + '. Choose a JSON file saved with Download backup.';
     }

@@ -146,6 +146,21 @@
     const site = E.siteFor(location.hostname);
     const scope = findScope(originEl, site);
     const needFetch = ['reed', 'totaljobs', 'cvlibrary'].includes(site.name) && !isJobPage(site);
+    // Sites with strict bot protection: read the open drawer or the ad seen just before, never fetch
+    if (needFetch && site.noFetch) {
+      if (scope) return E.parse(scope, document, site, location.href, { useLd: false, fallbackText: E.blockText(scope) });
+      const prev = await E.recentJob(location.hostname).catch(() => null);
+      const link = originEl && findJobLink(originEl, null, site);
+      // Apply pressed on a result card: the card is the job, unless it is the ad seen just before
+      if (link && !(prev && prev.url && S.normUrl(prev.url) === S.normUrl(link))) {
+        let card = originEl;
+        for (let i = 0; card && i < 8 && !(card.querySelector && card.querySelector('a[href]') && txt(card).length > 80); i++) card = card.parentElement;
+        const text = card ? E.blockText(card) : '';
+        const title = (text.split('\n').find(l => l.trim().length > 3) || '').trim();
+        return { title, company: (E.linesAfterTitle(text, title)[0] || ''), location: '', description: text, url: S.cleanUrl(link), platform: S.platformFromUrl(link) };
+      }
+      return prev;
+    }
     if (needFetch) {
       const link = paneJobLink(originEl, site) || findJobLink(originEl, scope, site);
       if (link) {
@@ -205,9 +220,14 @@
   }
 
   async function buildRecord(originEl, how) {
-    const job = await extractJob(originEl);
+    let job = await extractJob(originEl);
     if (!job) return null;
     const Q = globalThis.JT_Quality;
+    // An application form instead of an ad: use the ad opened on this site in the last 45 minutes
+    if (Q && (Q.looksLikeApplicationForm(job.description || '') || ((!job.title || Q.isJunkTitle(job.title)) && /apply|application/i.test(location.pathname)))) {
+      const prev = await E.recentJob(location.hostname).catch(() => null);
+      if (prev) job = { ...job, ...prev, contacts: E.mergeContacts(prev.contacts || [], job.contacts || []) };
+    }
     // A search heading or form title instead of the job title: look for the real one in the text
     if (Q && (!job.title || Q.isJunkTitle(job.title))) {
       const raw = job.description || '';
@@ -427,14 +447,14 @@
   const toolsHtml = c => `<div class="tools">${c.matched.map(t => `<span class="t s">${esc(t)}</span>`).join('')}${c.basic.map(t => `<span class="t b">${esc(t)}</span>`).join('')}${c.missing.map(t => `<span class="t m">${esc(t)}</span>`).join('')}</div>`;
 
   const PL_ICON = { ok: ['✓', '#23905a'], warn: ['!', '#b47a12'], fail: ['✕', '#c0463b'], unknown: ['?', '#7a8794'], info: ['i', '#1f6fa8'] };
-  const PL_HEAD = { ok: ['Fits your placement rules', '#1d6b40'], warn: ['Placement rules: check with the employer', '#7a5510'], fail: ['Breaks your placement rules', '#8f2f26'] };
+  const PL_HEAD = { ok: ['Fits your placement rules', '#1d6b40'], warn: ['Placement rules: check with the employer', '#7a5510'], unknown: ['Placement rules: the ad does not say, ask', '#5a6b7d'], fail: ['Breaks your placement rules', '#8f2f26'] };
   const placementHtml = (pl, compact) => {
     if (!pl) return '';
     const items = compact ? pl.items.filter(i => i.state !== 'ok') : pl.items;
     return `<div class="ap"><div class="v" style="color:${PL_HEAD[pl.verdict][1]}">${PL_HEAD[pl.verdict][0]}</div><ul>${items.map(i => `<li title="${esc(i.label)}"><i style="color:${PL_ICON[i.state][1]}">${PL_ICON[i.state][0]}</i><span><b>${esc(i.label.replace(/\s*\(.*\)/, ''))}:</b> ${esc(i.text)}</span></li>`).join('')}</ul></div>`;
   };
   const atsHtml = m => m ? `<div class="note" style="margin-top:6px"><b>ATS match with your CV: ${m.score}%</b>${m.addable.length ? `. You have these but your CV doesn't say so: ${m.addable.map(esc).join(', ')}` : ''}${m.missing.length ? `. Not in your CV or skills: ${m.missing.slice(0, 5).map(esc).join(', ')}` : ''}</div>` : '';
-  const plMark = pl => pl ? ({ ok: ' · rules ✓', warn: ' · rules ?', fail: ' · rules ✕' })[pl.verdict] : '';
+  const plMark = pl => pl ? ({ ok: ' · rules ✓', warn: ' · rules !', unknown: ' · rules ?', fail: ' · rules ✕' })[pl.verdict] : '';
 
   let previewSig = '', previewRec = null, previewHidden = false;
 
@@ -528,6 +548,7 @@
       if (!force && (profile.showPreview === false || previewHidden)) { removeBadge(); return; }
       const rec = await buildRecord();
       if (!looksLikeJobPage(rec)) { removeBadge(); previewSig = ''; return force ? null : undefined; }
+      E.rememberJob(location.hostname, rec);
       const sig = rec.title + '|' + rec.company + '|' + Math.round(rec.description.length / 200);
       let existing = await S.findByUrl(rec.url), elsewhere = null;
       if (!existing) { const s = await S.findSameJob(rec); if (s) { existing = s.app; elsewhere = s; } }

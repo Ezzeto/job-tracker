@@ -127,3 +127,12 @@ test('checkPlacement reads month ranges, "(14 weeks)" and technical duties writt
   assert.notEqual(r.verdict, 'fail');
   assert.equal(A.parsePlacementRules('Minimum length 12 weeks.').minWeeks, 12);
 });
+
+test('placement rules the ad does not mention are "not stated", not a warning', () => {
+  const { A } = require('./helpers/env');
+  const p = JSON.parse(JSON.stringify(A.DEFAULT_PROFILE));
+  p.areas = ['London'];
+  p.intern.placement = { ...p.intern.placement, start: '2027-01-25', end: '2027-05-28', minHours: 30, maxHours: 40, paidPreferred: true };
+  const an = A.analyze({ title: 'Software Engineering Intern', company: 'Acme', location: 'London', description: '', track: 'intern' }, p, { track: 'intern' });
+  if (an.placement) assert.notEqual(an.placement.verdict, 'warn');
+});

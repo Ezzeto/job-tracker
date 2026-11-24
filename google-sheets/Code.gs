@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 12; // 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 13; // 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -16,7 +16,7 @@ const COLS = [
   ['url', 'Link'], ['updated', '_updated'], ['benefits', 'Benefits'], ['contacts', 'Contacts'], ['followup', 'Follow-up'],
   ['track', 'Type'], ['placement', 'Placement rules'], ['verdict', 'Verdict'],
   ['method', 'Applied via'], ['cover', 'Cover letter'], ['cv', 'CV sent'], ['adAge', 'Ad age (days)'], ['applicants', 'Applicants'],
-  ['rejDays', 'Days to rejection'], ['outcome', 'Why rejected'], ['reqs', 'Ad demands'],
+  ['rejDays', 'Days to rejection'], ['outcome', 'Why rejected'], ['reqs', 'Ad demands'], ['description', 'Job ad'],
 ];
 const C = {}; COLS.forEach(([k], i) => { C[k] = i + 1; });
 // [status, status cell background, text colour, light tint for the whole row]
@@ -190,7 +190,7 @@ function formatSheet_(sh) {
   sh.setRowHeight(1, 36);
   sh.setFrozenRows(1);
   sh.setFrozenColumns(C.title);
-  sh.hideColumns(C.id); sh.hideColumns(C.updated);
+  sh.hideColumns(C.id); sh.hideColumns(C.updated); sh.hideColumns(C.description);
 
   // Text never stretches a row: long values are clipped and show in full when you click the cell
   body.setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP).setVerticalAlignment('middle').setFontSize(10);
@@ -228,7 +228,7 @@ function formatSheet_(sh) {
   }
   for (let c = 1; c <= n; c++) { while (sh.getColumnGroupDepth(c) > 0) sh.getRange(1, c).shiftColumnGroupDepth(-1); }
   sh.showColumns(C.ticket, n - C.ticket + 1);
-  sh.hideColumns(C.id); sh.hideColumns(C.updated);
+  sh.hideColumns(C.id); sh.hideColumns(C.updated); sh.hideColumns(C.description);
   GROUPS.forEach(([a, b]) => {
     if (sh.getColumnGroupDepth(C[a]) === 0) sh.getRange(1, C[a], 1, C[b] - C[a] + 1).shiftColumnGroupDepth(1);
     const g = sh.getColumnGroup(C[a], 1);
@@ -410,6 +410,8 @@ function doGet(e) {
   const ss = SpreadsheetApp.getActive();
   const sh = ensureSheet_();
   if (p.action === 'ping') return json_({ ok: true, version: SCRIPT_VERSION, name: ss.getName(), rows: Math.max(0, sh.getLastRow() - 1) });
+  if (p.action === 'fetchJob') return json_(fetchJob_(p.url));
+  if (p.action === 'profile') return json_({ ok: true, profile: readProfile_() });
 
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
@@ -439,6 +441,39 @@ function doGet(e) {
   } finally { lock.releaseLock(); }
 }
 
+// ---------- Phone app (3.7) ----------
+// Job boards the phone app may ask this script to read. The request comes from Google's servers,
+// not from your browser, so a site's bot protection cannot block your own browser for it.
+const JOB_HOSTS = /(^|\.)(linkedin\.com|indeed\.(com|co\.uk)|reed\.co\.uk|totaljobs\.com|cwjobs\.co\.uk|cv-library\.co\.uk|it-jobs\.co\.uk|jobs\.ac\.uk|adzuna\.co\.uk|glassdoor\.(com|co\.uk)|monster\.co\.uk|ziprecruiter\.co\.uk|brightnetwork\.co\.uk|gradcracker\.com|prospects\.ac\.uk|targetjobs\.co\.uk|findajob\.dwp\.gov\.uk|tes\.com|nhsjobs\.com|jobs\.nhs\.uk|myworkdayjobs\.com|greenhouse\.io|lever\.co|ashbyhq\.com|smartrecruiters\.com|workable\.com|teamtailor\.com|bamboohr\.com|recruitee\.com|eteach\.com|jobsgopublic\.com)$/i;
+function fetchJob_(url) {
+  let u;
+  try { u = String(url || '').trim(); if (!/^https:\/\//i.test(u)) throw new Error(); } catch (e) { return { ok: false, error: 'Not a link' }; }
+  const host = u.replace(/^https:\/\/([^/?#]+).*/i, '$1').toLowerCase();
+  if (!JOB_HOSTS.test(host)) return { ok: false, error: 'This site is not on the list of job boards the script reads. Paste the ad text instead.' };
+  // LinkedIn shows a logged-out copy of each job at this address
+  const li = u.match(/linkedin\.com\/.*?(?:currentJobId=|\/jobs\/view\/(?:[^/?#]*-)?)(\d{6,})/i);
+  const fetchUrl = li ? 'https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/' + li[1] : u;
+  try {
+    const res = UrlFetchApp.fetch(fetchUrl, { muteHttpExceptions: true, followRedirects: true, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36', 'Accept-Language': 'en-GB,en;q=0.9' } });
+    const code = res.getResponseCode();
+    if (code >= 400) return { ok: false, status: code, error: 'The site answered ' + code + '. Paste the ad text instead.' };
+    return { ok: true, status: code, url: li ? 'https://www.linkedin.com/jobs/view/' + li[1] + '/' : u, html: res.getContentText().slice(0, 900000) };
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+}
+// Your skills and settings, sent by the extension, so the phone scores jobs the same way
+const PROFILE_SHEET = '_profile';
+function readProfile_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(PROFILE_SHEET);
+  if (!sh) return null;
+  try { return JSON.parse(sh.getRange(1, 1).getValue() || 'null'); } catch (e) { return null; }
+}
+function saveProfile_(profile) {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(PROFILE_SHEET);
+  if (!sh) { sh = ss.insertSheet(PROFILE_SHEET); sh.hideSheet(); }
+  sh.getRange(1, 1).setValue(JSON.stringify(profile).slice(0, 49000));
+}
+
 /** POST: the extension sends new or changed applications and the IDs it deleted. */
 function doPost(e) {
   let body;
@@ -456,6 +491,7 @@ function doPost(e) {
       if (k === 'appliedAt') return v ? new Date(v) : '';
       // Only a real yyyy-mm-dd date: ',' or '1970-01-01' used to land in the sheet as 1970 or a broken cell
       if (k === 'nextDate') { const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); if (!m || +m[1] < 2000) return ''; return new Date(+m[1], +m[2] - 1, +m[3]); }
+      if (k === 'description') return String(v || '').slice(0, 40000);
       if (k === 'chance' || k === 'adAge' || k === 'applicants' || k === 'rejDays') return v === '' || v == null ? '' : Number(v);
       return v == null ? '' : v;
     });
@@ -475,8 +511,25 @@ function doPost(e) {
     }
     touched.forEach(r => { sh.setRowHeightsForced(r, 1, ROW_H); decorateRows_(sh, r, 1); });
 
+    // Quick changes from the phone: only the given cells change, and the row is marked as edited now
+    let patched = 0;
+    (body.patches || []).forEach(pt => {
+      const r = rowOf[pt.id];
+      if (!r) return;
+      ['status', 'notes', 'nextDate'].forEach(k => {
+        if (pt[k] === undefined) return;
+        let v = pt[k];
+        if (k === 'nextDate') { const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); v = m && +m[1] >= 2000 ? new Date(+m[1], +m[2] - 1, +m[3]) : ''; }
+        sh.getRange(r, C[k]).setValue(v);
+      });
+      sh.getRange(r, C.updated).setValue(Date.now());
+      decorateRows_(sh, r, 1);
+      patched++;
+    });
+    if (body.profile && typeof body.profile === 'object') saveProfile_(body.profile);
+
     const del = (body.deletes || []).map(id => rowOf[id]).filter(Boolean).sort((x, y) => y - x);
     del.forEach(r => sh.deleteRow(r));
-    return json_({ ok: true, version: SCRIPT_VERSION, updated, added: appendRows.length, deleted: del.length });
+    return json_({ ok: true, version: SCRIPT_VERSION, updated, patched, added: appendRows.length, deleted: del.length });
   } finally { lock.releaseLock(); }
 }
