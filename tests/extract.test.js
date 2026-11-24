@@ -63,10 +63,10 @@ test('a site that answers 403 is left alone for hours instead of being retried',
   const realFetch = globalThis.fetch;
   globalThis.fetch = async () => { calls++; return { ok: false, status: 403, text: async () => 'Access Denied' }; };
   try {
-    await assert.rejects(E.fetchAndParse('https://www.totaljobs.com/job/x-job1'), e => e.status === 403);
-    await assert.rejects(E.fetchAndParse('https://www.totaljobs.com/job/y-job2'), e => e.status === 'cooldown');
+    await assert.rejects(E.fetchAndParse('https://www.reed.co.uk/jobs/x/1'), e => e.status === 403);
+    await assert.rejects(E.fetchAndParse('https://www.reed.co.uk/jobs/y/2'), e => e.status === 'cooldown');
     assert.equal(calls, 1, 'the second request never reached the site');
-    assert.ok(await E.blockedUntil('www.totaljobs.com') > Date.now() + 5 * 3600e3);
+    assert.ok(await E.blockedUntil('www.reed.co.uk') > Date.now() + 5 * 3600e3);
   } finally { globalThis.fetch = realFetch; }
 });
 
@@ -79,4 +79,31 @@ test('cleanContacts drops junk names and adjustment mailboxes and strips LinkedI
     { type: 'name', value: 'Sruthi Soman', name: 'Sruthi Soman' },
   ]);
   assert.deepEqual(out.map(c => c.name), ['Robert James Hunt', 'Marc Martínez i Daunis', 'Sruthi Soman']);
+});
+
+test('Totaljobs and CWJobs are never fetched in the background (bot protection blocks the browser)', async () => {
+  assert.equal(E.siteFor('www.totaljobs.com').noFetch, true);
+  assert.equal(E.siteFor('www.cwjobs.co.uk').noFetch, true);
+  assert.ok(!E.siteFor('www.reed.co.uk').noFetch);
+  let called = false;
+  const prev = globalThis.fetch;
+  globalThis.fetch = async () => { called = true; return { ok: true, text: async () => '' }; };
+  try {
+    await assert.rejects(E.fetchAndParse('https://www.totaljobs.com/job/it-support/acme-job123456'), e => e.status === 'nofetch');
+    assert.equal(called, false);
+  } finally { globalThis.fetch = prev; }
+});
+
+test('the last ad seen on a site stands in for its application form, for 45 minutes', () => {
+  const now = Date.parse('2026-11-24T12:00:00Z');
+  const job = { title: 'IT Support Analyst', company: 'Acme', description: 'x'.repeat(400), url: 'https://www.totaljobs.com/job/a-job123456', junk: 1 };
+  const list = E.withRecent([], 'www.totaljobs.com', job, now - 10 * 60e3);
+  assert.equal(list[0].site, 'totaljobs');
+  assert.equal(list[0].job.junk, undefined);
+  assert.equal(E.pickRecent(list, 'www.cwjobs.co.uk', now).title, 'IT Support Analyst'); // same platform
+  assert.equal(E.pickRecent(list, 'www.reed.co.uk', now), null);
+  assert.equal(E.pickRecent(list, 'www.totaljobs.com', now + 40 * 60e3), null);
+  const two = E.withRecent(list, 'www.totaljobs.com', { ...job, title: 'Service Desk Analyst' }, now);
+  assert.equal(two.length, 1);
+  assert.equal(E.pickRecent(two, 'www.totaljobs.com', now).title, 'Service Desk Analyst');
 });

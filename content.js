@@ -146,6 +146,21 @@
     const site = E.siteFor(location.hostname);
     const scope = findScope(originEl, site);
     const needFetch = ['reed', 'totaljobs', 'cvlibrary'].includes(site.name) && !isJobPage(site);
+    // Sites with strict bot protection: read the open drawer or the ad seen just before, never fetch
+    if (needFetch && site.noFetch) {
+      if (scope) return E.parse(scope, document, site, location.href, { useLd: false, fallbackText: E.blockText(scope) });
+      const prev = await E.recentJob(location.hostname).catch(() => null);
+      const link = originEl && findJobLink(originEl, null, site);
+      // Apply pressed on a result card: the card is the job, unless it is the ad seen just before
+      if (link && !(prev && prev.url && S.normUrl(prev.url) === S.normUrl(link))) {
+        let card = originEl;
+        for (let i = 0; card && i < 8 && !(card.querySelector && card.querySelector('a[href]') && txt(card).length > 80); i++) card = card.parentElement;
+        const text = card ? E.blockText(card) : '';
+        const title = (text.split('\n').find(l => l.trim().length > 3) || '').trim();
+        return { title, company: (E.linesAfterTitle(text, title)[0] || ''), location: '', description: text, url: S.cleanUrl(link), platform: S.platformFromUrl(link) };
+      }
+      return prev;
+    }
     if (needFetch) {
       const link = paneJobLink(originEl, site) || findJobLink(originEl, scope, site);
       if (link) {
@@ -205,9 +220,14 @@
   }
 
   async function buildRecord(originEl, how) {
-    const job = await extractJob(originEl);
+    let job = await extractJob(originEl);
     if (!job) return null;
     const Q = globalThis.JT_Quality;
+    // An application form instead of an ad: use the ad opened on this site in the last 45 minutes
+    if (Q && (Q.looksLikeApplicationForm(job.description || '') || ((!job.title || Q.isJunkTitle(job.title)) && /apply|application/i.test(location.pathname)))) {
+      const prev = await E.recentJob(location.hostname).catch(() => null);
+      if (prev) job = { ...job, ...prev, contacts: E.mergeContacts(prev.contacts || [], job.contacts || []) };
+    }
     // A search heading or form title instead of the job title: look for the real one in the text
     if (Q && (!job.title || Q.isJunkTitle(job.title))) {
       const raw = job.description || '';
@@ -528,6 +548,7 @@
       if (!force && (profile.showPreview === false || previewHidden)) { removeBadge(); return; }
       const rec = await buildRecord();
       if (!looksLikeJobPage(rec)) { removeBadge(); previewSig = ''; return force ? null : undefined; }
+      E.rememberJob(location.hostname, rec);
       const sig = rec.title + '|' + rec.company + '|' + Math.round(rec.description.length / 200);
       let existing = await S.findByUrl(rec.url), elsewhere = null;
       if (!existing) { const s = await S.findSameJob(rec); if (s) { existing = s.app; elsewhere = s; } }
