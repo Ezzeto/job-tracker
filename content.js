@@ -447,14 +447,14 @@
   const toolsHtml = c => `<div class="tools">${c.matched.map(t => `<span class="t s">${esc(t)}</span>`).join('')}${c.basic.map(t => `<span class="t b">${esc(t)}</span>`).join('')}${c.missing.map(t => `<span class="t m">${esc(t)}</span>`).join('')}</div>`;
 
   const PL_ICON = { ok: ['✓', '#23905a'], warn: ['!', '#b47a12'], fail: ['✕', '#c0463b'], unknown: ['?', '#7a8794'], info: ['i', '#1f6fa8'] };
-  const PL_HEAD = { ok: ['Fits your placement rules', '#1d6b40'], warn: ['Placement rules: check with the employer', '#7a5510'], fail: ['Breaks your placement rules', '#8f2f26'] };
+  const PL_HEAD = { ok: ['Fits your placement rules', '#1d6b40'], warn: ['Placement rules: check with the employer', '#7a5510'], unknown: ['Placement rules: the ad does not say, ask', '#5a6b7d'], fail: ['Breaks your placement rules', '#8f2f26'] };
   const placementHtml = (pl, compact) => {
     if (!pl) return '';
     const items = compact ? pl.items.filter(i => i.state !== 'ok') : pl.items;
     return `<div class="ap"><div class="v" style="color:${PL_HEAD[pl.verdict][1]}">${PL_HEAD[pl.verdict][0]}</div><ul>${items.map(i => `<li title="${esc(i.label)}"><i style="color:${PL_ICON[i.state][1]}">${PL_ICON[i.state][0]}</i><span><b>${esc(i.label.replace(/\s*\(.*\)/, ''))}:</b> ${esc(i.text)}</span></li>`).join('')}</ul></div>`;
   };
   const atsHtml = m => m ? `<div class="note" style="margin-top:6px"><b>ATS match with your CV: ${m.score}%</b>${m.addable.length ? `. You have these but your CV doesn't say so: ${m.addable.map(esc).join(', ')}` : ''}${m.missing.length ? `. Not in your CV or skills: ${m.missing.slice(0, 5).map(esc).join(', ')}` : ''}</div>` : '';
-  const plMark = pl => pl ? ({ ok: ' · rules ✓', warn: ' · rules ?', fail: ' · rules ✕' })[pl.verdict] : '';
+  const plMark = pl => pl ? ({ ok: ' · rules ✓', warn: ' · rules !', unknown: ' · rules ?', fail: ' · rules ✕' })[pl.verdict] : '';
 
   let previewSig = '', previewRec = null, previewHidden = false;
 

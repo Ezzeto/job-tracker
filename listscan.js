@@ -197,7 +197,7 @@
       if (entry.job && entry.elsewhere === undefined) { const s = S.sameJobIn({ ...entry.job, url: key }, savedApps); entry.elsewhere = s ? s.app.platform || 'another site' : null; }
       const applied = appliedKeys.has(S.normUrl(key)) || !!entry.elsewhere;
       if (entry.res) rated++;
-      const hide = (res.verdict !== 'incomplete' && res.score < cfg.min) || (cfg.hideSkip && res.verdict === 'skip') || (cfg.hideApplied && applied) || (cfg.hideOutArea && res.outArea) || (cfg.hideSenior && res.senior)
+      const hide = (res.verdict !== 'incomplete' && !res.approx && res.score < cfg.min) || (cfg.hideSkip && res.verdict === 'skip') || (cfg.hideApplied && applied) || (cfg.hideOutArea && res.outArea) || (cfg.hideSenior && res.senior)
         || (cfg.onlyIntern && !res.intern) || (cfg.hidePlacementFail && res.intern && res.rules === 'fail');
       decorate(c, res, !entry.res, applied, hide, entry.elsewhere);
       if (!hide) shown++;
@@ -223,7 +223,7 @@
       else { if (getComputedStyle(el).position === 'static') el.style.position = 'relative'; b.dataset.abs = '1'; el.appendChild(b); }
     }
     const VL = { apply: 'Apply', tailor: 'Tailor', ask: 'Check', skip: 'Skip', incomplete: '?' };
-    const txt = (res.verdict === 'incomplete' ? '?' : `${approx ? '≈' : ''}${res.score}%`) + (res.verdict && res.verdict !== 'incomplete' ? ' · ' + VL[res.verdict] : '') + (res.intern ? (res.rules === 'ok' ? ' · rules ✓' : res.rules === 'fail' ? ' · rules ✕' : res.rules ? ' · rules ?' : ' · intern') : '') + (applied ? ' ✓' : '');
+    const txt = (res.verdict === 'incomplete' ? '?' : `${approx ? '≈' : ''}${res.score}%`) + (res.verdict && res.verdict !== 'incomplete' ? ' · ' + VL[res.verdict] : '') + (res.intern ? (res.rules === 'ok' ? ' · rules ✓' : res.rules === 'fail' ? ' · rules ✕' : res.rules === 'warn' ? ' · rules !' : res.rules ? ' · rules ?' : ' · intern') : '') + (applied ? ' ✓' : '');
     const VC = { apply: '#23905a', tailor: '#2f7fb5', ask: '#b47a12', skip: '#c0463b', incomplete: '#7a8794' };
     const bg = applied ? '#1d3b53' : res.verdict ? VC[res.verdict] : color(res.score);
     const title = (approx ? 'Estimate from the card text. Open the job for the full score.\n' : '') + (applied ? (elsewhere ? `Already applied for this job via ${elsewhere}\n` : 'Already in your tracker\n') : '') + (res.intern ? 'Internship\n' : '') + (res.blocks && res.blocks.length ? res.blocks.map(x => '✕ ' + x).join('\n') + '\n' : '') + (res.asks && res.asks.length ? res.asks.map(x => '! ' + x).join('\n') + '\n' : '') + res.why + (res.missing && res.missing.length ? `\nMissing: ${res.missing.join(', ')}` : '') + (res.rulesWhy ? `\n\nPlacement rules:\n${res.rulesWhy}` : '');

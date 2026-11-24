@@ -166,6 +166,7 @@ a.btn.primary{color:#fff}
 .trk{display:inline-block;font-size:10.5px;font-weight:650;background:#efe6fb;color:#4b2a8a;border-radius:8px;padding:1px 7px;margin-right:6px;vertical-align:1px}
 .apb{display:inline-block;font-size:11.5px;font-weight:650;border-radius:10px;padding:2px 8px;white-space:nowrap}
 .ap-ok{background:var(--good-soft);color:#1d6b40}.ap-warn{background:var(--mid-soft);color:#7a5510}.ap-fail{background:var(--bad-soft);color:#8f2f26}
+.ap-unknown{background:var(--line-soft,#eef2f6);color:#5a6b7d}
 .aplist{list-style:none;margin:0;padding:0;font-size:13px}
 .aplist li{display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed var(--line)}
 .aplist li:last-child{border-bottom:0}

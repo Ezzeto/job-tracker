@@ -107,3 +107,9 @@ test('the last ad seen on a site stands in for its application form, for 45 minu
   assert.equal(two.length, 1);
   assert.equal(E.pickRecent(two, 'www.totaljobs.com', now).title, 'Service Desk Analyst');
 });
+
+test('titles from tab names lose the notification count and the site name', () => {
+  assert.deepEqual(E.cleanTitleCompany('(3) IT Support Analyst | Acme Ltd | LinkedIn', ''), { title: 'IT Support Analyst', company: 'Acme Ltd' });
+  assert.deepEqual(E.cleanTitleCompany('IT Support Analyst – Acme Ltd – LinkedIn', ''), { title: 'IT Support Analyst', company: 'Acme Ltd' });
+  assert.deepEqual(E.cleanTitleCompany('Junior Dev - Front End', ''), { title: 'Junior Dev - Front End', company: '' });
+});

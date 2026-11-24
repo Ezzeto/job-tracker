@@ -1,5 +1,18 @@
 /* Job Tracker — background service worker */
-importScripts('lib/quality.js', 'lib/analyzer.js', 'lib/store.js', 'lib/legacy.js', 'lib/insights.js', 'lib/sync.js');
+importScripts('lib/quality.js', 'lib/analyzer.js', 'lib/store.js', 'lib/legacy.js', 'lib/insights.js', 'lib/sync.js', 'lib/recheck.js', 'lib/migrate.js');
+
+// Schema migration: a full copy of the data is kept in 'backups' (last 3) before anything changes,
+// and Data → Backups downloads it. Runs once per schema version, on install, update or start.
+async function migrateSchema() {
+  const got = await chrome.storage.local.get(['apps', 'profile', 'counter', 'pendingDeletes', 'schema', 'backups']);
+  if (!JT_Migrate.needsMigration(got.schema) || !Array.isArray(got.apps)) return null;
+  const backup = { at: new Date().toISOString(), reason: 'before schema ' + JT_Migrate.SCHEMA, version: chrome.runtime.getManifest().version, apps: got.apps, profile: got.profile, counter: got.counter };
+  await chrome.storage.local.set({ backups: [backup, ...(got.backups || [])].slice(0, 3) });
+  const r = JT_Migrate.migrateV2({ apps: got.apps, profile: got.profile, counter: got.counter, pendingDeletes: got.pendingDeletes, schema: got.schema });
+  await chrome.storage.local.set({ apps: r.apps, profile: r.profile || got.profile, counter: r.counter, pendingDeletes: r.pendingDeletes, schema: r.schema, lastMigration: { at: backup.at, ...r.report } });
+  return r.report;
+}
+
 
 async function openDashboard(hash) {
   const url = chrome.runtime.getURL('dashboard.html') + (hash || '');
@@ -23,7 +36,7 @@ async function updateBadge() {
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   const { profile } = await chrome.storage.local.get('profile');
   if (!profile) await chrome.storage.local.set({ profile: JT_Analyzer.DEFAULT_PROFILE });
-  if (reason === 'install') openDashboard('#settings');
+  if (reason === 'install') { await chrome.storage.local.set({ schema: JT_Migrate.SCHEMA }); openDashboard('#settings'); }
   if (reason === 'update') {
     // Shorten old links with ad parameters and migrate data saved by the Russian-language versions
     const p = await JT_Store.getProfile();
@@ -39,10 +52,11 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
       if (changed) { JT_Store.touch(a); n++; }
     });
     if (n) await JT_Store.saveApps(apps);
+    await migrateSchema();
   }
   updateBadge();
 });
-chrome.runtime.onStartup.addListener(() => { updateBadge(); autoSync(); markStale(); });
+chrome.runtime.onStartup.addListener(async () => { await migrateSchema(); updateBadge(); autoSync(); markStale(); });
 
 // Auto-sync: push a few seconds after a change, full sync every 10 minutes
 let pushTimer = null;
@@ -69,7 +83,7 @@ chrome.alarms.onAlarm.addListener(a => {
 async function markStale() {
   const p = await JT_Store.getProfile();
   const ids = JT_Insights.staleIds(await JT_Store.getApps(), Number(p.autoNoResponseDays) || 0);
-  for (const id of ids) await JT_Store.updateApp(id, { status: 'noresponse', outcome: { type: 'ghosted', auto: true, at: new Date().toISOString() } });
+  for (const id of ids) await JT_Store.updateApp(id, { status: 'noresponse', outcome: { type: 'ghosted', auto: true, at: new Date().toISOString() } }, { by: 'auto' });
   return ids.length;
 }
 
@@ -82,6 +96,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       .then(() => reply({ ok: true }));
     return true;
   }
+  if (msg && msg.type === 'undo') { JT_Store.undoEvent(msg.appId, msg.eventId).then(a => reply({ ok: !!a })); return true; }
   if (msg && msg.type === 'syncNow') { JT_Sync.syncNow().then(reply); return true; }
   if (msg && msg.type === 'markStale') { markStale().then(n => reply({ ok: true, n })); return true; }
   if (msg && msg.type === 'syncTest') { JT_Sync.test(msg.cfg).then(reply); return true; }

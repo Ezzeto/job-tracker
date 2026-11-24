@@ -34,8 +34,8 @@
   const skillsFor = t => t === 'intern' ? profile.intern.skills : profile.skills;
   let ovTrack = 'all', skTrack = 'job';
   const PL_ICON = { ok: ['✓', 'var(--good)'], warn: ['!', 'var(--mid)'], fail: ['✕', 'var(--bad)'], unknown: ['?', 'var(--muted)'], info: ['i', 'var(--blue)'] };
-  const PL_HEAD = { ok: 'Fits your placement rules', warn: 'Placement rules: check with the employer', fail: 'Breaks your placement rules' };
-  const plBadge = pl => pl ? `<span class="apb ap-${pl.verdict}" title="${esc(PL_HEAD[pl.verdict])}">rules ${({ ok: '✓', warn: '?', fail: '✕' })[pl.verdict]}</span>` : '';
+  const PL_HEAD = { ok: 'Fits your placement rules', warn: 'Placement rules: check with the employer', unknown: 'Placement rules: the ad does not say, ask', fail: 'Breaks your placement rules' };
+  const plBadge = pl => pl ? `<span class="apb ap-${pl.verdict}" title="${esc(PL_HEAD[pl.verdict])}">rules ${({ ok: '✓', warn: '!', unknown: '?', fail: '✕' })[pl.verdict]}</span>` : '';
   const daysTo = iso => Math.ceil((new Date(iso + 'T23:59:59') - Date.now()) / 864e5);
   const longDate = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
 
@@ -1452,10 +1452,14 @@
       const incoming = data.apps.filter(a => a && a.id && !ids.has(a.id));
       if (data.profile) JT_Legacy.migrateProfile(data.profile); // backups from versions before 2.0
       incoming.forEach(a => JT_Legacy.migrateApp(a, A, data.profile || profile));
-      const merged = cur.concat(incoming);
-      await S.set({ apps: merged, counter: Math.max(data.counter || 0, (await S.get('counter')).counter || 0) });
-      if (data.profile) await S.saveProfile(data.profile);
-      $('#dataMsg').textContent = `Restored: ${merged.length - cur.length} applications added.`;
+      // Older backups (schema 1) are brought up to date together with what is already here,
+      // so a link saved in both becomes one record; a copy of the current data is kept first
+      const st = await S.get(['counter', 'pendingDeletes', 'backups']);
+      await S.set({ backups: [{ at: new Date().toISOString(), reason: 'before restore', apps: cur, profile, counter: st.counter }, ...(st.backups || [])].slice(0, 3) });
+      const r = JT_Migrate.migrateV2({ apps: cur.concat(incoming), profile: data.profile || profile, counter: Math.max(data.counter || 0, st.counter || 0), pendingDeletes: st.pendingDeletes });
+      await S.set({ apps: r.apps, counter: r.counter, pendingDeletes: r.pendingDeletes, schema: r.schema });
+      if (data.profile) await S.saveProfile(r.profile);
+      $('#dataMsg').textContent = `Restored: ${r.apps.length - cur.length} applications added · ${r.report.merged.length} duplicates merged.`;
     } catch (err) {
       $('#dataMsg').textContent = 'This file can\'t be used: ' + err.message + '. Choose a JSON file saved with Download backup.';
     }
