@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 13; // 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 14; // 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -73,6 +73,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('Job Tracker')
     .addItem('Tidy up the sheet', 'setup')
     .addItem('Show sync token', 'showToken')
+    .addItem('Save a copy to Drive now', 'snapshotNow')
     .addItem('Create a new sync token', 'resetToken')
     .addSeparator()
     .addItem('Expand all columns', 'expandAll')
@@ -474,6 +475,45 @@ function saveProfile_(profile) {
   sh.getRange(1, 1).setValue(JSON.stringify(profile).slice(0, 49000));
 }
 
+// ---------- Copy for the weekly summary (14) ----------
+// JobTracker/job-tracker-latest.json in your Drive: the applications without ad texts, contacts or
+// notes, so a scheduled Claude task can read the week without access to the sync token.
+const SNAPSHOT_FOLDER = 'JobTracker', SNAPSHOT_FILE = 'job-tracker-latest.json';
+const SNAPSHOT_KEYS = ['ticket', 'title', 'company', 'location', 'category', 'workTypes', 'salary', 'platform', 'appliedAt', 'status', 'chance', 'verdict', 'nextDate', 'followup', 'track', 'method', 'cover', 'cv', 'adAge', 'applicants', 'rejDays', 'outcome', 'reqs', 'missing', 'updated'];
+function writeSnapshot_() {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName(SHEET);
+  if (!sh || sh.getLastRow() < 2) return 0;
+  const tz = ss.getSpreadsheetTimeZone();
+  const vals = sh.getRange(2, 1, sh.getLastRow() - 1, COLS.length).getValues();
+  const apps = vals.filter(r => r[C.id - 1]).map(r => {
+    const o = {};
+    SNAPSHOT_KEYS.forEach(k => { let v = r[C[k] - 1]; if (v instanceof Date) v = Utilities.formatDate(v, tz, 'yyyy-MM-dd'); o[k] = v === '' ? null : v; });
+    return o;
+  });
+  const json = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), timeZone: tz, apps });
+  const it = DriveApp.getFoldersByName(SNAPSHOT_FOLDER);
+  const folder = it.hasNext() ? it.next() : DriveApp.createFolder(SNAPSHOT_FOLDER);
+  const files = folder.getFilesByName(SNAPSHOT_FILE);
+  if (files.hasNext()) files.next().setContent(json);
+  else folder.createFile(SNAPSHOT_FILE, json, MimeType.PLAIN_TEXT);
+  PropertiesService.getScriptProperties().setProperty('SNAPSHOT_AT', String(Date.now()));
+  return apps.length;
+}
+/** Menu, or run once in the editor: asks Google for Drive access and writes the copy. */
+function snapshotNow() {
+  const n = writeSnapshot_();
+  Logger.log('Saved ' + n + ' applications to ' + SNAPSHOT_FOLDER + '/' + SNAPSHOT_FILE);
+  try { SpreadsheetApp.getUi().alert('Saved ' + n + ' applications to Drive: ' + SNAPSHOT_FOLDER + '/' + SNAPSHOT_FILE); } catch (e) { /* run from the editor */ }
+}
+// After a sync, at most every 10 minutes; a missing Drive permission never breaks the sync
+function maybeSnapshot_() {
+  try {
+    const last = Number(PropertiesService.getScriptProperties().getProperty('SNAPSHOT_AT') || 0);
+    if (Date.now() - last > 10 * 60e3) writeSnapshot_();
+  } catch (e) { /* run snapshotNow once in the editor to allow Drive */ }
+}
+
 /** POST: the extension sends new or changed applications and the IDs it deleted. */
 function doPost(e) {
   let body;
@@ -530,6 +570,7 @@ function doPost(e) {
 
     const del = (body.deletes || []).map(id => rowOf[id]).filter(Boolean).sort((x, y) => y - x);
     del.forEach(r => sh.deleteRow(r));
+    if (updated || patched || appendRows.length || del.length) maybeSnapshot_();
     return json_({ ok: true, version: SCRIPT_VERSION, updated, patched, added: appendRows.length, deleted: del.length });
   } finally { lock.releaseLock(); }
 }
