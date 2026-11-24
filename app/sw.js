@@ -18,7 +18,12 @@ self.addEventListener('fetch', e => {
     e.respondWith(fetch(e.request).then(r => { const c = r.clone(); caches.open(CACHE).then(x => x.put('index.html', c)); return r; }).catch(() => caches.match('index.html')));
     return;
   }
-  // App files: answer from cache at once, refresh it in the background
+  // The app's own files: network first too (they are small), the cache only when offline
+  if (u.origin === location.origin) {
+    e.respondWith(fetch(e.request).then(r => { if (r.ok) { const c = r.clone(); caches.open(CACHE).then(x => x.put(e.request, c)); } return r; }).catch(() => caches.match(e.request, { ignoreSearch: true })));
+    return;
+  }
+  // Fonts: answer from cache at once, refresh it in the background
   e.respondWith(caches.open(CACHE).then(async c => {
     const hit = await c.match(e.request, { ignoreSearch: u.origin === location.origin });
     const net = fetch(e.request).then(r => { if (r.ok && (u.origin === location.origin || /fonts\.(googleapis|gstatic)\.com$/.test(u.hostname))) c.put(e.request, r.clone()); return r; }).catch(() => hit);
