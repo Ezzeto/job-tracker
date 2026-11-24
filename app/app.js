@@ -578,9 +578,9 @@
   } else if (LS.get('vault', null)) {
     st.lock = 'unlock'; st.pendingShare = shared;
     if (old) VAULT_KEYS.forEach(k => { try { localStorage.removeItem('jt.' + k); } catch (e) { /* ignore */ } });
-  } else if (st.pendingCfg || st.cfg) {
-    // Connected but no PIN yet: choose one before anything is stored
-    if (!st.pendingCfg) st.pendingCfg = st.cfg;
+  } else {
+    // First open on this phone: choose a PIN before anything is shown or stored
+    if (st.cfg && !st.pendingCfg) st.pendingCfg = st.cfg;
     st.lock = 'create'; st.pendingShare = shared;
   }
   render();
@@ -588,6 +588,12 @@
     if (shared) { st.input = shared; render(); analyze(shared); }
     if (st.cfg) refresh(true);
   }
-  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    // A new version takes over as soon as it is downloaded: reload once so it is used straight away
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
+    navigator.serviceWorker.register('sw.js').then(reg => reg.update()).catch(() => {});
+  }
   window.JT_App = { st, analyzeJob, readJob, setStatus, render, lockNow };
 })();
