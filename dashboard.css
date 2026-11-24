@@ -1,10 +1,12 @@
 :root{
-  --bg:#eef2f5; --panel:#fff; --ink:#1c2733; --muted:#5a6b7d; --line:#d6dee6; --soft:#f5f8fa;
-  --navy:#17324a; --navy2:#22455f; --blue:#1f6fa8; --blue-soft:#e3eef7;
-  --good:#23905a; --good-soft:#dcefe3; --mid:#b47a12; --mid-soft:#fbeccc; --bad:#c0463b; --bad-soft:#f7dcd9;
-  --r:8px;
-  --font:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
-  --mono:"Cascadia Mono",Consolas,"SF Mono",monospace;
+  /* 3.7 design: the same system as the phone app. Cool neutral ground, cobalt for action, coral for attention */
+  --bg:#f4f5f9; --panel:#fff; --ink:#0f1222; --muted:#646b85; --line:#e3e6ef; --soft:#f1f3f8;
+  --navy:#0f1222; --navy2:#1d2136; --blue:#2b45e8; --blue-soft:#e6eaff; --coral:#ff5a3c;
+  --good:#0f9d63; --good-soft:#dcf5ea; --mid:#c98200; --mid-soft:#fff1d6; --bad:#e0393e; --bad-soft:#ffe3e3;
+  --r:16px; --shadow:0 1px 2px rgba(15,18,34,.05),0 8px 24px rgba(15,18,34,.06);
+  --font:"Onest",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --display:"Unbounded","Onest",system-ui,sans-serif;
+  --mono:"JetBrains Mono","Cascadia Mono",Consolas,monospace;
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
@@ -314,3 +316,52 @@ a.fu-c.fu-link:hover{border-color:var(--blue)}
 .tpl textarea{width:100%;font:inherit;font-size:13.5px;line-height:1.5}
 .tpl label{margin-bottom:8px}
 .settings-import{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 12px}
+
+
+/* ---------- 3.7 design layer ---------- */
+body{font-size:14.5px;-webkit-font-smoothing:antialiased}
+h1{font:600 26px/1.15 var(--display);letter-spacing:-.025em}
+h2{font:600 14.5px/1.3 var(--display);letter-spacing:-.01em;margin-bottom:12px}
+.side{background:var(--navy);padding:20px 14px;gap:3px;width:232px}
+.brand{font:600 15px var(--display);letter-spacing:-.01em;padding:4px 8px 22px;gap:11px}
+.logo{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#2b45e8,#5b3df0 55%,#ff5a3c);box-shadow:none;display:grid;place-items:center}
+.logo::after{content:"JT";font:700 11px var(--display);color:#fff;letter-spacing:-.03em}
+.side a{padding:10px 12px;border-radius:12px;color:#aeb4cc;font-weight:500}
+.side a:hover{background:var(--navy2);color:#fff}
+.side a.active{background:rgba(113,134,255,.16);color:#fff;font-weight:600;box-shadow:inset 3px 0 0 #7186ff}
+.count{background:rgba(255,255,255,.08);border-radius:999px;padding:1px 8px;opacity:1;font-weight:600}
+.count:empty{display:none}
+.side a.active .count{background:#7186ff;color:#0f1222}
+.side-foot{color:#6f7690}
+main{padding:28px 32px 64px}
+.panel,.pipeline,.table-wrap,.dl,.empty-state{border:0;border-radius:var(--r);box-shadow:var(--shadow)}
+.panel{padding:18px 20px}
+.empty-state{border:1.5px dashed var(--line);box-shadow:none}
+.btn{border-radius:11px;padding:9px 15px;font-weight:600;border:1.5px solid var(--line);background:#fff;transition:background .15s,border-color .15s}
+.btn:hover{border-color:#c6cbe0;background:var(--soft)}
+.btn.primary{background:var(--blue);border-color:var(--blue)}
+.btn.primary:hover{background:#2238c9;border-color:#2238c9}
+.btn.small{border-radius:9px;padding:5px 11px}
+input[type=text],input[type=email],input[type=url],input[type=number],input[type=date],select,textarea,.toolbar input,.toolbar select{border-radius:11px;border:1.5px solid var(--line)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 4px var(--blue-soft)}
+:focus-visible{outline:2.5px solid var(--blue)}
+.stage{padding:20px 22px 18px}
+.stage .num{font:700 40px/1.1 var(--display);letter-spacing:-.04em}
+.stage .bar{height:6px}
+.dl-n{font-family:var(--display);letter-spacing:-.03em}
+.apps th{background:transparent;font-size:12px;letter-spacing:.04em;text-transform:uppercase}
+.apps tbody tr:hover{background:#f7f8fc}
+.ticket{font-family:var(--mono);color:var(--blue);background:var(--blue-soft);border-radius:7px}
+.st-select{border-radius:999px;border:1.5px solid var(--line)}
+.chance{border-radius:999px}
+.chip{border-radius:999px;border:1.5px solid var(--line)}
+.chip[aria-pressed=true],.fu-seg button[aria-pressed=true],.track-seg button[aria-pressed=true],.tg .seg button[aria-pressed=true]{background:var(--ink);border-color:var(--ink)}
+.track-seg,.seg{border-radius:11px;border:1.5px solid var(--line)}
+.drawer{box-shadow:-20px 0 50px rgba(15,18,34,.18)}
+.dr-head .ticket{background:rgba(113,134,255,.2);color:#c9d1ff}
+.scrim{background:rgba(8,10,20,.45)}
+.hbar .track,.stage .bar{border-radius:999px}
+
+/* Toast with undo (status changes) */
+.jt-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;display:flex;gap:16px;align-items:center;background:var(--ink);color:#fff;border-radius:14px;padding:12px 16px;box-shadow:0 12px 32px rgba(15,18,34,.3);font-size:14px;max-width:min(560px,calc(100vw - 32px))}
+.jt-toast button{border:0;background:none;color:#ff8a70;font-weight:700;cursor:pointer;padding:2px 4px;font-size:14px}
