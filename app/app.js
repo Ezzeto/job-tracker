@@ -156,7 +156,12 @@
     if (onlyLink) {
       const url = S.cleanUrl(m[0].replace(/[).,]+$/, ''));
       if (!st.cfg) throw new Error('Чтобы читать вакансии по ссылке, подключи Google Таблицу в настройках (⚙). Пока можно вставить текст вакансии.');
-      const d = await api('GET', { action: 'fetchJob', url });
+      let d;
+      try { d = await api('GET', { action: 'fetchJob', url }); }
+      catch (e) {
+        if (/busy|429|999/.test(String(e.message))) throw new Error((/linkedin/i.test(url) ? 'LinkedIn' : 'Сайт') + ' сейчас не пускает автоматическое чтение (слишком много запросов). Скопируй текст вакансии: в приложении LinkedIn нажми «…» → «Поделиться» → «Копировать», или открой вакансию в браузере и выдели описание. Вставь его сюда вместе со ссылкой — разбор сработает так же.');
+        throw e;
+      }
       const doc = new DOMParser().parseFromString(d.html || '', 'text/html');
       const site = E.siteFor(new URL(d.url || url).hostname);
       const job = E.parse(doc, doc, site, d.url || url, { useLd: true });
