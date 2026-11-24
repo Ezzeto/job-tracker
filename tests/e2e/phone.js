@@ -47,6 +47,10 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
   page.on('console', m => { if (m.type() === 'error' && !/fonts\.g/.test(m.text())) errors.push(m.text()); });
+  const fresh = await ctx.newPage();
+  await fresh.goto('https://jt.example/index.html'); await wait(600);
+  console.log('first open without a connection link:', await fresh.textContent('.lock h1').catch(() => 'NO LOCK SCREEN'));
+  await fresh.close();
   const conn = Buffer.from(JSON.stringify({ u: 'https://script.google.com/macros/s/TEST/exec', t: 'secret' })).toString('base64');
   await page.goto('https://jt.example/index.html#connect=' + conn); await wait(800);
   const shot = async n => { if (OUT) await page.screenshot({ path: path.join(OUT, `phone-${n}.png`), fullPage: false }); };
