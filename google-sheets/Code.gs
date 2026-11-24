@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 15; // 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 16; // 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -454,15 +454,33 @@ function fetchJob_(url) {
   try { u = String(url || '').trim(); if (!/^https:\/\//i.test(u)) throw new Error(); } catch (e) { return { ok: false, error: 'Not a link' }; }
   const host = u.replace(/^https:\/\/([^/?#]+).*/i, '$1').toLowerCase();
   if (!JOB_HOSTS.test(host)) return { ok: false, error: 'This site is not on the list of job boards the script reads. Paste the ad text instead.' };
-  // LinkedIn shows a logged-out copy of each job at this address
+  // LinkedIn shows a logged-out copy of each job at several addresses; when one answers 429
+  // (too many requests from Google's servers) the next one often still works
   const li = u.match(/linkedin\.com\/.*?(?:currentJobId=|\/jobs\/view\/(?:[^/?#]*-)?)(\d{6,})/i);
-  const fetchUrl = li ? 'https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/' + li[1] : u;
-  try {
-    const res = UrlFetchApp.fetch(fetchUrl, { muteHttpExceptions: true, followRedirects: true, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36', 'Accept-Language': 'en-GB,en;q=0.9' } });
-    const code = res.getResponseCode();
-    if (code >= 400) return { ok: false, status: code, error: 'The site answered ' + code + '. Paste the ad text instead.' };
-    return { ok: true, status: code, url: li ? 'https://www.linkedin.com/jobs/view/' + li[1] + '/' : u, html: res.getContentText().slice(0, 900000) };
-  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+  const canon = li ? 'https://www.linkedin.com/jobs/view/' + li[1] + '/' : u;
+  const tries = li ? ['https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/' + li[1], 'https://uk.linkedin.com/jobs/view/' + li[1], 'https://www.linkedin.com/jobs/view/' + li[1] + '/'] : [u, u];
+  // The same ad asked again within 6 hours comes from the cache, without asking the site
+  const cache = CacheService.getScriptCache(), key = 'job:' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, canon));
+  const hit = cache.get(key);
+  if (hit) return { ok: true, status: 200, url: canon, html: hit, cached: true };
+  const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36', 'Accept-Language': 'en-GB,en;q=0.9', 'Accept': 'text/html,application/xhtml+xml' };
+  let last = 0;
+  for (let i = 0; i < tries.length; i++) {
+    if (i) Utilities.sleep(1500 * i);
+    try {
+      const res = UrlFetchApp.fetch(tries[i], { muteHttpExceptions: true, followRedirects: true, headers });
+      last = res.getResponseCode();
+      if (last < 400) {
+        const html = res.getContentText();
+        // A sign-in wall is not the ad: try the next address
+        if (/authwall|sign in to view|join linkedin/i.test(html.slice(0, 20000)) && !/description|show-more-less-html/i.test(html)) { last = 401; continue; }
+        try { cache.put(key, html.slice(0, 95000), 6 * 3600); } catch (e) { /* too big to cache */ }
+        return { ok: true, status: last, url: canon, html: html.slice(0, 900000) };
+      }
+      if (last !== 429 && last !== 999 && last !== 403 && last < 500) break;
+    } catch (e) { last = -1; }
+  }
+  return { ok: false, status: last, error: last === 429 || last === 999 ? 'busy' : 'The site answered ' + last + '. Paste the ad text instead.' };
 }
 // Your skills and settings, sent by the extension, so the phone scores jobs the same way
 const PROFILE_SHEET = '_profile';
