@@ -15,11 +15,36 @@
     get(k, d) { try { const v = localStorage.getItem('jt.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('jt.' + k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
   };
+  const V = window.JT_Vault;
   const st = {
-    cfg: LS.get('cfg', null), rows: LS.get('rows', []), profile: LS.get('profile', null), queue: LS.get('queue', []),
-    syncedAt: LS.get('syncedAt', 0), filter: LS.get('filter', 'active'), q: '', input: LS.get('draft', ''), result: null, busy: false, error: '',
+    cfg: null, rows: [], profile: null, queue: [], syncedAt: 0,
+    filter: LS.get('filter', 'active'), q: '', input: LS.get('draft', ''), result: null, busy: false, error: '',
+    // PIN lock: 'unlock' (a PIN is set, enter it), 'create' (connected, choose a PIN), null (open)
+    lock: null, pin: '', pin1: '', pinMsg: '', pendingCfg: null, pendingShare: null,
   };
-  const save = () => { LS.set('rows', st.rows); LS.set('queue', st.queue); LS.set('profile', st.profile); LS.set('syncedAt', st.syncedAt); };
+  let K = null;            // key derived from the PIN, only in memory while unlocked
+  let hiddenAt = 0;
+  const LOCK_AFTER_MS = 5 * 60e3, MAX_FAILS = 10;
+  const VAULT_KEYS = ['cfg', 'rows', 'profile', 'queue', 'syncedAt'];
+  // Data written by the first version without a PIN is moved into the vault, then removed
+  const legacy = () => { const o = {}; let any = false; VAULT_KEYS.forEach(k => { const v = LS.get(k, undefined); if (v !== undefined) { o[k] = v; any = true; } }); return any ? o : null; };
+  let saving = Promise.resolve();
+  function save() {
+    if (!K) return saving;
+    const data = {}; VAULT_KEYS.forEach(k => { data[k] = st[k]; });
+    saving = saving.then(() => V.seal(K, data)).then(box => { LS.set('vault', box); VAULT_KEYS.forEach(k => { try { localStorage.removeItem('jt.' + k); } catch (e) { /* ignore */ } }); }).catch(() => {});
+    return saving;
+  }
+  function lockNow() {
+    if (!LS.get('vault', null)) return;
+    K = null; VAULT_KEYS.forEach(k => { st[k] = k === 'rows' || k === 'queue' ? [] : k === 'syncedAt' ? 0 : null; });
+    st.result = null; st.lock = 'unlock'; st.pin = ''; st.pinMsg = '';
+    closeSheet(); render();
+  }
+  function wipe() {
+    ['vault', 'pinFails', ...VAULT_KEYS].forEach(k => { try { localStorage.removeItem('jt.' + k); } catch (e) { /* ignore */ } });
+    K = null; VAULT_KEYS.forEach(k => { st[k] = k === 'rows' || k === 'queue' ? [] : k === 'syncedAt' ? 0 : null; });
+  }
 
   // ---------- Statuses ----------
   const RU = { applied: 'Отклик', screening: 'Скрининг', test: 'Тестовое', interview1: 'Интервью 1', interview2: 'Интервью 2', interview3: 'Интервью 3',
@@ -334,6 +359,7 @@
         <h2>Как поставить на главный экран</h2>
         <p class="small muted" style="margin:0">Chrome на Android: меню ⋮ → «Установить приложение». После этого Job Tracker появится в меню «Поделиться» в LinkedIn, Indeed и Reed: нажми «Поделиться» на вакансии → Job Tracker.</p>
       </div>
+      ${K ? `<div class="card"><h2>PIN-код</h2><p class="small muted" style="margin:0">Приложение блокируется через 5 минут в фоне. Токен и заявки на телефоне зашифрованы этим PIN. После 10 неверных попыток данные на телефоне стираются (в таблице всё остаётся).</p><div class="row"><button class="btn ghost grow" id="lockNow">Заблокировать</button><button class="btn line grow" id="changePin">Сменить PIN</button></div></div>` : ''}
       ${st.cfg ? '<button class="btn line block" id="disconnect">Отключить таблицу на этом телефоне</button>' : ''}`;
   }
 
@@ -394,9 +420,82 @@
     $('#cntList').textContent = '';
     setOnline(true);
   }
+  // ---------- PIN screen ----------
+  function viewLock() {
+    const create = st.lock === 'create';
+    const step2 = create && st.pin1;
+    const title = create ? (step2 ? 'Повтори PIN' : 'Придумай PIN-код') : 'Введи PIN';
+    const sub = create ? (step2 ? 'Ещё раз, чтобы не ошибиться.' : 'От 4 до 8 цифр. Им шифруются токен таблицы и заявки на этом телефоне.') : 'Job Tracker заблокирован.';
+    const dots = Array.from({ length: Math.max(4, st.pin.length) }, (_, i) => `<i class="${i < st.pin.length ? 'on' : ''}"></i>`).join('');
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
+    return `
+      <div class="lock">
+        <span class="logo big" aria-hidden="true">JT</span>
+        <h1>${title}</h1>
+        <p class="sub">${sub}</p>
+        <div class="dots ${st.pinMsg ? 'shake' : ''}" aria-label="Введено цифр: ${st.pin.length}">${dots}</div>
+        <p class="pin-msg" role="alert">${esc(st.pinMsg)}</p>
+        <div class="keypad">${keys.map(k => k ? `<button data-key="${k}" aria-label="${k === '⌫' ? 'Стереть' : k}">${k}</button>` : '<span></span>').join('')}</div>
+        <button class="btn primary block" id="pinGo" ${st.pin.length >= 4 ? '' : 'disabled'}>${create ? (step2 ? 'Сохранить PIN' : 'Дальше') : 'Открыть'}</button>
+        ${!create ? '<button class="btn line block" id="pinForgot">Забыл PIN</button>' : ''}
+      </div>`;
+  }
+  async function pinSubmit() {
+    const pin = st.pin;
+    if (!V.validPin(pin)) return;
+    if (st.lock === 'create') {
+      if (!st.pin1) { st.pin1 = pin; st.pin = ''; st.pinMsg = ''; return render(); }
+      if (pin !== st.pin1) { st.pin1 = ''; st.pin = ''; st.pinMsg = 'PIN не совпал, попробуй снова'; return render(); }
+      K = await V.newKey(pin);
+      st.lock = null; st.pin = st.pin1 = ''; st.pinMsg = '';
+      await save();
+      toast('PIN сохранён');
+      return afterUnlock();
+    }
+    st.pinMsg = 'Проверяю…'; render();
+    try {
+      const { data, k } = await V.open(pin, LS.get('vault', null));
+      K = k; VAULT_KEYS.forEach(key => { if (data[key] !== undefined) st[key] = data[key]; });
+      LS.set('pinFails', 0);
+      st.lock = null; st.pin = ''; st.pinMsg = '';
+      afterUnlock();
+    } catch (e) {
+      const fails = (LS.get('pinFails', 0) || 0) + 1;
+      LS.set('pinFails', fails);
+      st.pin = '';
+      if (fails >= MAX_FAILS) { wipe(); st.lock = null; st.pinMsg = ''; location.hash = '#setup'; render(); toast('10 неверных PIN подряд: данные на телефоне стёрты. Подключи таблицу заново.'); return; }
+      st.pinMsg = `Неверный PIN. Осталось попыток: ${MAX_FAILS - fails}`;
+      render();
+    }
+  }
+  function afterUnlock() {
+    if (st.pendingCfg) { st.cfg = st.pendingCfg; st.pendingCfg = null; save(); }
+    const sh = st.pendingShare; st.pendingShare = null;
+    render();
+    if (sh) { st.input = sh; location.hash = '#add'; render(); analyze(sh); }
+    if (st.cfg) refresh(true);
+  }
+  function bindLock(v) {
+    v.querySelectorAll('[data-key]').forEach(b => b.onclick = () => pinKey(b.dataset.key));
+    const go = $('#pinGo', v); if (go) go.onclick = pinSubmit;
+    const fg = $('#pinForgot', v);
+    if (fg) fg.onclick = () => {
+      if (fg.dataset.sure) { wipe(); st.lock = null; location.hash = '#setup'; render(); toast('Данные на телефоне стёрты. Подключи таблицу заново: заявки в Google Таблице на месте.'); return; }
+      fg.dataset.sure = '1'; fg.textContent = 'Стереть данные на телефоне и подключить заново?';
+    };
+  }
+  function pinKey(k) {
+    if (k === '⌫') st.pin = st.pin.slice(0, -1);
+    else if (/^\d$/.test(k) && st.pin.length < 8) st.pin += k;
+    st.pinMsg = '';
+    render();
+  }
+
   function render() {
     const r = route();
     const v = $('#view');
+    document.body.classList.toggle('locked', !!st.lock);
+    if (st.lock) { v.innerHTML = viewLock(); bindLock(v); return; }
     v.innerHTML = r === 'list' ? viewList() : r === 'today' ? viewToday() : r === 'setup' ? viewSetup() : viewAdd();
     document.querySelectorAll('.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === r ? 'page' : 'false'));
     updateBadges();
@@ -430,10 +529,12 @@
       st.cfg = { url: $('#cfgUrl').value.trim(), token: $('#cfgToken').value.trim() };
       const msg = $('#cfgMsg');
       msg.textContent = 'Проверяю…';
-      try { const d = await api('GET', { action: 'ping' }); LS.set('cfg', st.cfg); msg.innerHTML = `<span style="color:var(--ok)">Подключено: «${esc(d.name)}», строк: ${d.rows}${d.version < 13 ? '. Обнови Code.gs до версии 13, чтобы читать ссылки' : ''}.</span>`; refresh(true); }
+      try { const d = await api('GET', { action: 'ping' }); if (K) save(); else { st.pendingCfg = st.cfg; st.lock = 'create'; } msg.innerHTML = `<span style="color:var(--ok)">Подключено: «${esc(d.name)}», строк: ${d.rows}${d.version < 13 ? '. Обнови Code.gs до версии 13, чтобы читать ссылки' : ''}.</span>`; if (st.lock) render(); else refresh(true); }
       catch (e) { msg.innerHTML = `<span style="color:var(--bad)">${esc(e.message)}</span>`; }
     };
-    const dc = $('#disconnect', v); if (dc) dc.onclick = () => { st.cfg = null; LS.set('cfg', null); st.rows = []; save(); render(); };
+    const dc = $('#disconnect', v); if (dc) dc.onclick = () => { wipe(); render(); toast('Таблица отключена, данные на телефоне стёрты'); };
+    const lk = $('#lockNow', v); if (lk) lk.onclick = lockNow;
+    const cp = $('#changePin', v); if (cp) cp.onclick = () => { st.pendingCfg = st.cfg; st.lock = 'create'; st.pin = st.pin1 = ''; render(); };
   }
 
   // Connection link from the extension: #connect=<base64 of {"u": url, "t": token}>
@@ -442,7 +543,7 @@
     if (!m) return false;
     try {
       const j = JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g, '+').replace(/_/g, '/')))));
-      if (j.u && j.t) { st.cfg = { url: j.u, token: j.t }; LS.set('cfg', st.cfg); }
+      if (j.u && j.t) { if (K) { st.cfg = { url: j.u, token: j.t }; save(); } else st.pendingCfg = { url: j.u, token: j.t }; }
     } catch (e) { /* broken link */ }
     history.replaceState(null, '', location.pathname + '#list');
     return true;
@@ -461,13 +562,32 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
   window.addEventListener('hashchange', () => { closeSheet(); render(); window.scrollTo(0, 0); });
   window.addEventListener('online', () => flush().then(() => refresh(true)));
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - st.syncedAt > 60e3) refresh(true); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (K && hiddenAt && Date.now() - hiddenAt > LOCK_AFTER_MS) { hiddenAt = 0; return lockNow(); }
+    if (!st.lock && Date.now() - st.syncedAt > 60e3) refresh(true);
+  });
 
-  const connected = readConnect();
+  const old = legacy();
+  if (old) { VAULT_KEYS.forEach(k => { if (old[k] !== undefined) st[k] = old[k]; }); }
+  readConnect();
   const shared = readShare();
+  if (!V || !V.supported()) {
+    // No WebCrypto (plain http): no PIN possible, the app still works but warns in Settings
+    if (st.pendingCfg) { st.cfg = st.pendingCfg; st.pendingCfg = null; }
+  } else if (LS.get('vault', null)) {
+    st.lock = 'unlock'; st.pendingShare = shared;
+    if (old) VAULT_KEYS.forEach(k => { try { localStorage.removeItem('jt.' + k); } catch (e) { /* ignore */ } });
+  } else if (st.pendingCfg || st.cfg) {
+    // Connected but no PIN yet: choose one before anything is stored
+    if (!st.pendingCfg) st.pendingCfg = st.cfg;
+    st.lock = 'create'; st.pendingShare = shared;
+  }
   render();
-  if (shared) { st.input = shared; render(); analyze(shared); }
-  if (st.cfg) refresh(!connected);
+  if (!st.lock) {
+    if (shared) { st.input = shared; render(); analyze(shared); }
+    if (st.cfg) refresh(true);
+  }
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
-  window.JT_App = { st, analyzeJob, readJob, setStatus, render };
+  window.JT_App = { st, analyzeJob, readJob, setStatus, render, lockNow };
 })();

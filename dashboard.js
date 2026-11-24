@@ -1375,7 +1375,7 @@
   };
   chrome.storage.onChanged.addListener(ch => { if (ch.syncState) renderSyncState(); });
   // Phone app: a link with the sheet address and token after #, so it never reaches a server
-  S.get('phoneUrl').then(({ phoneUrl }) => { $('#phoneUrl').value = phoneUrl || 'https://ezzeto.github.io/job-tracker/'; });
+  S.get('phoneUrl').then(({ phoneUrl }) => { $('#phoneUrl').value = phoneUrl || 'https://jobs.oleh-poratui.dev/'; });
   $('#phoneUrl').addEventListener('change', () => S.set({ phoneUrl: $('#phoneUrl').value.trim() }));
   $('#phoneCopy').onclick = async () => {
     const cfg = readCfg(), base = $('#phoneUrl').value.trim();
