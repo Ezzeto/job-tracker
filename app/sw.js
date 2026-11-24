@@ -3,7 +3,13 @@ const CACHE = 'jt-app-v1';
 const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest', 'vault.js', 'icons/icon-192.png', 'icons/icon-512.png',
   'lib/quality.js', 'lib/analyzer.js', 'lib/store.js', 'lib/extract.js', 'lib/insights.js', 'lib/market.js', 'lib/i18n.js'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
-self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+// A new version takes over open windows at once and reloads them, even ones started by an older version
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    .then(() => self.clients.claim())
+    .then(() => self.clients.matchAll({ type: 'window' }))
+    .then(list => Promise.all(list.map(c => c.navigate(c.url).catch(() => null)))));
+});
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
   if (e.request.method !== 'GET' || /script\.google(usercontent)?\.com$/.test(u.hostname)) return;

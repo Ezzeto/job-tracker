@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 13; // 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 15; // 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -73,6 +73,10 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('Job Tracker')
     .addItem('Tidy up the sheet', 'setup')
     .addItem('Show sync token', 'showToken')
+    .addItem('Save a copy to Drive now', 'snapshotNow')
+    .addItem('Weekly email: turn on / change', 'setupWeeklyEmail')
+    .addItem('Weekly email: send now', 'weeklyEmail')
+    .addItem('Weekly email: turn off', 'stopWeeklyEmail')
     .addItem('Create a new sync token', 'resetToken')
     .addSeparator()
     .addItem('Expand all columns', 'expandAll')
@@ -474,6 +478,183 @@ function saveProfile_(profile) {
   sh.getRange(1, 1).setValue(JSON.stringify(profile).slice(0, 49000));
 }
 
+// ---------- Copy for the weekly summary (14) ----------
+// JobTracker/job-tracker-latest.json in your Drive: the applications without ad texts, contacts or
+// notes, so a scheduled Claude task can read the week without access to the sync token.
+const SNAPSHOT_FOLDER = 'JobTracker', SNAPSHOT_FILE = 'job-tracker-latest.json';
+const SNAPSHOT_KEYS = ['ticket', 'title', 'company', 'location', 'category', 'workTypes', 'salary', 'platform', 'appliedAt', 'status', 'chance', 'verdict', 'nextDate', 'followup', 'track', 'method', 'cover', 'cv', 'adAge', 'applicants', 'rejDays', 'outcome', 'reqs', 'missing', 'updated'];
+function writeSnapshot_() {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName(SHEET);
+  if (!sh || sh.getLastRow() < 2) return 0;
+  const tz = ss.getSpreadsheetTimeZone();
+  const vals = sh.getRange(2, 1, sh.getLastRow() - 1, COLS.length).getValues();
+  const apps = vals.filter(r => r[C.id - 1]).map(r => {
+    const o = {};
+    SNAPSHOT_KEYS.forEach(k => { let v = r[C[k] - 1]; if (v instanceof Date) v = Utilities.formatDate(v, tz, 'yyyy-MM-dd'); o[k] = v === '' ? null : v; });
+    return o;
+  });
+  const json = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), timeZone: tz, apps });
+  const it = DriveApp.getFoldersByName(SNAPSHOT_FOLDER);
+  const folder = it.hasNext() ? it.next() : DriveApp.createFolder(SNAPSHOT_FOLDER);
+  const files = folder.getFilesByName(SNAPSHOT_FILE);
+  if (files.hasNext()) files.next().setContent(json);
+  else folder.createFile(SNAPSHOT_FILE, json, MimeType.PLAIN_TEXT);
+  PropertiesService.getScriptProperties().setProperty('SNAPSHOT_AT', String(Date.now()));
+  return apps.length;
+}
+/** Menu, or run once in the editor: asks Google for Drive access and writes the copy. */
+function snapshotNow() {
+  const n = writeSnapshot_();
+  Logger.log('Saved ' + n + ' applications to ' + SNAPSHOT_FOLDER + '/' + SNAPSHOT_FILE);
+  try { SpreadsheetApp.getUi().alert('Saved ' + n + ' applications to Drive: ' + SNAPSHOT_FOLDER + '/' + SNAPSHOT_FILE); } catch (e) { /* run from the editor */ }
+}
+// After a sync, at most every 10 minutes; a missing Drive permission never breaks the sync
+function maybeSnapshot_() {
+  try {
+    const last = Number(PropertiesService.getScriptProperties().getProperty('SNAPSHOT_AT') || 0);
+    if (Date.now() - last > 10 * 60e3) writeSnapshot_();
+  } catch (e) { /* run snapshotNow once in the editor to allow Drive */ }
+}
+
+// ---------- Weekly summary email (15) ----------
+// Every Sunday afternoon: the week's applications, replies and status changes, follow-ups due,
+// next steps, job emails from your inbox and interviews in your calendar, sent to one address
+// you choose (Script Properties, never in the code). Turn it on from the Job Tracker menu.
+const WEEKLY_TO = 'WEEKLY_TO', WEEKLY_LINK = 'WEEKLY_LINK';
+const RU_STATUS = { 'Applied': 'Отклик', 'Screening': 'Скрининг', 'Test task': 'Тестовое', 'Interview 1': 'Интервью 1', 'Interview 2': 'Интервью 2', 'Interview 3': 'Интервью 3', 'Offer': 'Оффер', 'Offer accepted': 'Принял оффер', 'Offer declined': 'Отказался', 'Rejected': 'Отказ', 'No response': 'Нет ответа', 'Withdrawn': 'Отозвал' };
+const REPLIED_ST = ['Screening', 'Test task', 'Interview 1', 'Interview 2', 'Interview 3', 'Offer', 'Offer accepted', 'Offer declined', 'Rejected'];
+const INTERVIEW_ST = ['Screening', 'Test task', 'Interview 1', 'Interview 2', 'Interview 3', 'Offer', 'Offer accepted'];
+const RU_MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const RU_DAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+/** Menu: asks for the address and the summary page link, schedules Sundays at 14:00, sends one now. */
+function setupWeeklyEmail() {
+  const ui = SpreadsheetApp.getUi(), props = PropertiesService.getScriptProperties();
+  const cur = props.getProperty(WEEKLY_TO) || Session.getEffectiveUser().getEmail();
+  const a = ui.prompt('Weekly email', 'Send the weekly summary to (email address):\n' + (cur ? 'Now: ' + cur : ''), ui.ButtonSet.OK_CANCEL);
+  if (a.getSelectedButton() !== ui.Button.OK) return;
+  const to = (a.getResponseText().trim() || cur);
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) { ui.alert('That is not an email address.'); return; }
+  const l = ui.prompt('Weekly email', 'Optional: link to your summary page (https://claude.ai/artifact/…). Leave empty to skip.', ui.ButtonSet.OK_CANCEL);
+  const link = l.getSelectedButton() === ui.Button.OK ? l.getResponseText().trim() : '';
+  props.setProperty(WEEKLY_TO, to);
+  if (/^https:\/\//.test(link)) props.setProperty(WEEKLY_LINK, link); else if (link === '') props.deleteProperty(WEEKLY_LINK);
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'weeklyEmail').forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('weeklyEmail').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(14).inTimezone(SpreadsheetApp.getActive().getSpreadsheetTimeZone()).create();
+  weeklyEmail();
+  ui.alert('Done. A summary was just sent to ' + to + ', and it will come every Sunday around 14:00.');
+}
+function stopWeeklyEmail() {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'weeklyEmail').forEach(t => ScriptApp.deleteTrigger(t));
+  try { SpreadsheetApp.getUi().alert('Weekly email turned off.'); } catch (e) { /* from the editor */ }
+}
+
+// Last week's status of every application, so the email lists real changes and not every row
+// the extension re-sent. Kept in a hidden sheet: Script Properties are too small for it.
+const WEEKLY_SHEET = '_weekly';
+function readBaseline_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(WEEKLY_SHEET);
+  if (!sh) return null;
+  try { return JSON.parse(sh.getRange(1, 1).getValue() || 'null'); } catch (e) { return null; }
+}
+function saveBaseline_(rows) {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(WEEKLY_SHEET);
+  if (!sh) { sh = ss.insertSheet(WEEKLY_SHEET); sh.hideSheet(); }
+  const map = {}; rows.forEach(r => { map[r.id] = String(r.status); });
+  sh.getRange(1, 1).setValue(JSON.stringify(map).slice(0, 49000));
+}
+
+/** Pure part: the week's numbers from the sheet rows (objects keyed by COLS). */
+function weeklyStats_(rows, now, baseline) {
+  const DAY = 864e5;
+  const end = new Date(now); end.setHours(23, 59, 59, 999);
+  const start = new Date(end.getTime() - 7 * DAY + 1);
+  const t = v => { if (v instanceof Date) return v.getTime(); const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3], 12).getTime() : NaN; };
+  const inWeek = x => x >= start.getTime() && x <= end.getTime();
+  const isB = r => /part[- ]?time|term[- ]?time|weekend|temporary|shift|graduate \/ placement/i.test(String(r.workTypes || '') + ' ' + String(r.title || '')) || /part[- ]?time|weekend|saturday|term[- ]?time/i.test(String(r.title || ''));
+  const applied = rows.filter(r => inWeek(t(r.appliedAt)));
+  const real = r => String(r.title || '').trim() && String(r.company || '').trim();
+  // With last week's statuses: every status that changed. The first time: replies to this week's applications only
+  const changed = rows.filter(r => real(r) && String(r.status) !== 'Applied' && (baseline ? baseline[r.id] !== undefined ? baseline[r.id] !== String(r.status) : String(r.status) !== 'Applied' && inWeek(t(r.appliedAt)) : inWeek(t(r.appliedAt)) && REPLIED_ST.indexOf(String(r.status)) >= 0));
+  const due = rows.filter(r => real(r) && String(r.status) === 'Applied' && !r.followup && now.getTime() - t(r.appliedAt) >= 7 * DAY);
+  const soon = rows.filter(r => { const x = t(r.nextDate); return x >= now.getTime() - DAY && x <= now.getTime() + 8 * DAY; });
+  const count = st => rows.filter(r => String(r.status) === st).length;
+  const reached = rows.filter(r => INTERVIEW_ST.indexOf(String(r.status)) >= 0).length;
+  const missing = {};
+  applied.forEach(r => String(r.missing || '').split(',').map(s => s.trim()).filter(Boolean).forEach(s => { missing[s] = (missing[s] || 0) + 1; }));
+  return {
+    start, end, applied, changed, due, soon,
+    B: applied.filter(isB).length, A: applied.filter(r => !isB(r)).length,
+    replies: changed.filter(r => REPLIED_ST.indexOf(String(r.status)) >= 0).length, firstRun: !baseline,
+    answered: rows.filter(r => REPLIED_ST.indexOf(String(r.status)) >= 0).length, interviews: changed.filter(r => INTERVIEW_ST.indexOf(String(r.status)) >= 0).length,
+    total: rows.length, waiting: count('Applied'), rejected: count('Rejected'), noresponse: count('No response'), reached,
+    missing: Object.keys(missing).sort((a, b) => missing[b] - missing[a]).slice(0, 4).map(k => k + (missing[k] > 1 ? ' ×' + missing[k] : '')),
+  };
+}
+
+function weeklyEmail() {
+  const props = PropertiesService.getScriptProperties();
+  const to = props.getProperty(WEEKLY_TO);
+  if (!to) return;
+  const ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(SHEET);
+  const now = new Date();
+  const vals = sh && sh.getLastRow() >= 2 ? sh.getRange(2, 1, sh.getLastRow() - 1, COLS.length).getValues() : [];
+  const rows = vals.filter(r => r[C.id - 1]).map(r => { const o = {}; COLS.forEach(([k], j) => { o[k] = r[j]; }); return o; });
+  const s = weeklyStats_(rows, now, readBaseline_());
+  // Job emails and interviews: optional, a missing permission only leaves the section out
+  let mails = [], events = [];
+  try {
+    mails = GmailApp.search('newer_than:7d -in:sent -category:promotions (application OR applying OR interview OR unfortunately OR "next steps" OR assessment OR shortlisted OR candidate)', 0, 12)
+      .map(th => ({ subject: th.getFirstMessageSubject(), from: String(th.getMessages()[0].getFrom()).replace(/<.*>/, '').trim(), date: th.getLastMessageDate() }));
+  } catch (e) { mails = null; }
+  try {
+    events = CalendarApp.getDefaultCalendar().getEvents(now, new Date(now.getTime() + 8 * 864e5))
+      .filter(ev => /interview|call|screen|assessment|meeting with|собеседован/i.test(ev.getTitle())).slice(0, 8)
+      .map(ev => ({ title: ev.getTitle(), at: ev.getStartTime() }));
+  } catch (e) { events = null; }
+
+  const h = x => String(x == null ? '' : x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const d = x => x.getDate() + ' ' + RU_MONTHS[x.getMonth()];
+  const dd = x => { const v = x instanceof Date ? x : new Date(x); return isNaN(v) ? '' : RU_DAYS[v.getDay()] + ', ' + v.getDate() + ' ' + RU_MONTHS[v.getMonth()].slice(0, 3) + '.'; };
+  const range = (s.start.getMonth() === s.end.getMonth() ? s.start.getDate() : d(s.start)) + '–' + d(s.end) + ' ' + s.end.getFullYear();
+  const link = props.getProperty(WEEKLY_LINK);
+  const pct = (a, b) => Math.min(100, b ? Math.round(a / b * 100) : 0);
+  const bar = (a, b, c) => `<div style="height:7px;background:#eef0f6;border-radius:9px;overflow:hidden;margin:4px 0 10px"><div style="height:7px;width:${pct(a, b)}%;background:${c}"></div></div>`;
+  const tile = (n, l) => `<td style="background:#f4f5f9;border-radius:12px;padding:10px;text-align:center"><div style="font-size:24px;font-weight:bold">${n}</div><div style="font-size:12px;color:#646b85">${l}</div></td>`;
+  const li = arr => arr.length ? '<ul style="margin:0 0 14px;padding-left:18px">' + arr.join('') + '</ul>' : '<p style="margin:0 0 14px;color:#646b85">Нет.</p>';
+  const rate = s.total ? (Math.round(s.answered / s.total * 1000) / 10).toString().replace('.', ',') : '0';
+  const advice = s.due.length >= 5 ? `Начни неделю с follow-up: ${s.due.length} заявок ждут ответа больше 7 дней.`
+    : s.B < 6 ? `Добери отклики на рынке Б: ${s.B} из 6–8 за неделю, плюс 2–3 холодных письма местным компаниям.`
+    : s.replies === 0 ? 'Ответов не было: попробуй прямые отклики в первые 48 часов и письмо hiring manager.'
+    : 'Хороший темп — держи его и готовься к ответам работодателей.';
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#0f1222;line-height:1.5">
+<p style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#2b45e8;font-weight:bold;margin:0 0 4px">Еженедельная сводка</p>
+<h1 style="font-size:22px;margin:0 0 12px">${h(range)}</h1>
+<table role="presentation" style="width:100%;border-collapse:separate;border-spacing:6px 0;margin:0 0 14px"><tr>${tile(s.applied.length, 'откликов')}${tile(s.replies, 'ответов')}${tile(s.interviews, 'скринингов и интервью')}${tile(s.due.length, 'ждут follow-up')}</tr></table>
+<p style="margin:0 0 6px;font-size:12px;color:#646b85">Рынок определён по типу работы в вакансии, примерно.</p><p style="margin:0"><b style="color:#0b958c">Рынок Б (с учёбой):</b> ${s.B} из 8 откликов</p>${bar(s.B, 8, '#0b958c')}
+<p style="margin:0"><b style="color:#7c4dff">Рынок А (full-time):</b> ${s.A} из 10 откликов</p>${bar(s.A, 10, '#7c4dff')}
+<p style="margin:0 0 14px;font-size:13px;color:#646b85">Всего заявок ${s.total} · ждут ответа ${s.waiting} · отказов ${s.rejected} · без ответа ${s.noresponse} · ответили ${rate}% · сейчас на интервью ${s.reached}</p>
+<h2 style="font-size:16px;margin:0 0 6px">Отклики недели</h2>${li(s.applied.slice(0, 15).map(r => `<li>${h(r.title)} — ${h(r.company)}${r.platform ? ' <span style="color:#646b85">· ' + h(r.platform) + '</span>' : ''}</li>`))}
+<h2 style="font-size:16px;margin:0 0 6px">Ответы и смены статуса</h2>${s.firstRun ? '<p style="margin:0 0 6px;font-size:12px;color:#646b85">Первое письмо: здесь только ответы на отклики этой недели. Со следующего — все смены статуса за неделю.</p>' : ''}${li(s.changed.slice(0, 12).map(r => `<li><b>${h(RU_STATUS[r.status] || r.status)}</b>: ${h(r.title)} — ${h(r.company)}</li>`))}
+${mails ? `<h2 style="font-size:16px;margin:0 0 6px">Письма о вакансиях за неделю</h2>${li(mails.map(m => `<li>${h(m.subject)} <span style="color:#646b85">· ${h(m.from)} · ${h(dd(m.date))}</span></li>`))}` : ''}
+<h2 style="font-size:16px;margin:0 0 6px">На этой неделе</h2>${li([].concat(
+    (events || []).map(e => `<li>📅 ${h(dd(e.at))}: ${h(e.title)}</li>`),
+    s.soon.map(r => `<li>Следующий шаг ${h(dd(r.nextDate instanceof Date ? r.nextDate : new Date(String(r.nextDate) + 'T12:00:00')))}: ${h(r.title)} — ${h(r.company)}</li>`),
+    s.due.slice(0, 6).map(r => `<li>Follow-up: ${h(r.title)} — ${h(r.company)}</li>`),
+    s.due.length > 6 ? [`<li style="color:#646b85">и ещё ${s.due.length - 6} follow-up во вкладке Follow-ups</li>`] : []))}
+${s.missing.length ? `<p style="margin:0 0 14px;font-size:13px"><b>Чаще всего просили, а у тебя нет:</b> ${h(s.missing.join(', '))}</p>` : ''}
+<div style="background:#e6eaff;border-radius:14px;padding:14px;margin:0 0 16px"><div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#2b45e8;font-weight:bold">Совет недели</div><div style="font-weight:bold;margin-top:4px">${h(advice)}</div></div>
+${link ? `<p style="text-align:center;margin:0 0 16px"><a href="${h(link)}" style="display:inline-block;background:#2b45e8;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:12px">Открыть сводку и отметить, что сделал</a></p>` : ''}
+<p style="font-size:12px;color:#646b85;margin:0">Письмо собрано скриптом твоей Google Таблицы «${h(ss.getName())}». Выключить: меню Job Tracker → Weekly email: turn off.</p></div>`;
+  const text = [`Неделя поиска · ${range}`, `Откликов ${s.applied.length} · ответов ${s.replies} · интервью ${s.interviews} · ждут follow-up ${s.due.length}`,
+    `Рынок Б: ${s.B} из 8 · Рынок А: ${s.A} из 10`, '', 'Отклики недели:'].concat(s.applied.slice(0, 15).map(r => `- ${r.title} — ${r.company}`), ['', 'Совет: ' + advice], link ? ['', link] : []).join('\n');
+  const pl = (n, one, few, many) => n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
+  saveBaseline_(rows);
+  MailApp.sendEmail({ to, subject: `Неделя поиска · ${range} — ${pl(s.applied.length, 'отклик', 'отклика', 'откликов')}, ${pl(s.replies, 'ответ', 'ответа', 'ответов')}`, htmlBody: html, body: text, name: 'Job Tracker' });
+}
+
 /** POST: the extension sends new or changed applications and the IDs it deleted. */
 function doPost(e) {
   let body;
@@ -530,6 +711,7 @@ function doPost(e) {
 
     const del = (body.deletes || []).map(id => rowOf[id]).filter(Boolean).sort((x, y) => y - x);
     del.forEach(r => sh.deleteRow(r));
+    if (updated || patched || appendRows.length || del.length) maybeSnapshot_();
     return json_({ ok: true, version: SCRIPT_VERSION, updated, patched, added: appendRows.length, deleted: del.length });
   } finally { lock.releaseLock(); }
 }

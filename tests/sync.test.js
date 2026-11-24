@@ -114,3 +114,17 @@ test('applying an edit from the sheet does not echo it back', async () => {
   await Sync.syncNow();
   assert.equal(posts(), before);
 });
+
+test('the profile reaches a version 13 sheet once, for the phone app', async () => {
+  resetStorage();
+  const sheet = createFakeSheet({ version: 13 });
+  globalThis.fetch = sheet.fetch;
+  await S.set({ sheetCfg: { url: sheet.url, token: 'secret' } });
+  await S.addApp({ title: 'IT Support', company: 'Acme', url: 'https://example.com/1' });
+  await Sync.syncNow();
+  await Sync.syncNow();
+  const withProfile = sheet.calls.filter(c => c.method === 'POST' && c.body.profile);
+  assert.equal(withProfile.length, 1);
+  assert.ok(withProfile[0].body.profile.skills, 'skills are sent');
+  assert.equal(withProfile[0].body.profile.factBank, undefined, 'the fact bank stays on the computer');
+});

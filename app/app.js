@@ -70,13 +70,21 @@
   async function api(method, params, body) {
     if (!st.cfg || !st.cfg.url || !st.cfg.token) throw new Error('Таблица не подключена');
     let res;
-    if (method === 'GET') {
-      const u = new URL(st.cfg.url);
-      u.searchParams.set('token', st.cfg.token);
-      Object.entries(params || {}).forEach(([k, v]) => u.searchParams.set(k, v));
-      res = await fetch(u.toString(), { redirect: 'follow' });
-    } else {
-      res = await fetch(st.cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...body, token: st.cfg.token }) });
+    if (!/^https:\/\/script\.google\.com\/(a\/macros\/[^/]+|macros)\/s\/[\w-]+\/exec\/?$/.test(st.cfg.url.split('?')[0])) throw new Error('Адрес должен быть вида https://script.google.com/macros/s/…/exec (не /dev и не ссылка на саму таблицу).');
+    try {
+      if (method === 'GET') {
+        const u = new URL(st.cfg.url);
+        u.searchParams.set('token', st.cfg.token);
+        Object.entries(params || {}).forEach(([k, v]) => u.searchParams.set(k, v));
+        res = await fetch(u.toString(), { redirect: 'follow' });
+      } else {
+        res = await fetch(st.cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...body, token: st.cfg.token }) });
+      }
+    } catch (e) {
+      // The extension can reach a script open only to your Google account; a web page cannot,
+      // so Google answers with a sign-in page the browser refuses to read ('Failed to fetch')
+      if (!navigator.onLine) throw new Error('Нет интернета');
+      throw new Error('Скрипт не отвечает этой странице. В Apps Script: Deploy → Manage deployments → ✏ → «Who has access: Anyone» (не «Anyone with Google account») → Version: New version → Deploy. Данные защищает токен.');
     }
     let d;
     try { d = await res.json(); } catch (e) { throw new Error('Скрипт ответил не JSON. Проверь ссылку на веб-приложение и что развёрнута последняя версия Code.gs.'); }
@@ -264,6 +272,7 @@
         ${officeBad ? `<div class="notice bad">Для работы с учёбой не подходит: офис ${r.office} дня в неделю${p.workDays && p.workDays.length ? '' : ''}.</div>` : ''}
         ${worthWhy ? `<div class="notice small">Full-time без признаков «стоит академа»: ${esc(worthWhy)}.</div>` : ''}
         ${blocks.length || asks.length ? `<ul class="list-plain">${blocks.map(b => `<li><span class="mark bad">✕</span><span>${esc(tr(b.text))}</span></li>`).join('')}${asks.map(b => `<li><span class="mark warn">!</span><span>${esc(tr(b.text))}</span></li>`).join('')}</ul>` : ''}
+        ${!st.profile ? '<div class="notice small">Твой профиль навыков ещё не пришёл с компьютера, поэтому все навыки красные. На компе: панель трекера → Skills &amp; settings → Google Sheet → <b>Sync now</b>, затем здесь ⚙ → «Сохранить и проверить».</div>' : ''}
         ${(c.tools || []).length ? `<div><h2 style="margin-bottom:8px">Навыки из вакансии</h2><div class="skills">${(c.matched || []).map(t => `<span class="chip ok">${esc(t)}</span>`).join('')}${(c.basic || []).map(t => `<span class="chip warn">${esc(t)}</span>`).join('')}${(c.missing || []).map(t => `<span class="chip bad">${esc(t)}</span>`).join('')}</div><p class="small muted" style="margin:8px 0 0">зелёный — уверенно, жёлтый — базово, красный — нет</p></div>` : ''}
       </section>
       <details class="card" open>
