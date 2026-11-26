@@ -8,7 +8,7 @@
   'use strict';
   const A = window.JT_Analyzer, S = window.JT_Store, E = window.JT_Extract, Q = window.JT_Quality, Mk = window.JT_Market,
     I = window.JT_Insights, T = window.JT_I18n, F = window.JT_Follow, TP = window.JT_Templates, P = window.JT_Prompt,
-    FIT = window.JT_Fit, CH = window.JT_Chance, LLM = window.JT_LLM, LRN = window.JT_Learn, TL = window.JT_Tailor, DX = window.JT_Docx, OR = window.JT_Outreach, AS = window.JT_Assist;
+    FIT = window.JT_Fit, CH = window.JT_Chance, LLM = window.JT_LLM, LRN = window.JT_Learn, TL = window.JT_Tailor, DX = window.JT_Docx, OR = window.JT_Outreach, AS = window.JT_Assist, RV = window.JT_Review;
   if (T) T.setLang('ru');
   const tr = s => (T ? T.tr(s) : s);
   const $ = (s, el) => (el || document).querySelector(s);
@@ -35,7 +35,7 @@ Certificates: CompTIA A+ in progress; Cisco "Introduction to Modern AI".
 Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   const DEFAULT_LOCAL = () => ({
     targets: { B: 7, A: 5, C: 3 }, studyDays: [3, 4], mail: 'auto', from: '',
-    ai: { key: '', model: '' }, facts: DEFAULT_FACTS, llmCache: {}, cvs: {}, learned: {}, learnTasks: {}, learnNotes: {}, outreach: { radius: 30, primary: false, osmAt: '' }, cvLink: '', alertsHidden: {},
+    ai: { key: '', model: '' }, facts: DEFAULT_FACTS, llmCache: {}, cvs: {}, learned: {}, learnTasks: {}, learnNotes: {}, outreach: { radius: 30, primary: false, osmAt: '' }, cvLink: '', alertsHidden: {}, briefs: {}, reviews: {}, offers: [],
     snooze: {}, noChannel: {}, inboxDone: [], later: [], employers: null, templates: {}, tplJob: { title: '', company: '', name: '' }, why: '',
   });
   const st = {
@@ -526,6 +526,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
         <div class="legend"><span><i></i>Б</span><span><i class="A"></i>А</span><span><i class="C"></i>письмо работодателю</span><span><i class="S"></i>пары</span></div>
       </section>
       ${st.scriptVersion >= 17 ? `<div class="sec-h"><h2>Из почты <span class="n">${L.inbox.length || ''}</span></h2><button class="btn quiet sm" id="scanInbox" ${st.inboxBusy ? 'disabled' : ''}>${st.inboxBusy ? 'Проверяю…' : 'Проверить почту'}</button></div>${inbox ? `<div class="group">${inbox}</div>` : '<p class="small muted" style="margin:0 2px">Новых писем об откликах нет. Ярлык и пересылка не нужны: скрипт читает весь ящик, ничего не меняя.</p>'}` : st.cfg ? '<div class="note small">Обнови Code.gs до версии 17 — тогда здесь появятся отказы и приглашения из Gmail, и статус меняется одним нажатием.</div>' : ''}
+      ${(() => { const soon = st.rows.filter(r => ['screening', 'test', 'interview1', 'interview2', 'interview3'].includes(idOf(r.status)) && r.nextDate && r.nextDate >= todayIso() && (Date.parse(r.nextDate) - Date.now()) / 864e5 <= 4); return soon.length ? `<div class="sec-h"><h2>Подготовка к интервью</h2></div><div class="group">${soon.map(r => `<div class="item"><div class="top">${dot(idOf(r.status))}<div class="grow"><div class="t">${esc(r.company)}</div><div class="s">${esc(r.title)} · ${esc(r.nextDate === todayIso() ? 'сегодня' : r.nextDate)}</div></div></div><div class="row"><button class="btn go sm" data-brief="${esc(r.id)}">Справка и вопросы</button></div></div>`).join('')}</div>` : ''; })()}
       ${alertsHtml()}
       ${due ? `<div class="sec-h"><h2>Следующий шаг <span class="n">${L.due.length}</span></h2></div><div class="group">${due}</div>` : ''}
       ${follow ? `<div class="sec-h"><h2>Follow-up <span class="n">${L.follow.length}</span></h2>${L.follow.length > 8 ? `<span class="small muted">первые 8 из ${L.follow.length}</span>` : ''}</div><div class="group">${follow}</div>` : ''}
@@ -709,6 +710,118 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     if (st.cfg) api('POST', null, { learned: { [name]: date || null } }).catch(() => {});
   }
 
+  // ---------- Week review, cost of a screening, ask the tracker ----------
+  function plainApp(r) {
+    const a = toApp(r);
+    return { status: a.status, appliedAt: a.appliedAt, company: a.company, title: a.title, platform: a.platform, market: a.market, agency: a.agency, method: r.method, cvKind: r.cvKind, cover: r.cover, minutes: r.minutes,
+      fit: r.fit2 !== '' && r.fit2 != null ? r.fit2 : r.chance, missing: a.chance.missing, tools: a.chance.tools, salaryText: a.salaryText, rejDays: r.rejDays, id: a.id, ticket: a.ticket };
+  }
+  const weekKey = () => { const d = new Date(); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return isoOf(d); };
+  function costTable(cost) {
+    return `<table class="tbl"><thead><tr><th>Канал</th><th>Откликов</th><th>Скрин.</th><th>Часов</th><th>Часов на скрининг</th></tr></thead><tbody>${cost.map(x => `<tr><td>${esc(x.channel)}</td><td>${x.n}</td><td>${x.screens}</td><td>${String(x.hours).replace('.', ',')}</td><td>${x.perScreen == null ? (x.screens ? '—' : `0 из ${String(x.hours).replace('.', ',')} ч`) : String(x.perScreen).replace('.', ',')}</td></tr>`).join('')}</tbody></table>
+      <p class="tiny muted">Время отклика замеряется с телефона (от разбора до «Я откликнулся»); где замера нет — оценка: Easy Apply 5 мин, форма на сайте 15, сайт компании 30, письмо 10, +10 за подгонку CV, +15 за письмо.</p>`;
+  }
+  function viewReview() {
+    const apps = st.rows.map(plainApp), w = RV.week(apps), t = st.local.targets, k = weekKey();
+    const note = (st.local.reviews || {})[k];
+    const cell = (label, a, b) => `<div class="kpi"><b>${a}</b><span>${label}${b != null ? ` · было ${b}` : ''}</span></div>`;
+    return `<div><h1>Неделя</h1><p class="lead">Что сделано, что сработало и что делать дальше. Цифры считает трекер, выводы пишет AI.</p></div>
+      <div class="kpis">${cell('откликов', w.thisWeek.n, w.lastWeek.n)}${cell(`рынок Б · цель ${t.B}`, w.thisWeek.B, w.lastWeek.B)}${cell(`рынок А · цель ${t.A}`, w.thisWeek.A, w.lastWeek.A)}${cell('подогнанных CV', w.thisWeek.tailored, w.lastWeek.tailored)}</div>
+      <div class="paper"><h2>Сколько стоит один скрининг</h2>${costTable(w.cost)}</div>
+      <div class="paper"><h2>Выводы и план на неделю</h2>
+        ${note ? `<textarea class="out" id="revText" style="min-height:260px">${esc(note)}</textarea><div class="row"><button class="btn go sm" id="revSend" ${st.scriptVersion >= 23 ? '' : 'disabled'}>В воскресное письмо</button><button class="btn line sm" id="revCopy">Копировать</button><button class="btn quiet sm" id="revAi">Переписать</button></div>${st.scriptVersion && st.scriptVersion < 23 ? '<p class="tiny muted">Для письма нужен Code.gs версии 23.</p>' : ''}`
+          : st.local.ai.key ? `<button class="btn go" id="revAi" ${st.revBusy ? 'disabled' : ''}>${st.revBusy ? 'Пишу…' : 'Написать выводы (AI)'}</button>` : '<p class="small muted">С ключом AI здесь появятся 5 выводов по цифрам и план на неделю. <a href="#setup">Настройки → AI</a></p>'}
+        <p class="tiny muted">В AI уходят только цифры, без названий компаний и твоих данных.</p></div>`;
+  }
+  async function writeReview() {
+    const apps = st.rows.map(plainApp), w = RV.week(apps);
+    const emp = (st.local.employers || []);
+    const extra = `Cold emails to local employers this week: ${weekData().C}; replies from employers so far: ${emp.filter(e => e.status === 'replied').length}. Baseline on 24.11.2026: 3 screenings from 209 applications (1.4%), agencies 0 from 28.`;
+    st.revBusy = true; render();
+    try {
+      const text = await LLM.chat(aiCfg(), [
+        { role: 'system', content: 'You are a job search coach for a UK IT support student. Write in Russian. Be specific and honest about small samples (say when numbers are too small to conclude). No invented numbers: use only the ones given.' },
+        { role: 'user', content: `Numbers:\n${RV.summaryForAi(w, st.local.targets, extra)}\n\nWrite: "Что сработало" (up to 3 bullets), "Что не сработало" (up to 3 bullets), "План на неделю" (4–5 concrete actions with numbers, market B first: part-time IT alongside study, then market A only for roles worth a study break). Plain text, short bullets.` },
+      ], { temperature: 0.4, cacheKey: false });
+      st.local.reviews = { ...(st.local.reviews || {}), [weekKey()]: text.trim() }; save();
+    } catch (e) { toast(String(e.message || e)); }
+    st.revBusy = false; render();
+  }
+  async function askTracker(question) {
+    const out = $('#askOut');
+    out.innerHTML = '<p class="small muted">Думаю…</p>';
+    try {
+      const raw = await LLM.chat(aiCfg(), RV.askPrompt(question, todayIso(), companiesList()), { json: true, temperature: 0, cacheKey: false });
+      const q = RV.cleanQuery(raw), apps = st.rows.map(plainApp), r = RV.runQuery(apps, q);
+      const pc = r.total ? Math.round(r.screens / r.total * 1000) / 10 : 0;
+      const head = q.show === 'rate' ? `${r.screens} из ${r.total} дошли до скрининга (${String(pc).replace('.', ',')}%)` : `${r.total} ${plural(r.total, 'заявка', 'заявки', 'заявок')}${r.screens ? `, из них со скринингом ${r.screens}` : ''}`;
+      const groups = r.groups ? `<table class="tbl"><tbody>${r.groups.slice(0, 20).map(g => `<tr><td>${esc(RU[g.key] || g.key)}</td><td>${g.n}</td><td>${g.screens ? 'скрин. ' + g.screens : ''}</td></tr>`).join('')}</tbody></table>` : '';
+      const list = (q.show === 'list' || r.total <= 8) && r.total ? `<div class="group" style="margin-top:8px">${r.rows.slice(0, 30).map(a => `<button class="app-row" data-open="${esc(a.id)}">${dot(a.status)}<span class="t">${esc(a.title)}</span><span class="r"><b>${esc(RU[a.status] || a.status)}</b>${esc(String(a.appliedAt).slice(0, 10))}</span><span class="m">${esc(a.company)}</span></button>`).join('')}</div>` : '';
+      out.innerHTML = `<p><b>${esc(head)}</b></p>${groups}${list}<p class="tiny muted">Фильтр: ${esc(Object.entries(q.filter).filter(([, v]) => v != null && !(Array.isArray(v) && !v.length)).map(([k2, v]) => `${k2}=${Array.isArray(v) ? v.join('/') : v}`).join(', ') || 'все заявки')}</p>`;
+      bind(out);
+    } catch (e) { out.innerHTML = `<p class="small" style="color:var(--red)">${esc(e.message)}</p>`; }
+  }
+
+  // ---------- Company brief before an interview ----------
+  function viewBrief() {
+    const r = rowById(st.briefId);
+    if (!r) return '<h1>Справка о компании</h1><div class="empty"><b>Выбери заявку</b>Открой заявку и нажми «Справка о компании».</div>';
+    const b = (st.local.briefs || {})[r.id], co = r.company || '';
+    const links = [['Сайт компании', `https://www.google.com/search?q=${encodeURIComponent(co + ' official site')}`], ['Отзывы сотрудников', `https://www.google.com/search?q=${encodeURIComponent(co + ' Glassdoor reviews')}`], ['LinkedIn', `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(co)}`], ['Новости', `https://news.google.com/search?q=${encodeURIComponent(co)}`], ['Companies House', `https://find-and-update.company-information.service.gov.uk/search?q=${encodeURIComponent(co)}`]];
+    return `<div><p class="ticket">${esc(r.ticket || '')} · ${esc(RU[idOf(r.status)] || '')}</p><h1>${esc(co || 'Компания')}</h1><p class="lead">${esc(r.title || '')}</p></div>
+      <div class="paper tight"><h2>Источники</h2><div class="row">${links.map(([l, u]) => `<a class="btn line sm" href="${esc(u)}" target="_blank" rel="noopener">${l}</a>`).join('')}${r.location ? `<a class="btn line sm" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(co + ' ' + r.location)}&travelmode=transit" target="_blank" rel="noopener">Как добраться</a>` : ''}</div></div>
+      <div class="paper"><h2>Справка и подготовка</h2>
+        ${b ? `<div class="ad" style="max-height:none">${esc(b)}</div><div class="row"><button class="btn line sm" id="briefCopy">Копировать</button><button class="btn quiet sm" id="briefAi">Переписать</button></div>`
+          : st.local.ai.key ? `<button class="btn go" id="briefAi" ${st.briefBusy ? 'disabled' : ''}>${st.briefBusy ? 'Готовлю…' : 'Подготовить справку (AI)'}</button>` : '<p class="small muted">С ключом AI здесь будет справка: чем занимается компания, что за роль, вероятные вопросы с твоими историями STAR и вопросы работодателю.</p>'}
+        <p class="tiny muted">AI работает по тексту вакансии и своим общим знаниям, без поиска в интернете: факты о компании проверь по источникам выше. Свежие новости и отзывы найдёт Claude с веб-поиском — кнопка ниже.</p>
+        <button class="btn line sm" id="briefPrompt">Промпт для Claude с поиском</button></div>`;
+  }
+  async function writeBrief(r) {
+    st.briefBusy = true; render();
+    try {
+      const text = await LLM.chat(aiCfg(), [
+        { role: 'system', content: `You prepare an entry-level IT support candidate for an interview. Write in Russian, but keep example answers in English. ${LLM.NO_INVENT} Mark anything about the company that is not in the ad as "проверь" — you have no internet access.` },
+        { role: 'user', content: `Company: ${r.company}\nRole: ${r.title}\nLocation: ${r.location || ''}\nAD:\n<<<\n${String(r.description || '').slice(0, 6000)}\n>>>\nCANDIDATE FACTS:\n<<<\n${st.local.facts || DEFAULT_FACTS}\n>>>\nWrite these sections:\n1. Чем занимается компания (2–3 строки, что известно; остальное — «проверь»).\n2. Что на самом деле за роль (по тексту вакансии): главные задачи и инструменты.\n3. 6 вероятных вопросов на интервью; к каждому — какую историю из фактов кандидата рассказать (по STAR, коротко) и одну фразу-начало ответа на английском.\n4. Пробелы: что просят, а у кандидата нет, и как честно ответить.\n5. 3 умных вопроса работодателю (на английском).\n6. Чек-лист на день интервью (5 пунктов).` },
+      ], { temperature: 0.4, maxTokens: 2200, cacheKey: false });
+      st.local.briefs = { ...(st.local.briefs || {}), [r.id]: text.trim() }; save();
+    } catch (e) { toast(String(e.message || e)); }
+    st.briefBusy = false; render();
+  }
+
+  // ---------- Offers and salary talks ----------
+  function viewOffer() {
+    const offers = st.local.offers || [];
+    const sal = st.rows.map(r => A.parseSalary(String(r.salary || ''))).filter(x => x && x.annualMin >= 12000 && x.annualMin < 120000).map(x => (x.annualMin + (x.annualMax || x.annualMin)) / 2).sort((a, b) => a - b);
+    const median = sal.length ? Math.round(sal[Math.floor(sal.length / 2)]) : 0;
+    const money = v => '£' + Math.round(v).toLocaleString('en-GB');
+    const field = (o, k, label, ph) => `<label class="f">${label}<input class="input" data-off="${esc(o.id)}:${k}" value="${esc(o[k] == null ? '' : o[k])}" placeholder="${ph || ''}" inputmode="decimal"></label>`;
+    const cards = offers.map(o => { const m = RV.offerMaths(o); return `<div class="paper"><div class="row"><input class="input grow" data-off="${esc(o.id)}:company" value="${esc(o.company || '')}" placeholder="Компания" style="font-weight:700"><button class="btn quiet sm" data-off-del="${esc(o.id)}">Удалить</button></div>
+      <div class="split">${field(o, 'salary', 'Зарплата в год, £', '26000')}${field(o, 'hourly', 'или в час, £', '13.50')}</div>
+      <div class="split">${field(o, 'hours', 'Часов в неделю', '37.5')}${field(o, 'days', 'Дней в неделю', '5')}</div>
+      <div class="split">${field(o, 'commuteMin', 'Дорога в одну сторону, мин', '30')}${field(o, 'commuteCost', 'Дорога в день, £', '8')}</div>
+      <div class="kpis" style="grid-template-columns:repeat(3,1fr)"><div class="kpi"><b>${m.year ? money(m.year) : '—'}</b><span>в год</span></div><div class="kpi"><b>${m.hourly ? '£' + m.hourly.toFixed(2) : '—'}</b><span>в час</span></div><div class="kpi"><b>${m.effective ? '£' + m.effective.toFixed(2) : '—'}</b><span>в час с дорогой</span></div></div>
+      ${m.travelHours ? `<p class="small muted">Дорога: ${m.travelHours} ч и ${money(m.travelCost)} в год.</p>` : ''}
+      ${st.local.ai.key ? `<button class="btn line sm" data-off-ai="${esc(o.id)}">Что сказать на переговорах (AI)</button>` : ''}<div data-off-out="${esc(o.id)}">${o.script ? `<textarea class="out" style="min-height:220px">${esc(o.script)}</textarea>` : ''}</div></div>`; }).join('');
+    return `<div><h1>Оффер и зарплата</h1><p class="lead">Сравни предложения с учётом дороги и подготовься к разговору о зарплате.</p></div>
+      <div class="paper tight"><p>Медиана зарплат в твоих вакансиях: <b>${median ? money(median) : 'нет данных'}</b>${sal.length ? ` (${sal.length} вакансий)` : ''}. Порог для рынка А: £${Math.round((profile().salaryThresholdA || 30000) / 1000)}k.</p></div>
+      ${cards || '<div class="empty"><b>Офферов пока нет</b>Добавь предложение, когда оно появится, — или сравни две вакансии заранее.</div>'}
+      <button class="btn go block" id="offAdd">Добавить предложение</button>`;
+  }
+  async function offerScript(o) {
+    const m = RV.offerMaths(o), out = $(`[data-off-out="${o.id}"]`);
+    out.innerHTML = '<p class="small muted">Пишу…</p>';
+    const sal = st.rows.map(r => A.parseSalary(String(r.salary || ''))).filter(x => x && x.annualMin >= 12000).map(x => (x.annualMin + (x.annualMax || x.annualMin)) / 2).sort((a, b) => a - b);
+    const median = sal.length ? Math.round(sal[Math.floor(sal.length / 2)]) : 0;
+    const ask = m.year ? Math.ceil(Math.max(m.year + 1000, Math.min(m.year * 1.1, Math.max(median, m.year * 1.05))) / 500) * 500 : 0;
+    try {
+      const text = await LLM.chat(aiCfg(), [
+        { role: 'system', content: `You coach a UK entry-level IT support candidate on salary negotiation. Russian explanations, English scripts. ${LLM.NO_INVENT} Polite, short, no ultimatums.` },
+        { role: 'user', content: `Offer: ${o.company || 'the employer'}, £${m.year} a year (£${m.hourly}/h), ${o.hours || 37.5} h/week, ${o.days || 5} days. Commute: ${o.commuteMin || 0} min each way, £${o.commuteCost || 0}/day; effective £${m.effective}/h. Median salary in the candidate's saved job ads: £${median || 'unknown'}. Suggested ask (computed): £${ask}.\nFACTS:\n<<<\n${st.local.facts || DEFAULT_FACTS}\n>>>\nWrite: 1) стоит ли торговаться и почему (2 строки); 2) email на английском с просьбой о £${ask} или о компенсации дороги/гибком графике; 3) фразы для звонка (3–4); 4) что ответить, если откажут.` },
+      ], { temperature: 0.4, maxTokens: 1500, cacheKey: false });
+      o.script = text.trim(); save(); render();
+    } catch (e) { out.innerHTML = `<p class="small" style="color:var(--red)">${esc(e.message)}</p>`; }
+  }
+
   // ---------- Applications ----------
   function filtered() {
     const q = st.q.trim().toLowerCase(), f = st.filter, mk = st.market;
@@ -752,12 +865,15 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       <label class="f">Заметки<textarea class="input" id="notes" placeholder="Кто звонил, дата интервью, что спросили…" style="min-height:90px">${esc(r.notes || '')}</textarea></label>
       <div class="row"><button class="btn go grow" id="saveNotes">Сохранить</button><button class="btn line" id="sheetVoice">Заметка голосом</button>${r.url ? `<a class="btn line grow" href="${esc(r.url)}" target="_blank" rel="noopener">Вакансия</a>` : ''}</div>
       ${a.chance.tools.length ? `<div class="stack"><h3>Навыки</h3><div class="tags">${a.chance.matched.map(t => `<span class="tag ok">${esc(t)}</span>`).join('')}${a.chance.missing.map(t => `<span class="tag bad">${esc(t)}</span>`).join('')}</div></div>` : ''}
+      ${ACTIVE.includes(cur) || cur === 'accepted' ? `<div class="row"><button class="btn line grow" id="sheetBrief">Справка о компании</button>${['offer', 'accepted'].includes(cur) ? '<button class="btn line grow" id="sheetOffer">Оффер</button>' : ''}</div>` : ''}
       ${r.description ? `<details class="fold"><summary><h3>Текст вакансии</h3></summary><div class="ad" style="margin-top:10px">${esc(r.description)}</div></details>
         <div class="row"><button class="btn line grow" id="reAnalyze">Разобрать снова</button><button class="btn line grow" id="sheetPrompt">Промпт для Claude</button></div>` : ''}`;
     sh.hidden = false; $('#scrim').hidden = false; $('#toast').hidden = true;
     $$('[data-set]', sh).forEach(b => b.onclick = () => { setStatus(r.id, b.dataset.set); closeSheet(); });
     const sent = $('#sheetSent', sh); if (sent) sent.onclick = () => { markSent(r.id); closeSheet(); };
     $('#sheetVoice', sh).onclick = () => openVoice(`${r.company}: `);
+    const sb = $('#sheetBrief', sh); if (sb) sb.onclick = () => { st.briefId = r.id; closeSheet(); location.hash = '#brief'; };
+    const so = $('#sheetOffer', sh); if (so) so.onclick = () => { st.local.offers = st.local.offers || []; if (!st.local.offers.some(o => o.rowId === r.id)) { const sa = A.parseSalary(String(r.salary || '')); st.local.offers.unshift({ id: 'f' + Date.now().toString(36), rowId: r.id, company: r.company, salary: sa && sa.annualMin ? Math.round((sa.annualMin + (sa.annualMax || sa.annualMin)) / 2) : '' }); save(); } closeSheet(); location.hash = '#offer'; };
     $('#saveNotes', sh).onclick = () => { patchRow(r, { notes: $('#notes').value, nextDate: $('#nd').value || '' }); closeSheet(); toast('Сохранено'); };
     const ra = $('#reAnalyze', sh);
     if (ra) ra.onclick = () => { closeSheet(); st.result = analyzeJob({ title: r.title, company: r.company, location: r.location, description: r.description, url: r.url, platform: r.platform }); st.letter = ''; location.hash = '#check'; render(); };
@@ -889,13 +1005,15 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     const base = 1.4;
     const rate = screens.length / n * 100;
     return `
-      <div><h1>Статистика</h1><p class="lead">Что работает, а что нет — по твоим заявкам.</p></div>
+      <div><h1>Статистика</h1><p class="lead">Что работает, а что нет — по твоим заявкам. Итоги недели — на странице <a href="#review">Неделя</a>.</p></div>
+      ${st.local.ai.key ? `<div class="paper tight"><h2>Спроси трекер</h2><div class="row"><input class="input grow" id="askQ" placeholder="Сколько я подал в школы в ноябре и кто ответил?" aria-label="Вопрос"><button class="btn go" id="askGo">Спросить</button></div><div id="askOut"></div></div>` : ''}
       <div class="kpis"><div class="kpi"><b>${n}</b><span>откликов</span></div><div class="kpi"><b>${pct(screens.length, n)}</b><span>до скрининга</span></div><div class="kpi"><b>${inter.length}</b><span>интервью</span></div><div class="kpi"><b>${pct(replied.length, n)}</b><span>ответили</span></div></div>
       <div class="paper"><h2>Конверсия в скрининг</h2>
         <p>${screens.length} из ${n}: <b>${pf(rate)}%</b>, вероятный диапазон ${pf(lo)}–${pf(hi)}%.</p>
         <p class="small muted">База на 24.11.2026: 3 из 209 (1,4%). ${n < 60 ? 'Выборка пока маленькая, выводы делать рано.' : rate > base * 1.5 ? 'Лучше базы — то, что изменилось, работает.' : rate < base / 1.5 ? 'Ниже базы: меньше откликов, больше подгонки и прямых откликов.' : 'Примерно на уровне базы.'} Одна удача из трёх — это не 33%: смотри на диапазон.</p></div>
       <div class="paper"><h2>Воронка</h2><div class="funnel">${funnel.map(([l, v]) => `<div class="f"><span>${l}</span><i style="width:${Math.max(1, v / n * 100)}%"></i><b>${v}</b></div>`).join('')}</div></div>
       <div class="paper"><h2>Отклики по неделям</h2><div class="bars">${weeks.map(w => `<div><b>${w.n || ''}</b><i style="height:${w.n / maxW * 100}%"></i>${w.s.getDate()}.${String(w.s.getMonth() + 1).padStart(2, '0')}</div>`).join('')}</div></div>
+      <div class="paper"><h2>Сколько стоит один скрининг</h2>${costTable(RV.costPerScreen(st.rows.map(plainApp)))}</div>
       ${table('По источнику', seg(a => a.platform))}
       ${table('Агентство или работодатель', seg(a => a.agency ? 'Агентство' : 'Напрямую'))}
       ${table('По рынку', seg(a => a.market === 'A' ? 'А · full-time' : 'Б · с учёбой'))}
@@ -1117,6 +1235,8 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     return `<h1>Ещё</h1><div class="group">
       ${link('#stats', '<path d="M5 20V11M10 20V5M15 20v-7M20 20V9" />', 'Статистика', 'конверсия, воронка, источники, отказы')}
       ${link('#employers', '<path d="M4 20V9l8-5 8 5v11M9 20v-6h6v6" />', 'Работодатели рядом', 'школы, колледжи, MSP — холодные письма')}
+      ${link('#review', '<path d="M4 5h16v14H4zM4 9h16M9 13h6M9 16h4" />', 'Неделя', 'итоги, стоимость скрининга, план от AI')}
+      ${link('#offer', '<path d="M12 3v18M16 7H10a3 3 0 0 0 0 6h4a3 3 0 0 1 0 6H7" />', 'Оффер и зарплата', 'сравнение с дорогой, переговоры')}
       ${link('#cv', '<path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5" />', 'CV', 'версии А и Б, подгонка под вакансию')}
       ${link('#learn', '<path d="M3 8l9-4 9 4-9 4zM7 10v5c3 2 7 2 10 0v-5" />', 'План обучения', 'задания для лаборатории из пробелов')}
       ${link('#templates', '<path d="M4 6l8 6 8-6M4 6h16v12H4z" />', 'Шаблоны писем', 'cover letter, письмо работодателю, ответы')}
@@ -1242,7 +1362,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   });
 
   // ---------- Router ----------
-  const ROUTES = { today: viewToday, check: viewCheck, apps: viewApps, stats: viewStats, templates: viewTemplates, employers: viewEmployers, cv: viewCv, learn: viewLearn, more: viewMore, setup: viewSetup };
+  const ROUTES = { today: viewToday, check: viewCheck, apps: viewApps, stats: viewStats, templates: viewTemplates, employers: viewEmployers, cv: viewCv, learn: viewLearn, review: viewReview, brief: viewBrief, offer: viewOffer, more: viewMore, setup: viewSetup };
   const route = () => { const r = location.hash.replace('#', '').split('=')[0]; return ROUTES[r] ? r : (r === 'add' ? 'check' : r === 'list' ? 'apps' : 'today'); };
   function updateBadges() {
     if (st.lock) return;
@@ -1255,7 +1375,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     document.body.classList.toggle('locked', !!st.lock);
     if (st.lock) { v.innerHTML = viewLock(); bindLock(v); return; }
     v.innerHTML = ROUTES[r]();
-    const tab = ['stats', 'templates', 'employers', 'setup', 'cv', 'learn'].includes(r) && matchMedia('(max-width: 919px)').matches ? 'more' : r;
+    const tab = ['stats', 'templates', 'employers', 'setup', 'cv', 'learn', 'review', 'brief', 'offer'].includes(r) && matchMedia('(max-width: 919px)').matches ? 'more' : r;
     $$('.nav a[data-tab]').forEach(a => a.setAttribute('aria-current', a.dataset.tab === tab || a.dataset.tab === r ? 'page' : 'false'));
     updateBadges();
     bind(v);
@@ -1333,6 +1453,20 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     const lo = $('#letterOut', v); if (lo) lo.oninput = () => { st.letter = lo.value; };
     const lc = $('#letterCopy', v); if (lc) lc.onclick = () => copy(st.letter, lc);
     const lx = $('#letterClear', v); if (lx) lx.onclick = () => { st.letter = ''; st.letterWarn = []; render(); };
+    // Week, ask, brief, offer
+    const ra2 = $('#revAi', v); if (ra2) ra2.onclick = writeReview;
+    const rc = $('#revCopy', v); if (rc) rc.onclick = () => copy($('#revText').value, rc);
+    const rt = $('#revText', v); if (rt) rt.onchange = () => { st.local.reviews[weekKey()] = rt.value; save(); };
+    const rs = $('#revSend', v); if (rs) rs.onclick = async () => { try { await api('POST', null, { weeklyNote: $('#revText').value }); toast('Выводы попадут в воскресное письмо'); } catch (e) { toast(String(e.message || e)); } };
+    const ag = $('#askGo', v); if (ag) { ag.onclick = () => { const q = $('#askQ').value.trim(); if (q) askTracker(q); }; $('#askQ', v).onkeydown = e => { if (e.key === 'Enter') ag.click(); }; }
+    $$('[data-brief]', v).forEach(b => b.onclick = () => { st.briefId = b.dataset.brief; location.hash = '#brief'; });
+    const ba = $('#briefAi', v); if (ba) ba.onclick = () => writeBrief(rowById(st.briefId));
+    const bc = $('#briefCopy', v); if (bc) bc.onclick = () => copy(st.local.briefs[st.briefId], bc);
+    const bp = $('#briefPrompt', v); if (bp) bp.onclick = () => { const r = rowById(st.briefId); copy(`I have an interview for "${r.title}" at ${r.company}${r.location ? ' (' + r.location + ')' : ''}. Search the web and give me: what the company does and how big it is, recent news (last 6 months), what employees say about working there and about the IT team, the IT systems they likely use, and 3 smart questions to ask. Cite sources.\n\nJob ad:\n${String(r.description || '').slice(0, 5000)}`, bp); };
+    const oa = $('#offAdd', v); if (oa) oa.onclick = () => { st.local.offers = st.local.offers || []; st.local.offers.push({ id: 'f' + Date.now().toString(36), company: '' }); save(); render(); };
+    $$('[data-off]', v).forEach(i => i.onchange = () => { const [id, k] = i.dataset.off.split(':'); const o = st.local.offers.find(x => x.id === id); if (!o) return; o[k] = k === 'company' ? i.value.trim() : i.value.replace(',', '.').replace(/[^\d.]/g, ''); save(); render(); });
+    $$('[data-off-del]', v).forEach(b => b.onclick = () => { st.local.offers = st.local.offers.filter(x => x.id !== b.dataset.offDel); save(); render(); });
+    $$('[data-off-ai]', v).forEach(b => b.onclick = () => { const o = st.local.offers.find(x => x.id === b.dataset.offAi); if (o) offerScript(o); });
     // CV
     const tg = $('#tailorGo', v); if (tg) tg.onclick = () => doTailor(st.result);
     const cr = $('#cvReset', v); if (cr) cr.onclick = () => { const r = st.result; r.tl = null; r.tailored = false; render(); };

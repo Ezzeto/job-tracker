@@ -38,8 +38,8 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
     const req = r.request();
     const u = new URL(req.url());
     let body;
-    if (req.method() === 'POST') { const b = JSON.parse(req.postData()); posts.push(b); (b.apps || []).forEach(a => rows.unshift(a)); (b.patches || []).forEach(p => Object.assign(rows.find(x => x.id === p.id) || {}, p)); (b.inboxDismiss || []).forEach(id => { const i = inbox.findIndex(x => x.id === id); if (i >= 0) inbox.splice(i, 1); }); body = { ok: true, version: 22, events: (b.events || []).map(() => ({ ok: true, id: 'ev1' })) }; }
-    else if (u.searchParams.get('action') === 'ping') body = { ok: true, version: 22, name: 'Job search', rows: rows.length };
+    if (req.method() === 'POST') { const b = JSON.parse(req.postData()); posts.push(b); (b.apps || []).forEach(a => rows.unshift(a)); (b.patches || []).forEach(p => Object.assign(rows.find(x => x.id === p.id) || {}, p)); (b.inboxDismiss || []).forEach(id => { const i = inbox.findIndex(x => x.id === id); if (i >= 0) inbox.splice(i, 1); }); body = { ok: true, version: 23, events: (b.events || []).map(() => ({ ok: true, id: 'ev1' })) }; }
+    else if (u.searchParams.get('action') === 'ping') body = { ok: true, version: 23, name: 'Job search', rows: rows.length };
     else if (u.searchParams.get('action') === 'profile') body = { ok: true, profile: { skills: { 'Microsoft 365': 'strong', 'Active Directory': 'strong', 'Windows 10/11': 'strong', Intune: 'basic' }, areas: ['Hertfordshire', 'Broxbourne', 'Harlow', 'London'], workDays: [0, 1, 2, 5], hoursPerWeek: 32, experienceYears: 2, signName: 'Test Person', gmailAccounts: ['me@example.com'], pitch: 'a second-year Computing student who supports Microsoft 365 and Active Directory users' } };
     else if (u.searchParams.get('action') === 'inbox') body = { ok: true, items: inbox, alerts, added: 0 };
     else if (u.searchParams.get('action') === 'slots') body = { ok: true, busy: [] };
@@ -55,8 +55,15 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
     const type = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webmanifest': 'application/manifest+json' }[path.extname(p)] || 'text/plain';
     r.fulfill({ status: 200, contentType: type, body: fs.readFileSync(p) });
   });
-  await ctx.route('https://api.groq.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' },
-    body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ company: 'Harlow College', status: 'interview1', event: { title: 'Interview', date: dayIso(-5), time: '10:00', minutes: 45 }, nextDate: null, note: 'Sara called: interview on Tuesday at 10.', todo: ['bring passport'] }) } }] }) }));
+  const voiceJson = () => JSON.stringify({ company: 'Harlow College', status: 'interview1', event: { title: 'Interview', date: dayIso(-5), time: '10:00', minutes: 45 }, nextDate: null, note: 'Sara called: interview on Tuesday at 10.', todo: ['bring passport'] });
+  await ctx.route('https://api.groq.com/**', r => {
+    const body = r.request().postData() || '';
+    const content = /job search tracker/.test(body) ? JSON.stringify({ filter: { text: 'school' }, groupBy: null, show: 'list' })
+      : /job search coach/.test(body) ? 'Что сработало:\n- Отклики напрямую в колледжи.\nПлан на неделю:\n- 7 откликов на рынке Б.'
+      : /prepare an entry-level IT support candidate for an interview/.test(body) ? '1. Чем занимается компания: проверь.\n3. Вопросы: Tell me about a time you helped a frustrated user.'
+      : voiceJson();
+    r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ choices: [{ message: { content } }] }) });
+  });
   await ctx.route('https://overpass-api.de/**', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ elements: [
     { type: 'node', id: 11, lat: 51.88, lon: 0.18, tags: { amenity: 'school', name: 'Birchwood High School', website: 'https://www.birchwoodhigh.org' } },
     { type: 'node', id: 12, lat: 51.87, lon: 0.16, tags: { office: 'it', name: 'Stortford IT Ltd', email: 'hello@stortfordit.co.uk' } },
@@ -121,7 +128,7 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   console.log('patch sent:', JSON.stringify(posts.filter(p => (p.patches || []).length).pop().patches));
   await page.click('#toast button'); await wait(700);
   console.log('after undo:', JSON.stringify(posts.filter(p => (p.patches || []).length).pop().patches));
-  for (const r of ['stats', 'employers', 'templates', 'setup', 'more', 'cv', 'learn']) { await page.goto('https://jt.example/index.html#' + r); await wait(500); if (r !== 'more' && (await page.$('.lock'))) await typePin('2580'); await wait(300); await shot('5-' + r); console.log(r + ':', (await page.textContent('h1')).trim()); }
+  for (const r of ['stats', 'employers', 'templates', 'setup', 'more', 'cv', 'learn', 'review', 'offer']) { await page.goto('https://jt.example/index.html#' + r); await wait(500); if (r !== 'more' && (await page.$('.lock'))) await typePin('2580'); await wait(300); await shot('5-' + r); console.log(r + ':', (await page.textContent('h1')).trim()); }
   await page.goto('https://jt.example/index.html#today'); await wait(500); if (await page.$('.lock')) await typePin('2580');
   await page.evaluate(() => { window.JT_App.st.local.ai.key = 'gsk_test'; window.JT_App.render(); });
   await page.click('#voiceOpen'); await wait(300);
@@ -131,6 +138,24 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   await page.click('#vApply'); await wait(900);
   const vp = posts.filter(p => (p.patches || []).length).pop();
   console.log('voice applied:', JSON.stringify(vp.patches[0]).slice(0, 160), '| events:', JSON.stringify(posts.filter(p => p.events).map(p => p.events[0].title)));
+  await page.goto('https://jt.example/index.html#stats'); await wait(600); if (await page.$('.lock')) await typePin('2580');
+  await page.fill('#askQ', 'Сколько я подал в школы?'); await page.click('#askGo'); await wait(800);
+  console.log('ask:', (await page.textContent('#askOut b')).trim(), '|', await page.$$eval('#askOut .app-row .m', l => l.map(x => x.textContent).join(', ')));
+  console.log('cost rows:', await page.$$eval('.tbl', t => t.find(x => /Часов на скрининг/.test(x.textContent)).querySelectorAll('tbody tr').length));
+  await page.goto('https://jt.example/index.html#review'); await wait(500); if (await page.$('.lock')) await typePin('2580');
+  await page.click('#revAi'); await wait(800);
+  await page.click('#revSend'); await wait(600);
+  console.log('weekly note sent:', JSON.stringify(posts.filter(p => p.weeklyNote).map(p => p.weeklyNote.slice(0, 30))));
+  await shot('8-review');
+  await page.evaluate(() => { window.JT_App.st.briefId = 'a2'; location.hash = '#brief'; }); await wait(400);
+  await page.click('#briefAi'); await wait(800);
+  console.log('brief:', (await page.textContent('.ad')).slice(0, 60));
+  await page.goto('https://jt.example/index.html#offer'); await wait(500); if (await page.$('.lock')) await typePin('2580');
+  await page.click('#offAdd'); await wait(300);
+  const offId = await page.$eval('[data-off$=":salary"]', i => i.dataset.off.split(':')[0]);
+  await page.fill(`[data-off="${offId}:salary"]`, '26000'); await page.press(`[data-off="${offId}:salary"]`, 'Tab'); await wait(300);
+  await page.fill(`[data-off="${offId}:commuteMin"]`, '45'); await page.press(`[data-off="${offId}:commuteMin"]`, 'Tab'); await wait(300);
+  console.log('offer:', (await page.$$eval('.kpi b', l => l.map(x => x.textContent))).slice(-3).join(' | '));
   await page.goto('https://jt.example/index.html#employers'); await wait(800); if (await page.$('.lock')) await typePin('2580');
   await page.click('#osmLoad'); await wait(900);
   console.log('employers:', await page.$$eval('#empList .app-row', l => l.length), '| queue:', (await page.$$eval('[data-emp-mail]', l => l.map(a => a.closest('.item').querySelector('.t').textContent))).slice(0, 5).join(', '));
@@ -157,7 +182,7 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   await typePin('2580');
   console.log('after reload unlocked, rows:', await page.evaluate(() => window.JT_App.st.rows.length));
   let overflow = false;
-  for (const r of ['today', 'check', 'apps', 'stats', 'employers', 'templates', 'setup']) { await page.evaluate(h => { location.hash = h; }, '#' + r); await wait(250); if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)) { overflow = true; console.log('overflow on', r); } }
+  for (const r of ['today', 'check', 'apps', 'stats', 'employers', 'templates', 'setup', 'review', 'offer', 'cv', 'learn']) { await page.evaluate(h => { location.hash = h; }, '#' + r); await wait(250); if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)) { overflow = true; console.log('overflow on', r); } }
   if (OUT) {
     await page.setViewportSize({ width: 1360, height: 860 }); await page.evaluate(() => { location.hash = '#today'; }); await wait(400); await shot('7-desktop-today');
     await page.evaluate(() => { location.hash = '#stats'; }); await wait(400); await shot('7-desktop-stats');

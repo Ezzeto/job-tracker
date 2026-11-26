@@ -31,7 +31,7 @@ test('a finished task counts as a basic skill from the home lab, a skill used at
 
 test('skills learned on the phone reach the extension once, and None set later sticks', async () => {
   resetStorage();
-  const sheet = createFakeSheet({ version: 22, learned: { ServiceNow: '2026-11-26' } });
+  const sheet = createFakeSheet({ version: 23, learned: { ServiceNow: '2026-11-26' } });
   globalThis.fetch = sheet.fetch;
   await S.set({ sheetCfg: { url: sheet.url, token: 'secret', auto: true } });
   await Sync.syncNow();

@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 22; // 22 = jobs from alert emails, forgotten applications added from confirmations, free calendar slots, Telegram; 21 = employers you contacted (synced with the phone), their replies and vacancy pages watched; 20 = calendar events from voice notes on the phone; 19 = home lab tasks finished on the phone (learned skills); 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 23; // 23 = AI conclusions of the week from the phone in the Sunday email; 22 = jobs from alert emails, forgotten applications added from confirmations, free calendar slots, Telegram; 21 = employers you contacted (synced with the phone), their replies and vacancy pages watched; 20 = calendar events from voice notes on the phone; 19 = home lab tasks finished on the phone (learned skills); 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -725,7 +725,7 @@ function weeklyEmail() {
 <p style="margin:0 0 6px;font-size:12px;color:#646b85">Рынок определён по типу работы в вакансии, примерно.</p><p style="margin:0"><b style="color:#0b958c">Рынок Б (с учёбой):</b> ${s.B} из 8 откликов</p>${bar(s.B, 8, '#0b958c')}
 <p style="margin:0"><b style="color:#7c4dff">Рынок А (full-time):</b> ${s.A} из 10 откликов</p>${bar(s.A, 10, '#7c4dff')}
 <p style="margin:0 0 14px;font-size:13px;color:#646b85">Всего заявок ${s.total} · ждут ответа ${s.waiting} · отказов ${s.rejected} · без ответа ${s.noresponse} · ответили ${rate}% · сейчас на интервью ${s.reached}</p>
-<h2 style="font-size:16px;margin:0 0 6px">Отклики недели</h2>${li(s.applied.slice(0, 15).map(r => `<li>${h(r.title)} — ${h(r.company)}${r.platform ? ' <span style="color:#646b85">· ' + h(r.platform) + '</span>' : ''}</li>`))}
+${(() => { try { const n = JSON.parse(props.getProperty('WEEKLY_NOTE') || 'null'); return n && Date.now() - n.at < 8 * 864e5 ? `<h2 style="font-size:16px;margin:0 0 6px">Выводы недели (AI, с телефона)</h2><div style="white-space:pre-wrap;margin:0 0 14px;background:#f2f4ef;border-radius:12px;padding:10px 12px">${h(n.text)}</div>` : ''; } catch (e) { return ''; } })()}<h2 style="font-size:16px;margin:0 0 6px">Отклики недели</h2>${li(s.applied.slice(0, 15).map(r => `<li>${h(r.title)} — ${h(r.company)}${r.platform ? ' <span style="color:#646b85">· ' + h(r.platform) + '</span>' : ''}</li>`))}
 <h2 style="font-size:16px;margin:0 0 6px">Ответы и смены статуса</h2>${s.firstRun ? '<p style="margin:0 0 6px;font-size:12px;color:#646b85">Первое письмо: здесь только ответы на отклики этой недели. Со следующего — все смены статуса за неделю.</p>' : ''}${li(s.changed.slice(0, 12).map(r => `<li><b>${h(RU_STATUS[r.status] || r.status)}</b>: ${h(r.title)} — ${h(r.company)}</li>`))}
 ${mails ? `<h2 style="font-size:16px;margin:0 0 6px">Письма о вакансиях за неделю</h2>${li(mails.map(m => `<li>${h(m.subject)} <span style="color:#646b85">· ${h(m.from)} · ${h(dd(m.date))}</span></li>`))}` : ''}
 <h2 style="font-size:16px;margin:0 0 6px">На этой неделе</h2>${li([].concat(
@@ -801,6 +801,7 @@ function doPost(e) {
     if (body.learned && typeof body.learned === 'object') saveLearned_(body.learned);
     const events = Array.isArray(body.events) ? addEvents_(body.events.slice(0, 5)) : [];
     if (Array.isArray(body.employers)) saveEmployers_(body.employers);
+    if (typeof body.weeklyNote === 'string') PropertiesService.getScriptProperties().setProperty('WEEKLY_NOTE', JSON.stringify({ text: body.weeklyNote.slice(0, 6000), at: Date.now() }));
 
     const del = (body.deletes || []).map(id => rowOf[id]).filter(Boolean).sort((x, y) => y - x);
     del.forEach(r => sh.deleteRow(r));
