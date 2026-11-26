@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 18; // 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 19; // 19 = home lab tasks finished on the phone (learned skills); 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -417,7 +417,7 @@ function doGet(e) {
   const sh = ensureSheet_();
   if (p.action === 'ping') return json_({ ok: true, version: SCRIPT_VERSION, name: ss.getName(), rows: Math.max(0, sh.getLastRow() - 1) });
   if (p.action === 'fetchJob') return json_(fetchJob_(p.url));
-  if (p.action === 'profile') return json_({ ok: true, profile: readProfile_() });
+  if (p.action === 'profile') return json_({ ok: true, profile: readProfile_(), learned: readLearned_() });
   if (p.action === 'inbox') return json_(inbox_(p.force === '1'));
 
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
@@ -497,6 +497,23 @@ function saveProfile_(profile) {
   let sh = ss.getSheetByName(PROFILE_SHEET);
   if (!sh) { sh = ss.insertSheet(PROFILE_SHEET); sh.hideSheet(); }
   sh.getRange(1, 1).setValue(JSON.stringify(profile).slice(0, 49000));
+}
+
+// Skills practised in the home lab, marked on the phone: { tool: 'yyyy-mm-dd' }. The extension adds them
+// to your skills as Basic, from a home lab, on its next sync.
+const LEARNED_SHEET = '_learned';
+function readLearned_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(LEARNED_SHEET);
+  if (!sh) return {};
+  try { return JSON.parse(sh.getRange(1, 1).getValue() || '{}'); } catch (e) { return {}; }
+}
+function saveLearned_(add) {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(LEARNED_SHEET);
+  if (!sh) { sh = ss.insertSheet(LEARNED_SHEET); sh.hideSheet(); }
+  const cur = readLearned_();
+  Object.keys(add).slice(0, 200).forEach(k => { const v = add[k]; if (v === null) delete cur[k]; else if (/^\d{4}-\d{2}-\d{2}$/.test(String(v)) && k.length <= 60) cur[k] = String(v); });
+  sh.getRange(1, 1).setValue(JSON.stringify(cur));
 }
 
 // ---------- Copy for the weekly summary (14) ----------
@@ -730,6 +747,7 @@ function doPost(e) {
     });
     if (body.profile && typeof body.profile === 'object') saveProfile_(body.profile);
     if (Array.isArray(body.inboxDismiss) && body.inboxDismiss.length) dismissInbox_(body.inboxDismiss);
+    if (body.learned && typeof body.learned === 'object') saveLearned_(body.learned);
 
     const del = (body.deletes || []).map(id => rowOf[id]).filter(Boolean).sort((x, y) => y - x);
     del.forEach(r => sh.deleteRow(r));

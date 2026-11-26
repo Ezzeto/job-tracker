@@ -25,8 +25,8 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
     { id: 'a2', ticket: 'APP-0228', title: 'IT Operations Specialist I', company: 'Cloudflare', status: 'Interview 1', appliedAt: dayIso(20), chance: 82, nextDate: dayIso(0), description: 'Full-time role, 37.5 hours.', updated: 1 },
     { id: 'a3', ticket: 'APP-0190', title: '1st Line Support Engineer', company: 'Zachary Daniels', status: 'Rejected', appliedAt: dayIso(30), chance: 64, rejDays: 2, updated: 1 },
     { id: 'a4', ticket: 'APP-0150', title: 'Desktop Support Technician', company: 'Acme Systems', status: 'Applied', appliedAt: dayIso(40), chance: 58, updated: 1 },
-    { id: 'a5', ticket: 'APP-0240', title: 'IT Technician', company: 'Harlow College', status: 'Applied', appliedAt: dayIso(1), chance: 77, description: desc, followup: '', updated: 1 },
-    { id: 'a6', ticket: 'APP-0241', title: 'IT Support Assistant', company: 'Birchwood High School', status: 'Applied', appliedAt: dayIso(12), chance: 70, description: desc, followup: '1 · 20/11/2026', updated: 1 },
+    { id: 'a5', ticket: 'APP-0240', title: 'IT Technician', company: 'Harlow College', status: 'Applied', appliedAt: dayIso(1), chance: 77, description: desc, followup: '', missing: 'ITIL, ServiceNow', tools: 'ITIL, ServiceNow, Microsoft 365', updated: 1 },
+    { id: 'a6', ticket: 'APP-0241', title: 'IT Support Assistant', company: 'Birchwood High School', status: 'Applied', appliedAt: dayIso(12), chance: 70, description: desc, followup: '1 · 20/11/2026', missing: 'ITIL', tools: 'ITIL, Microsoft 365', updated: 1 },
   ];
   const inbox = [{ id: 't1', kind: 'rejected', subject: 'Your application to Acme Systems', from: 'Acme Systems Careers', date: new Date().toISOString(), rowId: 'a4', company: 'Acme Systems', human: false, link: 'https://mail.google.com/mail/#all/t1' },
     { id: 't2', kind: 'interview', subject: 'Interview invitation', from: 'Tom Brown', date: new Date().toISOString(), rowId: 'a1', company: 'Hays', human: true, link: 'https://mail.google.com/mail/#all/t2' }];
@@ -78,13 +78,20 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   console.log('follow-up patch:', JSON.stringify(posts.filter(p => (p.patches || []).length).pop().patches));
   const mailLink = await page.getAttribute('[data-mail]', 'href').catch(() => '');
   console.log('follow-up mail link:', mailLink.slice(0, 60));
-  await page.click('a[data-tab="check"]'); await wait(300);
+  await page.goto('https://jt.example/index.html#cv'); await wait(500); if (await page.$('.lock')) await typePin('2580');
+  await page.evaluate(() => { document.querySelector('[data-cvtext="B"]').closest('details').open = true; });
+  await page.fill('[data-cvtext="B"]', "Test Person\nIT Support\nBishop's Stortford\n\nPROFILE\nSecond-year Computing student. I support small businesses with Microsoft 365. I run a home lab. Available 3 days a week.\n\nSKILLS\n• Windows 11, Microsoft 365, Active Directory, Intune\n\nEXPERIENCE\nFreelance IT Support | Self-employed | 2024 – present\n• Reset passwords and unlocked accounts in Active Directory for 20 users\n• Fixed Wi-Fi and printer faults on site\n• Set up Intune policies for new laptops\n\nFront of House | Côte | 2022 – 2026\n• Served around 250 guests a shift\n• Trained 25 new staff\n\nEDUCATION\nBSc Computing with AI Technology, Northumbria University London"); await page.click('[data-cvsave="B"]'); await wait(400);
+  console.log('cv saved:', await page.textContent('.tag.ok').catch(() => 'NO'));
+  await page.click('a[data-tab="check"]').catch(() => page.goto('https://jt.example/index.html#check')); await wait(300);
   await page.fill('#jobInput', 'https://www.linkedin.com/jobs/view/4499999999/?trk=abc'); await page.click('#go'); await wait(1200);
   console.log('verdict:', await page.textContent('.verdict .v'), '| score:', await page.textContent('.score'));
   console.log('tags:', (await page.$$eval('#result .tag', l => l.map(x => x.textContent))).join(' | '));
   console.log('fit block:', (await page.textContent('#result .paper.tight').catch(() => 'NO FIT')).replace(/\s+/g, ' ').slice(0, 220));
   await shot('2-result');
   await page.click('#promptCopy').catch(() => {}); await wait(300);
+  await page.click('#tailorGo'); await wait(500);
+  console.log('tailored:', (await page.textContent('details.paper.fold[open] p').catch(() => 'NO')).replace(/\s+/g, ' '));
+  const dl = page.waitForEvent('download', { timeout: 5000 }).catch(() => null); await page.click('#cvDocx'); const d = await dl; console.log('docx download:', d ? d.suggestedFilename() : 'NONE');
   await page.click('#applied'); await wait(800);
   const added = posts.find(p => (p.apps || []).length);
   console.log('added row:', added && added.apps[0].ticket, added && added.apps[0].title, '|', added && added.apps[0].status, '| desc chars', added && added.apps[0].description.length);
@@ -95,7 +102,10 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   console.log('patch sent:', JSON.stringify(posts.filter(p => (p.patches || []).length).pop().patches));
   await page.click('#toast button'); await wait(700);
   console.log('after undo:', JSON.stringify(posts.filter(p => (p.patches || []).length).pop().patches));
-  for (const r of ['stats', 'employers', 'templates', 'setup', 'more']) { await page.goto('https://jt.example/index.html#' + r); await wait(500); if (r !== 'more' && (await page.$('.lock'))) await typePin('2580'); await wait(300); await shot('5-' + r); console.log(r + ':', (await page.textContent('h1')).trim()); }
+  for (const r of ['stats', 'employers', 'templates', 'setup', 'more', 'cv', 'learn']) { await page.goto('https://jt.example/index.html#' + r); await wait(500); if (r !== 'more' && (await page.$('.lock'))) await typePin('2580'); await wait(300); await shot('5-' + r); console.log(r + ':', (await page.textContent('h1')).trim()); }
+  console.log('learn items:', (await page.$$eval('[data-ldone]', l => l.map(x => x.dataset.ldone))).join(', '));
+  await page.click('[data-ldone]'); await wait(600);
+  console.log('learned sent:', JSON.stringify(posts.filter(p => p.learned).map(p => p.learned)));
   await page.goto('https://jt.example/index.html#today'); await wait(500); if (await page.$('.lock')) await typePin('2580');
   await page.evaluate(() => window.JT_App.lockNow()); await wait(300);
   await typePin('1111');

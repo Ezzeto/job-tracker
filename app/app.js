@@ -8,7 +8,7 @@
   'use strict';
   const A = window.JT_Analyzer, S = window.JT_Store, E = window.JT_Extract, Q = window.JT_Quality, Mk = window.JT_Market,
     I = window.JT_Insights, T = window.JT_I18n, F = window.JT_Follow, TP = window.JT_Templates, P = window.JT_Prompt,
-    FIT = window.JT_Fit, CH = window.JT_Chance, LLM = window.JT_LLM;
+    FIT = window.JT_Fit, CH = window.JT_Chance, LLM = window.JT_LLM, LRN = window.JT_Learn, TL = window.JT_Tailor, DX = window.JT_Docx;
   if (T) T.setLang('ru');
   const tr = s => (T ? T.tr(s) : s);
   const $ = (s, el) => (el || document).querySelector(s);
@@ -35,7 +35,7 @@ Certificates: CompTIA A+ in progress; Cisco "Introduction to Modern AI".
 Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   const DEFAULT_LOCAL = () => ({
     targets: { B: 7, A: 5, C: 3 }, studyDays: [3, 4], mail: 'auto', from: '',
-    ai: { key: '', model: '' }, facts: DEFAULT_FACTS, llmCache: {},
+    ai: { key: '', model: '' }, facts: DEFAULT_FACTS, llmCache: {}, cvs: {}, learned: {}, learnTasks: {}, learnNotes: {},
     snooze: {}, noChannel: {}, inboxDone: [], later: [], employers: null, templates: {}, tplJob: { title: '', company: '', name: '' }, why: '',
   });
   const st = {
@@ -85,7 +85,8 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   function profile() {
     const d = JSON.parse(JSON.stringify(A.DEFAULT_PROFILE));
     const p = st.profile || {};
-    return { ...d, ...p, skills: { ...(p.skills || d.skills) }, areas: p.areas || d.areas, intern: { ...d.intern, ...(p.intern || {}), placement: { ...d.intern.placement, ...((p.intern || {}).placement || {}) } } };
+    const out = { ...d, ...p, skills: { ...(p.skills || d.skills) }, areas: p.areas || d.areas, intern: { ...d.intern, ...(p.intern || {}), placement: { ...d.intern.placement, ...((p.intern || {}).placement || {}) } } };
+    return LRN ? LRN.withLearned(out, (st.local && st.local.learned) || {}) : out;
   }
 
   // ---------- Sheet rows as application objects for the shared lib code ----------
@@ -300,7 +301,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       missing: (c.missing || []).join(', '), tools: (c.tools || []).join(', '), details: (an.details || []).join(' • '), url: job.url || '',
       benefits: (an.benefits || []).join(' • '), track: an.track === 'intern' ? 'Internship' : 'Job', verdict: A.VERDICTS[c.verdict] ? A.VERDICTS[c.verdict].label : '',
       cover: st.letter ? 'Written for this job' : '', fit2: res && res.fit && res.fit.score != null ? res.fit.score : '', predicted: res && res.chanceP ? Math.round(res.chanceP.p * 1000) / 10 : '',
-      cvKind: res && res.tailored ? 'Tailored' : '', minutes: res && res.startedAt ? Math.max(1, Math.min(240, Math.round((Date.now() - res.startedAt) / 60000))) : '', description: String(an.description || job.description || '').slice(0, 40000), updated: Date.now(),
+      cvKind: res && res.tailored ? 'Tailored' : res && res.cvVer ? 'Standard' : '', cv: res && res.cvVer ? `CV ${res.cvVer === 'A' ? 'А' : 'Б'}${res.tailored ? ' · tailored' : ''}` : '', minutes: res && res.startedAt ? Math.max(1, Math.min(240, Math.round((Date.now() - res.startedAt) / 60000))) : '', description: String(an.description || job.description || '').slice(0, 40000), updated: Date.now(),
     };
   }
   function addRow(row) {
@@ -517,6 +518,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       <details class="paper fold" open><summary><h2>Ответы для анкеты</h2></summary>
         <div class="group">${r.answers.map((x, i) => `<div class="qa"><div class="q">${esc(x.q)}</div><div class="a">${esc(x.a)}</div><button class="btn sm" data-copy-answer="${i}">Копировать</button>${x.note ? `<div class="n">${esc(x.note)}</div>` : ''}</div>`).join('')}</div>
       </details>
+      ${cvBlock(r)}
       <details class="paper fold" ${st.letter ? 'open' : ''}><summary><h2>Cover letter</h2></summary>
         <label class="f">Почему эта компания — одно-два предложения своими словами
           <textarea class="input" id="why" style="min-height:70px" placeholder="Например: I use your app every week and want to support the people who build it.">${esc(st.local.why || '')}</textarea></label>
@@ -548,6 +550,100 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       <p class="tiny muted">${esc(src)}${!st.local.ai.key ? ' · с ключом AI разбор точнее: <a href="#setup">Настройки</a>' : ''}${r.aiError ? ' · ' + esc(r.aiError) : ''}</p>
       ${r.ai && r.ai.employer && r.agency ? `<div class="note small">Похоже, настоящий работодатель — <b>${esc(r.ai.employer)}</b>. Найди эту вакансию у него на сайте и откликнись напрямую: от агентств пока 0 скринингов из 28. <a href="https://www.google.com/search?q=${encodeURIComponent(`"${r.ai.employer}" ${r.job.title} job`)}" target="_blank" rel="noopener">Искать</a></div>` : ''}
     </div>`;
+  }
+
+  // ---------- CV: two versions, tailored to each job without inventing anything ----------
+  const cvFor = market => { const c = st.local.cvs || {}; const want = market === 'A' ? 'A' : 'B'; return c[want] ? want : c[want === 'A' ? 'B' : 'A'] ? (want === 'A' ? 'B' : 'A') : null; };
+  function cvBlock(r) {
+    const ver = cvFor(r.market);
+    if (!ver) return `<div class="paper tight"><h2>CV под вакансию</h2><p class="small muted">Загрузи свои CV (версия А — full-time, Б — с учёбой) на странице <a href="#cv">CV</a>, и здесь появится подогнанная версия под каждую вакансию: нужные пункты выше, твои формулировки без изменений.</p></div>`;
+    const t = r.tl;
+    const ruVer = ver === 'A' ? 'А' : 'Б';
+    return `<details class="paper fold" open><summary><h2>CV под вакансию</h2></summary>
+      <p class="small muted">Берётся версия ${ruVer}${(st.local.cvs[r.market === 'A' ? 'A' : 'B']) ? '' : ' (другой версии нет)'}. Пункты переставляются под требования, ничего не добавляется и не переписывается.</p>
+      ${!t ? `<button class="btn go" id="tailorGo">Подогнать CV ${ruVer}</button>` : `
+        <p>Совпадение с вакансией: <b>${t.report.coverBefore}% → ${t.report.coverAfter}%</b>, переставлено пунктов: ${t.report.moved}.</p>
+        ${t.report.added.length ? `<p class="small">Добавлено в навыки (ты отметил их как знакомые): ${esc(t.report.added.join(', '))}</p>` : ''}
+        ${t.report.gaps.length ? `<p class="small muted">Нет в CV и не добавлено: ${esc(t.report.gaps.slice(0, 8).join(', '))}</p>` : ''}
+        ${t.summaryWarn && t.summaryWarn.length ? `<div class="note bad small">Проверь профиль: AI упомянул ${esc(t.summaryWarn.join(', '))}, этого нет в CV и навыках.</div>` : ''}
+        <textarea class="out" readonly aria-label="Подогнанное CV">${esc(TL.toText(t.cv))}</textarea>
+        <div class="row"><button class="btn go sm" id="cvDocx">Скачать Word</button><button class="btn line sm" id="cvPdf">Скачать PDF</button>${st.local.ai.key ? `<button class="btn quiet sm" id="cvSummary" ${t.summaryBusy ? 'disabled' : ''}>${t.summaryBusy ? 'Пишу…' : 'Профиль под вакансию (AI)'}</button>` : ''}<button class="btn quiet sm" id="cvReset">Сбросить</button></div>`}
+    </details>`;
+  }
+  function doTailor(r) {
+    const ver = cvFor(r.market); if (!ver) return;
+    const base = TL.parse(st.local.cvs[ver].text);
+    const out = TL.tailor(base, r.job, profile());
+    r.tl = { ...out, ver }; r.tailored = true; r.cvVer = ver;
+    if (r.facts) { r.facts.tailored = true; r.chanceP = CH.predict(r.facts, CH.stats(st.rows.map(rowFacts))); r.chanceD = CH.describe(r.chanceP); }
+    render();
+  }
+  async function tailorSummary(r) {
+    const t = r.tl; if (!t) return;
+    const sum = t.cv.sections.find(x => x.kind === 'summary');
+    const cvText = TL.toText(t.cv);
+    t.summaryBusy = true; render();
+    try {
+      const text = await LLM.draft(aiCfg(), { task: `Rewrite the CV profile (3 lines, no first-person pronouns) for this job: ${r.job.title} at ${r.job.company || 'the employer'}. Use the job's own words only for things the CV already shows. ${r.market === 'B' ? 'Mention availability alongside a Computing degree.' : 'Present as ready for a full-time role.'}`, facts: cvText.slice(0, 5000), skills: '', context: r.job.description, words: 60 });
+      const clean = text.replace(/^["']|["']$/g, '').trim();
+      t.summaryWarn = LLM.unknownTools(clean, cvText, profile());
+      if (sum) { const para = sum.blocks.find(b => b.t === 'para'); if (para) para.text = clean; else sum.blocks.unshift({ t: 'para', text: clean }); }
+      else t.cv.sections.unshift({ title: 'PROFILE', kind: 'summary', blocks: [{ t: 'para', text: clean }] });
+    } catch (e) { toast(String(e.message || e)); }
+    t.summaryBusy = false; render();
+  }
+  function saveBlob(data, name, type) {
+    const blob = data instanceof Blob ? data : new Blob([data], { type });
+    const u = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 3000);
+  }
+  const loadScript = src => new Promise((ok, no) => { if (document.querySelector(`script[src="${src}"]`)) return ok(); const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => no(new Error('Не удалось загрузить ' + src)); document.head.appendChild(el); });
+  async function cvPdf(cv) {
+    await loadScript('lib/vendor/jspdf.umd.min.js'); await loadScript('lib/cvpdf.js');
+    return window.JT_CvPdf.build(cv);
+  }
+  async function readCvFile(file) {
+    if (/\.docx$/i.test(file.name)) await loadScript('lib/vendor/mammoth.browser.min.js');
+    await import('./lib/cvread.mjs');
+    return window.JT_ReadCV(file);
+  }
+  function viewCv() {
+    const c = st.local.cvs || {};
+    const slot = (k, title, hint) => { const v = c[k]; return `<section class="paper"><div class="row"><h2 class="grow">${title}</h2>${v ? `<span class="tag ok">загружено</span>` : '<span class="tag">нет</span>'}</div>
+      <p class="small muted">${hint}</p>
+      ${v ? `<p class="small">${esc(v.name || 'вставленный текст')}, ${(v.text.match(/\b\w+\b/g) || []).length} слов, обновлено ${esc(ago(v.at))}</p>` : ''}
+      <div class="row"><label class="btn go sm" style="cursor:pointer">Загрузить PDF или Word<input type="file" accept=".pdf,.docx,.txt" data-cvfile="${k}" hidden></label>${v ? `<button class="btn line sm" data-cvview="${k}">Показать текст</button><button class="btn quiet sm" data-cvdel="${k}">Удалить</button>` : ''}</div>
+      <details class="fold"><summary><h3>Или вставь текст CV</h3></summary><textarea class="input" data-cvtext="${k}" style="margin-top:10px;min-height:160px" placeholder="Скопируй весь текст CV сюда">${esc(v ? v.text : '')}</textarea><button class="btn line sm" data-cvsave="${k}" style="margin-top:8px">Сохранить текст</button></details>
+      ${v && st.local.ai.key ? `<button class="btn quiet sm" data-cvai="${k}">Профиль для рынка ${k === 'A' ? 'А' : 'Б'} (AI)</button><div data-cvaiout="${k}"></div>` : ''}
+    </section>`; };
+    const apps = st.rows.filter(r => r.cvKind);
+    return `<div><h1>CV</h1><p class="lead">Две версии под две цели. Файл читается на этом устройстве и хранится зашифрованным, никуда не загружается.</p></div>
+      ${slot('B', 'Версия Б — работа с учёбой', 'В шапке: «available 3–4 days a week incl. weekends», учёба заметно. Для университетского helpdesk, школ, колледжей, part-time.')}
+      ${slot('A', 'Версия А — full-time', 'Учёба внизу, акцент на готовность к full-time. Только для вакансий, ради которых стоит взять академ.')}
+      <div class="note info small">В «Разборе» трекер сам берёт версию по рынку вакансии и подгоняет её. Отметка «подогнано» идёт в таблицу — в статистике будет видно, помогает ли подгонка${apps.length ? ` (уже отмечено заявок: ${apps.length})` : ''}.</div>`;
+  }
+
+  // ---------- Learning plan from the gaps ----------
+  function viewLearn() {
+    const apps = st.rows.map(r => { const a = toApp(r); return { missing: a.chance.missing, market: a.market, appliedAt: a.appliedAt }; });
+    const base = st.profile ? { ...st.profile } : profile();
+    const list = LRN.gaps(apps, base, st.local.learned || {});
+    const done = Object.entries(st.local.learned || {}).sort((a, b) => b[1].localeCompare(a[1]));
+    const card = (g, i) => { const custom = (st.local.learnTasks || {})[g.name]; return `<div class="item"><div class="top"><div class="grow"><div class="t">${esc(g.name)}</div><div class="s">нет у тебя в ${g.count} ${plural(g.count, 'вакансии', 'вакансиях', 'вакансиях')}${i < 3 ? ' · в первую очередь' : ''}</div></div><span class="when">~${Math.round((custom ? 90 : g.minutes) / 15) * 15} мин</span></div>
+      <p class="small">${esc(custom || g.task)}</p>
+      <textarea class="input" data-lnote="${esc(g.name)}" style="min-height:60px;font-size:14px" placeholder="Что сделал — пара строк. Пригодится для CV и портфолио">${esc((st.local.learnNotes || {})[g.name] || '')}</textarea>
+      <div class="row"><button class="btn go sm" data-ldone="${esc(g.name)}">Сделал</button>${st.local.ai.key ? `<button class="btn quiet sm" data-lai="${esc(g.name)}">Другое задание (AI)</button>` : ''}</div></div>`; };
+    return `<div><h1>План обучения</h1><p class="lead">Чего чаще всего не хватает в твоих вакансиях — в виде заданий для домашней лаборатории. Сделал — навык считается «лабораторией» (0,6 в Fit), и после синхронизации появится в расширении.</p></div>
+      ${list.length ? `<div class="group">${list.slice(0, 6).map(card).join('')}</div>` : `<div class="empty"><b>${st.rows.length ? 'Пробелов не найдено' : 'Пока нет данных'}</b>${st.rows.length ? 'В твоих вакансиях нет инструмента, которого не хватало бы хотя бы дважды.' : 'План появится после первых откликов.'}</div>`}
+      ${done.length ? `<div class="sec-h"><h2>Уже сделано <span class="n">${done.length}</span></h2></div><div class="group">${done.map(([n, d]) => `<div class="item"><div class="top"><span class="k ok" style="width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-weight:800">✓</span><div class="grow"><div class="t">${esc(n)}</div><div class="s">${esc(d)}${(st.local.learnNotes || {})[n] ? ' · ' + esc(st.local.learnNotes[n].slice(0, 120)) : ''}</div></div><button class="btn quiet sm" data-lundo="${esc(n)}">Отменить</button></div></div>`).join('')}</div>` : ''}
+      <p class="tiny muted">Двойной вес у вакансий рынка Б и у откликов за последние 90 дней.</p>`;
+  }
+  function setLearned(name, date) {
+    st.local.learned = st.local.learned || {};
+    if (date) st.local.learned[name] = date; else delete st.local.learned[name];
+    save(); render();
+    if (st.cfg) api('POST', null, { learned: { [name]: date || null } }).catch(() => {});
   }
 
   // ---------- Applications ----------
@@ -654,6 +750,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       ${table('По источнику', seg(a => a.platform))}
       ${table('Агентство или работодатель', seg(a => a.agency ? 'Агентство' : 'Напрямую'))}
       ${table('По рынку', seg(a => a.market === 'A' ? 'А · full-time' : 'Б · с учёбой'))}
+      ${closed.some(a => rowById(a.id) && rowById(a.id).cvKind) ? table('CV: подогнанное или обычное', seg(a => ({ Tailored: 'Подогнанное', Standard: 'Обычное' })[(rowById(a.id) || {}).cvKind] || 'Не отмечено')) + table('Версия CV', seg(a => String((rowById(a.id) || {}).cv || '').replace(/ · .*$/, '') || 'Не отмечено')) : ''}
       <p class="tiny muted" style="margin:-8px 2px 0">«Закрыто» — есть ответ или прошло 21+ день. Ожидающие свежие отклики не считаются.</p>
       <div class="paper"><h2>Отказы</h2><p>${rej.length} ${plural(rej.length, 'отказ', 'отказа', 'отказов')}${fast ? `, из них ${fast} за 0–3 дня — это автоматический отсев по анкете или CV, а не решение человека.` : '.'}</p>${fast >= 5 ? '<p class="small muted">Быстрые отказы чаще всего из-за ответов в анкете (график, стаж, права) или ключевых слов в CV. Сравни эти вакансии с теми, где был скрининг.</p>' : ''}</div>
       ${topMiss.length ? `<div class="paper"><h2>Чего не хватает чаще всего</h2><div class="tags">${topMiss.map(([t, k]) => `<span class="tag bad">${esc(t)} · ${k}</span>`).join('')}</div><p class="small muted">Первые 2–3 — кандидаты для домашней лаборатории или курса: каждая закроет пробел во многих вакансиях.</p></div>` : ''}
@@ -720,6 +817,8 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     return `<h1>Ещё</h1><div class="group">
       ${link('#stats', '<path d="M5 20V11M10 20V5M15 20v-7M20 20V9" />', 'Статистика', 'конверсия, воронка, источники, отказы')}
       ${link('#employers', '<path d="M4 20V9l8-5 8 5v11M9 20v-6h6v6" />', 'Работодатели рядом', 'школы, колледжи, MSP — холодные письма')}
+      ${link('#cv', '<path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5" />', 'CV', 'версии А и Б, подгонка под вакансию')}
+      ${link('#learn', '<path d="M3 8l9-4 9 4-9 4zM7 10v5c3 2 7 2 10 0v-5" />', 'План обучения', 'задания для лаборатории из пробелов')}
       ${link('#templates', '<path d="M4 6l8 6 8-6M4 6h16v12H4z" />', 'Шаблоны писем', 'cover letter, письмо работодателю, ответы')}
       ${link('#setup', '<circle cx="12" cy="12" r="3" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3" />', 'Настройки', 'таблица, цели, почта, AI, PIN')}</div>
       <div class="paper tight"><h3>Тема</h3><div class="seg" role="group" aria-label="Тема">${[['auto', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([k, l]) => `<button data-theme-set="${k}" aria-pressed="${(LS.get('theme', 'auto') || 'auto') === k}">${l}</button>`).join('')}</div></div>`;
@@ -838,7 +937,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   });
 
   // ---------- Router ----------
-  const ROUTES = { today: viewToday, check: viewCheck, apps: viewApps, stats: viewStats, templates: viewTemplates, employers: viewEmployers, more: viewMore, setup: viewSetup };
+  const ROUTES = { today: viewToday, check: viewCheck, apps: viewApps, stats: viewStats, templates: viewTemplates, employers: viewEmployers, cv: viewCv, learn: viewLearn, more: viewMore, setup: viewSetup };
   const route = () => { const r = location.hash.replace('#', '').split('=')[0]; return ROUTES[r] ? r : (r === 'add' ? 'check' : r === 'list' ? 'apps' : 'today'); };
   function updateBadges() {
     if (st.lock) return;
@@ -851,7 +950,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     document.body.classList.toggle('locked', !!st.lock);
     if (st.lock) { v.innerHTML = viewLock(); bindLock(v); return; }
     v.innerHTML = ROUTES[r]();
-    const tab = ['stats', 'templates', 'employers', 'setup'].includes(r) && matchMedia('(max-width: 919px)').matches ? 'more' : r;
+    const tab = ['stats', 'templates', 'employers', 'setup', 'cv', 'learn'].includes(r) && matchMedia('(max-width: 919px)').matches ? 'more' : r;
     $$('.nav a[data-tab]').forEach(a => a.setAttribute('aria-current', a.dataset.tab === tab || a.dataset.tab === r ? 'page' : 'false'));
     updateBadges();
     bind(v);
@@ -923,6 +1022,41 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     const lo = $('#letterOut', v); if (lo) lo.oninput = () => { st.letter = lo.value; };
     const lc = $('#letterCopy', v); if (lc) lc.onclick = () => copy(st.letter, lc);
     const lx = $('#letterClear', v); if (lx) lx.onclick = () => { st.letter = ''; st.letterWarn = []; render(); };
+    // CV
+    const tg = $('#tailorGo', v); if (tg) tg.onclick = () => doTailor(st.result);
+    const cr = $('#cvReset', v); if (cr) cr.onclick = () => { const r = st.result; r.tl = null; r.tailored = false; render(); };
+    const cs2 = $('#cvSummary', v); if (cs2) cs2.onclick = () => tailorSummary(st.result);
+    const cd = $('#cvDocx', v); if (cd) cd.onclick = () => { const t = st.result.tl; saveBlob(DX.build(t.cv, { title: TL.fileName(t.cv, st.result.job) }), TL.fileName(t.cv, st.result.job) + '.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'); };
+    const cp2 = $('#cvPdf', v); if (cp2) cp2.onclick = async () => { const t = st.result.tl; try { saveBlob(await cvPdf(t.cv), TL.fileName(t.cv, st.result.job) + '.pdf', 'application/pdf'); } catch (e) { toast(String(e.message || e)); } };
+    $$('[data-cvfile]', v).forEach(i => i.onchange = async () => {
+      const f = i.files[0]; if (!f) return; const k = i.dataset.cvfile;
+      toast('Читаю файл…');
+      try { const d = await readCvFile(f); if ((d.text || '').trim().length < 200) throw new Error('В файле почти нет текста (скан?). Вставь текст вручную.'); st.local.cvs = { ...(st.local.cvs || {}), [k]: { text: d.text, name: f.name, at: todayIso() } }; save(); render(); toast('CV сохранено'); }
+      catch (e) { toast(String(e.message || e)); }
+    });
+    $$('[data-cvsave]', v).forEach(b => b.onclick = () => { const k = b.dataset.cvsave; const t = $(`[data-cvtext="${k}"]`, v).value.trim(); if (t.length < 200) return toast('Слишком короткий текст для CV'); st.local.cvs = { ...(st.local.cvs || {}), [k]: { text: t, name: '', at: todayIso() } }; save(); render(); toast('CV сохранено'); });
+    $$('[data-cvdel]', v).forEach(b => b.onclick = () => { const c = { ...(st.local.cvs || {}) }; delete c[b.dataset.cvdel]; st.local.cvs = c; save(); render(); });
+    $$('[data-cvview]', v).forEach(b => b.onclick = () => { const d = b.closest('section').querySelector('details'); d.open = true; d.scrollIntoView({ block: 'center' }); });
+    $$('[data-cvai]', v).forEach(b => b.onclick = async () => {
+      const k = b.dataset.cvai, out = $(`[data-cvaiout="${k}"]`, v); out.innerHTML = '<p class="small muted">Пишу…</p>';
+      try {
+        const cvText = st.local.cvs[k].text;
+        const text = await LLM.draft(aiCfg(), { task: k === 'B' ? 'Write a 3-line CV profile for part-time / weekend IT support roles alongside a Computing degree: say availability 3–4 days a week including weekends.' : 'Write a 3-line CV profile for full-time junior IT support / service desk roles at a strong tech company: ready to start full-time.', facts: cvText.slice(0, 5000), words: 60 });
+        const warn = LLM.unknownTools(text, cvText, profile());
+        out.innerHTML = `<textarea class="out" style="min-height:110px">${esc(text)}</textarea>${warn.length ? `<p class="small" style="color:var(--red)">Проверь: ${esc(warn.join(', '))} нет в CV.</p>` : ''}<p class="tiny muted">Вставь в CV вместо профиля и загрузи файл заново.</p>`;
+      } catch (e) { out.innerHTML = `<p class="small" style="color:var(--red)">${esc(e.message)}</p>`; }
+    });
+    // Learning plan
+    $$('[data-ldone]', v).forEach(b => b.onclick = () => { const n = b.dataset.ldone; setLearned(n, todayIso()); toast(`${n}: засчитано как лаборатория`, 'Отменить', () => setLearned(n, null)); });
+    $$('[data-lundo]', v).forEach(b => b.onclick = () => setLearned(b.dataset.lundo, null));
+    $$('[data-lnote]', v).forEach(t => t.onchange = () => { st.local.learnNotes = { ...(st.local.learnNotes || {}), [t.dataset.lnote]: t.value }; save(); });
+    $$('[data-lai]', v).forEach(b => b.onclick = async () => {
+      const n = b.dataset.lai; b.disabled = true; b.textContent = 'Придумываю…';
+      try {
+        const text = await LLM.draft(aiCfg(), { task: `Suggest one practical home lab task (Russian language, 2–3 sentences, about 90 minutes) that proves the skill "${n}" for an entry-level IT support job. Use only free tools or free tiers. The candidate already has a Proxmox home lab with Windows Server, Active Directory, Entra ID, Intune and osTicket. End with what to write in a knowledge base note.`, facts: st.local.facts || DEFAULT_FACTS, words: 70 });
+        st.local.learnTasks = { ...(st.local.learnTasks || {}), [n]: text.trim() }; save(); render();
+      } catch (e) { toast(String(e.message || e)); b.disabled = false; b.textContent = 'Другое задание (AI)'; }
+    });
     // Applications
     const q = $('#q', v);
     if (q) q.oninput = () => { st.q = q.value; const l = $('#list', v); l.innerHTML = filtered().slice(0, 300).map(rowHtml).join('') || '<div class="empty">Ничего не найдено</div>'; bind(l); };
