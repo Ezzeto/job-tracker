@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 17; // 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 18; // 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -17,6 +17,7 @@ const COLS = [
   ['track', 'Type'], ['placement', 'Placement rules'], ['verdict', 'Verdict'],
   ['method', 'Applied via'], ['cover', 'Cover letter'], ['cv', 'CV sent'], ['adAge', 'Ad age (days)'], ['applicants', 'Applicants'],
   ['rejDays', 'Days to rejection'], ['outcome', 'Why rejected'], ['reqs', 'Ad demands'], ['description', 'Job ad'],
+  ['fit2', 'Precise Fit %'], ['predicted', 'Interview chance %'], ['cvKind', 'CV type'], ['minutes', 'Minutes spent'],
 ];
 const C = {}; COLS.forEach(([k], i) => { C[k] = i + 1; });
 // [status, status cell background, text colour, light tint for the whole row]
@@ -693,7 +694,7 @@ function doPost(e) {
       // Only a real yyyy-mm-dd date: ',' or '1970-01-01' used to land in the sheet as 1970 or a broken cell
       if (k === 'nextDate') { const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); if (!m || +m[1] < 2000) return ''; return new Date(+m[1], +m[2] - 1, +m[3]); }
       if (k === 'description') return String(v || '').slice(0, 40000);
-      if (k === 'chance' || k === 'adAge' || k === 'applicants' || k === 'rejDays') return v === '' || v == null ? '' : Number(v);
+      if (k === 'chance' || k === 'adAge' || k === 'applicants' || k === 'rejDays' || k === 'fit2' || k === 'predicted' || k === 'minutes') return v === '' || v == null ? '' : Number(v);
       return v == null ? '' : v;
     });
     const appendRows = [];

@@ -1102,6 +1102,7 @@
       profile.targetCategories = $$('#pTargets .chip[aria-pressed=true]').map(x => x.dataset.target);
       await S.saveProfile(profile);
     });
+    const evOf = (n, lv) => ((profile.evidence || {})[n]) || (lv === 'strong' ? 'work' : 'lab');
     $$('#skTrack button').forEach(b => { b.setAttribute('aria-pressed', b.dataset.t === skTrack); b.onclick = () => { skTrack = b.dataset.t; renderSettings(); }; });
     const sk = skillsFor(skTrack);
     const groups = {};
@@ -1116,12 +1117,19 @@
         return `<div class="skill"><span>${esc(n)}</span><span class="seg" role="group" aria-label="${esc(n)}">
           <button class="s" data-sk="${esc(n)}" data-lv="strong" aria-pressed="${lv === 'strong'}">Confident</button>
           <button class="b" data-sk="${esc(n)}" data-lv="basic" aria-pressed="${lv === 'basic'}">Basic</button>
-          <button class="n" data-sk="${esc(n)}" data-lv="none" aria-pressed="${lv === 'none'}">None</button></span></div>`;
+          <button class="n" data-sk="${esc(n)}" data-lv="none" aria-pressed="${lv === 'none'}">None</button></span>${lv !== 'none' && skTrack !== 'intern' ? `<button class="ev-btn" data-ev="${esc(n)}" title="Where you used it: counts 1.0 for real work or clients, 0.6 for a home lab or study (precise Fit)">${evOf(n, lv) === 'work' ? 'at work' : 'home lab'}</button>` : ''}</div>`;
       }).join('')}</div></div>`).join('');
+    $$('#skillsGrid [data-ev]').forEach(b => b.onclick = async () => {
+      const n = b.dataset.ev; profile.evidence = profile.evidence || {};
+      profile.evidence[n] = evOf(n, sk[n]) === 'work' ? 'lab' : 'work';
+      b.textContent = profile.evidence[n] === 'work' ? 'at work' : 'home lab';
+      await S.saveProfile(profile);
+    });
     $$('#skillsGrid [data-sk]').forEach(b => b.onclick = async () => {
       skillsFor(skTrack)[b.dataset.sk] = b.dataset.lv;
       $$(`#skillsGrid [data-sk="${CSS.escape(b.dataset.sk)}"]`).forEach(x => x.setAttribute('aria-pressed', x === b));
       await S.saveProfile(profile);
+      renderSettings();
     });
   }
   // Each address with a button that opens its inbox the way a follow-up would: if Gmail shows another

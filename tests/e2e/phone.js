@@ -82,6 +82,7 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   await page.fill('#jobInput', 'https://www.linkedin.com/jobs/view/4499999999/?trk=abc'); await page.click('#go'); await wait(1200);
   console.log('verdict:', await page.textContent('.verdict .v'), '| score:', await page.textContent('.score'));
   console.log('tags:', (await page.$$eval('#result .tag', l => l.map(x => x.textContent))).join(' | '));
+  console.log('fit block:', (await page.textContent('#result .paper.tight').catch(() => 'NO FIT')).replace(/\s+/g, ' ').slice(0, 220));
   await shot('2-result');
   await page.click('#promptCopy').catch(() => {}); await wait(300);
   await page.click('#applied'); await wait(800);

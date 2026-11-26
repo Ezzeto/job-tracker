@@ -7,7 +7,8 @@
 (function () {
   'use strict';
   const A = window.JT_Analyzer, S = window.JT_Store, E = window.JT_Extract, Q = window.JT_Quality, Mk = window.JT_Market,
-    I = window.JT_Insights, T = window.JT_I18n, F = window.JT_Follow, TP = window.JT_Templates, P = window.JT_Prompt;
+    I = window.JT_Insights, T = window.JT_I18n, F = window.JT_Follow, TP = window.JT_Templates, P = window.JT_Prompt,
+    FIT = window.JT_Fit, CH = window.JT_Chance, LLM = window.JT_LLM;
   if (T) T.setLang('ru');
   const tr = s => (T ? T.tr(s) : s);
   const $ = (s, el) => (el || document).querySelector(s);
@@ -34,7 +35,7 @@ Certificates: CompTIA A+ in progress; Cisco "Introduction to Modern AI".
 Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   const DEFAULT_LOCAL = () => ({
     targets: { B: 7, A: 5, C: 3 }, studyDays: [3, 4], mail: 'auto', from: '',
-    ai: { key: '', model: 'openai/gpt-oss-120b' }, facts: DEFAULT_FACTS,
+    ai: { key: '', model: '' }, facts: DEFAULT_FACTS, llmCache: {},
     snooze: {}, noChannel: {}, inboxDone: [], later: [], employers: null, templates: {}, tplJob: { title: '', company: '', name: '' }, why: '',
   });
   const st = {
@@ -278,15 +279,18 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     const dup = st.rows.find(r => (key && r.url && S.normUrl(r.url) === key) || (job.title && norm(r.title) === norm(job.title) && norm(r.company) === norm(job.company)));
     const agency = F.isAgency({ company: job.company, description: job.description });
-    return { job: { ...job, title: job.title || 'Без названия' }, an, c, market, office, worth, dup, agency, answers: Mk.answers(full, p, an) };
+    const res = { job: { ...job, title: job.title || 'Без названия' }, an, c, market, office, worth, dup, agency, answers: Mk.answers(full, p, an), startedAt: Date.now() };
+    scoreFit(res);
+    return res;
   }
   async function analyze(raw) {
     st.busy = true; st.error = ''; st.result = null; st.letter = ''; st.letterWarn = []; render();
     try { st.result = analyzeJob(await readJob(raw)); } catch (e) { st.error = String(e.message || e); }
     st.busy = false; render();
+    if (st.result) aiExtract(st.result);
     const r = $('#result'); if (r) r.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
-  function rowFromJob(job, an, c, status) {
+  function rowFromJob(job, an, c, status, res) {
     const nums = st.rows.map(x => parseInt(String(x.ticket || '').replace(/\D/g, ''), 10) || 0);
     return {
       id: 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ticket: 'APP-' + String(Math.max(0, ...nums) + 1).padStart(4, '0'),
@@ -295,7 +299,8 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       appliedAt: todayIso(), status: A.statusLabel(status), chance: c.verdict !== 'incomplete' ? c.score : '', nextDate: '', notes: 'Добавлено с телефона',
       missing: (c.missing || []).join(', '), tools: (c.tools || []).join(', '), details: (an.details || []).join(' • '), url: job.url || '',
       benefits: (an.benefits || []).join(' • '), track: an.track === 'intern' ? 'Internship' : 'Job', verdict: A.VERDICTS[c.verdict] ? A.VERDICTS[c.verdict].label : '',
-      cover: st.letter ? 'Written for this job' : '', description: String(an.description || job.description || '').slice(0, 40000), updated: Date.now(),
+      cover: st.letter ? 'Written for this job' : '', fit2: res && res.fit && res.fit.score != null ? res.fit.score : '', predicted: res && res.chanceP ? Math.round(res.chanceP.p * 1000) / 10 : '',
+      cvKind: res && res.tailored ? 'Tailored' : '', minutes: res && res.startedAt ? Math.max(1, Math.min(240, Math.round((Date.now() - res.startedAt) / 60000))) : '', description: String(an.description || job.description || '').slice(0, 40000), updated: Date.now(),
     };
   }
   function addRow(row) {
@@ -305,7 +310,8 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   }
   function addFromResult() {
     const r = st.result; if (!r) return;
-    addRow(rowFromJob(r.job, r.an, r.c, 'applied'));
+    if (r.chanceP) { r.facts.cover = !!st.letter; r.chanceP = CH.predict(r.facts, CH.stats(st.rows.map(rowFacts))); }
+    addRow(rowFromJob(r.job, r.an, r.c, 'applied', r));
     st.local.later = st.local.later.filter(x => !(r.job.url && x.url === r.job.url));
     st.result = null; st.input = ''; st.letter = ''; LS.set('draft', ''); save();
     location.hash = '#today';
@@ -319,21 +325,36 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   }
 
   // ---------- AI (Groq) and the Claude prompt ----------
-  async function groq(messages) {
-    const key = st.local.ai.key;
-    if (!key) throw new Error('Добавь ключ Groq в настройках.');
-    let res;
-    try {
-      res = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
-        body: JSON.stringify({ model: st.local.ai.model || 'openai/gpt-oss-120b', messages, temperature: 0.4, max_tokens: 1400 }) });
-    } catch (e) { throw new Error(navigator.onLine ? 'Groq не отвечает. Попробуй ещё раз.' : 'Нет интернета'); }
-    if (res.status === 401) throw new Error('Groq не принял ключ. Проверь его в настройках.');
-    if (res.status === 429) throw new Error('Лимит Groq на сейчас исчерпан. Подожди минуту.');
-    if (res.status === 404 || res.status === 400) { const t = await res.text(); throw new Error('Groq: ' + (/model/i.test(t) ? 'модель не найдена, поменяй её в настройках' : t.slice(0, 160))); }
-    if (!res.ok) throw new Error('Groq ответил ошибкой ' + res.status);
-    const d = await res.json();
-    return String((d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  // The AI cache lives in the encrypted vault; the oldest answers go when it grows past 150
+  const aiCfg = () => ({ key: st.local.ai.key, model: st.local.ai.model, cache: {
+    get: k => (st.local.llmCache || {})[k],
+    set: (k, v) => { const c = st.local.llmCache = st.local.llmCache || {}; c[k] = v; const ks = Object.keys(c); if (ks.length > 150) ks.slice(0, ks.length - 150).forEach(x => delete c[x]); save(); },
+  } });
+  const groq = messages => LLM.chat(aiCfg(), messages, { cacheKey: false, temperature: 0.4 });
+  const providerName = () => (st.local.ai.key ? LLM.PROVIDERS[LLM.providerOf(st.local.ai.key)].name : 'AI');
+
+  // ---------- Precise Fit and interview chance ----------
+  function rowFacts(r) {
+    const a = toApp(r);
+    return { status: a.status, appliedAt: a.appliedAt, title: a.title, company: a.company, location: a.location, agency: a.agency, method: r.method, adAge: r.adAge, applicants: r.applicants,
+      fit: r.fit2 !== '' && r.fit2 != null ? r.fit2 : r.chance, market: a.market, tailored: r.cvKind ? r.cvKind === 'Tailored' : null, cover: r.cover ? !/^(no|none)/i.test(String(r.cover)) : null, predicted: r.predicted };
   }
+  function scoreFit(res) {
+    const reqs = res.ai && (res.ai.essential.length + res.ai.desirable.length >= 3) ? res.ai : FIT.fromAd(res.job.description, res.job.company);
+    res.fit = FIT.compute(reqs, profile(), res.job);
+    const agency = res.ai && res.ai.agency != null ? res.ai.agency : res.agency;
+    res.facts = { title: res.job.title, company: res.job.company, location: res.job.location, agency, method: agency ? 'agency' : '', fit: res.fit.score, market: res.market, cover: !!st.letter };
+    res.chanceP = CH.predict(res.facts, CH.stats(st.rows.map(rowFacts)));
+    res.chanceD = CH.describe(res.chanceP);
+  }
+  async function aiExtract(res) {
+    if (!st.local.ai.key || res.aiBusy || res.ai) return;
+    res.aiBusy = true; render();
+    try { res.ai = await LLM.extract(aiCfg(), res.job); if (res.ai.officeDays != null && res.office == null) res.office = res.ai.officeDays; scoreFit(res); }
+    catch (e) { res.aiError = String(e.message || e); }
+    res.aiBusy = false; if (st.result === res) render();
+  }
+
   function skillsLine() {
     const sk = profile().skills || {};
     const of = lvl => Object.keys(sk).filter(k => sk[k] === lvl);
@@ -488,6 +509,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
         ${worthWhy ? `<div class="note small">Full-time без признаков «стоит академа»: ${esc(worthWhy)}.</div>` : ''}
         ${r.agency ? '<p class="small muted">Агентства пока дали 0 скринингов из 28. Если работодатель известен — лучше откликнуться у него напрямую.</p>' : ''}
         ${blocks.length || asks.length ? `<ul class="checks">${blocks.map(b => `<li><span class="k bad">✕</span><span>${esc(tr(b.text))}</span></li>`).join('')}${asks.map(b => `<li><span class="k warn">?</span><span>${esc(tr(b.text))}</span></li>`).join('')}</ul>` : ''}
+        ${fitHtml(r)}
         ${(c.tools || []).length ? `<div class="stack"><h3>Навыки из вакансии</h3><div class="tags">${(c.matched || []).map(t => `<span class="tag ok">${esc(t)}</span>`).join('')}${(c.basic || []).map(t => `<span class="tag warn">${esc(t)}</span>`).join('')}${(c.missing || []).map(t => `<span class="tag bad">${esc(t)}</span>`).join('')}</div><p class="tiny muted">зелёный — уверенно, жёлтый — базово, красный — нет</p></div>` : ''}
         ${!st.profile ? '<div class="note small">Профиль навыков ещё не пришёл с компьютера, поэтому навыки могут быть красными. В расширении: Skills &amp; settings → Google Sheet → Sync now.</div>' : ''}
       </section>
@@ -499,11 +521,33 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
         <label class="f">Почему эта компания — одно-два предложения своими словами
           <textarea class="input" id="why" style="min-height:70px" placeholder="Например: I use your app every week and want to support the people who build it.">${esc(st.local.why || '')}</textarea></label>
         <div class="row">${ai ? `<button class="btn go grow" id="aiLetter" ${st.letterBusy ? 'disabled' : ''}>${st.letterBusy ? '<span class="spinner"></span> Пишу письмо' : 'Написать письмо (AI)'}</button>` : ''}<button class="btn line grow" id="promptCopy">Промпт для Claude</button></div>
-        ${!ai ? '<p class="small muted">С ключом Groq (бесплатно) письмо пишется прямо здесь: <a href="#setup">Настройки → AI</a>. Промпт можно вставить в приложение Claude.</p>' : ''}
+        ${!ai ? '<p class="small muted">С бесплатным ключом AI письмо пишется прямо здесь: <a href="#setup">Настройки → AI</a>. Промпт можно вставить в приложение Claude.</p>' : ''}
         ${st.letterWarn.length ? `<div class="note bad small">Проверь: в письме есть ${esc(st.letterWarn.join(', '))} — этого нет в твоих фактах и навыках. Убери, если не делал.</div>` : ''}
         ${st.letter ? `<textarea class="out" id="letterOut" aria-label="Текст письма">${esc(st.letter)}</textarea><div class="row"><button class="btn go grow" id="letterCopy">Копировать письмо</button><button class="btn quiet" id="letterClear">Очистить</button></div>` : ''}
       </details>
       <button class="btn quiet block" id="clear">Разобрать другую вакансию</button>`;
+  }
+
+  const EVK = { work: ['✓', 'ok'], lab: ['◐', 'ok'], similar: ['~', 'warn'], none: ['✕', 'bad'], check: ['?', 'warn'] };
+  function reqLine(q) {
+    const k = EVK[q.check && q.level !== 'none' && q.level !== 'work' ? 'check' : q.level] || EVK.check;
+    return `<li><span class="k ${k[1]}">${k[0]}</span><span>${esc(q.text)}${q.note || q.level !== 'none' ? `<br><span class="tiny muted">${esc([FIT.LABEL[q.level] || '', q.note].filter(Boolean).join(' · '))}</span>` : ''}</span></li>`;
+  }
+  function fitHtml(r) {
+    const f = r.fit, d = r.chanceD; if (!f) return '';
+    const src = r.ai ? `требования прочитал AI (${providerName()})${r.ai.dropped ? `, ${r.ai.dropped} выдуманных строк отброшено` : ''}` : r.aiBusy ? 'AI читает требования…' : f.source === 'ad' ? 'требования из разделов вакансии' : 'требования по названным инструментам — приблизительно';
+    return `<div class="paper tight" style="background:var(--paper-2);border:0">
+      <div class="split"><div><p class="tiny muted">Точный Fit</p><p style="font-size:26px;font-weight:750;letter-spacing:-.03em">${f.score == null ? '—' : f.score + '%'}</p></div>
+        <div><p class="tiny muted">Шанс приглашения</p><p style="font-size:${d.main.length > 8 ? 16 : 26}px;font-weight:750;letter-spacing:-.02em;line-height:1.25">${esc(d.main)}</p><p class="tiny muted">${esc(d.sub)}</p></div></div>
+      <p class="small">${esc(f.summary)}</p>
+      ${d.why ? `<p class="small muted">Шанс: ${esc(d.why)}${d.note ? '. ' + esc(d.note) : ''}</p>` : d.note ? `<p class="small muted">${esc(d.note)}</p>` : ''}
+      <details class="fold"><summary><h3>Требования: ${f.essOk}/${f.essential.length} обязательных${f.desirable.length ? `, ${f.desOk}/${f.desirable.length} желательных` : ''}</h3></summary>
+        ${f.essential.length ? `<p class="tiny muted" style="margin-top:10px">Обязательные</p><ul class="checks">${f.essential.map(reqLine).join('')}</ul>` : ''}
+        ${f.desirable.length ? `<p class="tiny muted" style="margin-top:10px">Желательные</p><ul class="checks">${f.desirable.map(reqLine).join('')}</ul>` : ''}
+        <p class="tiny muted" style="margin-top:8px">✓ работа · ◐ лаборатория или учёба · ~ похожий инструмент · ✕ нет · ? проверь сам. Откуда навык — отмечается в расширении: Skills &amp; settings.</p></details>
+      <p class="tiny muted">${esc(src)}${!st.local.ai.key ? ' · с ключом AI разбор точнее: <a href="#setup">Настройки</a>' : ''}${r.aiError ? ' · ' + esc(r.aiError) : ''}</p>
+      ${r.ai && r.ai.employer && r.agency ? `<div class="note small">Похоже, настоящий работодатель — <b>${esc(r.ai.employer)}</b>. Найди эту вакансию у него на сайте и откликнись напрямую: от агентств пока 0 скринингов из 28. <a href="https://www.google.com/search?q=${encodeURIComponent(`"${r.ai.employer}" ${r.job.title} job`)}" target="_blank" rel="noopener">Искать</a></div>` : ''}
+    </div>`;
   }
 
   // ---------- Applications ----------
@@ -701,10 +745,14 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
         <label class="f">Как открывать письма<select class="input" id="mailMode"><option value="auto" ${l.mail === 'auto' ? 'selected' : ''}>Само: на телефоне — приложение, на компьютере — Gmail</option><option value="mailto" ${l.mail === 'mailto' ? 'selected' : ''}>Приложение почты</option><option value="gmail" ${l.mail === 'gmail' ? 'selected' : ''}>Gmail в браузере</option></select></label>
         <label class="f">Отправлять из Gmail-аккаунта<input class="input" id="mailFrom" list="accts" value="${esc(l.from)}" placeholder="oleh.poratui@gmail.com"><datalist id="accts">${accounts.map(x => `<option value="${esc(x)}">`).join('')}</datalist></label>
         <p class="small muted">Письмо всегда только открывается готовым — отправляешь ты.</p></section>
-      <section class="paper"><h2>AI для писем</h2>
-        <p class="small muted">Бесплатный ключ Groq: <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> → Create API Key. Ключ хранится только на этом устройстве, зашифрованный PIN-кодом. В Groq уходят текст вакансии и факты ниже — без имени, телефона и почты.</p>
-        <label class="f">Ключ Groq<input class="input" id="aiKey" type="password" value="${esc(l.ai.key)}" placeholder="gsk_…" autocomplete="off"></label>
-        <label class="f">Модель<input class="input" id="aiModel" value="${esc(l.ai.model)}" list="models"><datalist id="models"><option value="openai/gpt-oss-120b"><option value="llama-3.3-70b-versatile"><option value="openai/gpt-oss-20b"></datalist></label>
+      <section class="paper"><h2>AI</h2>
+        <p class="small muted">Нужен один бесплатный ключ — любой из трёх. Ключ хранится только на этом устройстве, зашифрованный PIN-кодом. В AI уходят текст вакансии и факты ниже, без имени, телефона и почты.</p>
+        <ul class="small" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px">
+          <li><b>Groq</b> (лучший вариант, есть распознавание голоса): <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> → Create API Key.</li>
+          <li><b>Gemini</b> (если Groq не пускает): <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → Create API key. На бесплатном тарифе Google может использовать запросы для улучшения моделей.</li>
+          <li><b>OpenRouter</b>: <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>, бесплатные модели, около 50 запросов в день.</li></ul>
+        <label class="f">Ключ (gsk_…, AIza… или sk-or-…)<input class="input" id="aiKey" type="password" value="${esc(l.ai.key)}" placeholder="вставь ключ" autocomplete="off"></label>
+        <label class="f">Модель — можно не трогать<input class="input" id="aiModel" value="${esc(l.ai.model)}" placeholder="${esc(l.ai.key ? LLM.modelFor(l.ai.key, '') : 'выберется сама')}"></label>
         <div class="row"><button class="btn go" id="aiSave">Сохранить</button><button class="btn line" id="aiTest">Проверить ключ</button></div><div id="aiMsg" class="small"></div>
         <label class="f">Факты о тебе — единственный источник для AI и промпта Claude<textarea class="input" id="facts" style="min-height:200px">${esc(l.facts)}</textarea></label>
         <div class="row"><button class="btn line" id="factsSave">Сохранить факты</button><button class="btn quiet" id="factsReset">Вернуть исходные</button></div></section>
@@ -844,7 +892,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     $$('[data-later-check]', v).forEach(b => b.onclick = () => { const x = st.local.later.find(y => y.id === b.dataset.laterCheck); if (!x) return; st.result = analyzeJob(x); st.letter = ''; location.hash = '#check'; });
     $$('[data-later-apply]', v).forEach(b => b.onclick = () => {
       const x = st.local.later.find(y => y.id === b.dataset.laterApply); if (!x) return;
-      const r = analyzeJob(x); addRow(rowFromJob(r.job, r.an, r.c, 'applied'));
+      const r = analyzeJob(x); addRow(rowFromJob(r.job, r.an, r.c, 'applied', r));
       st.local.later = st.local.later.filter(y => y.id !== x.id); save(); render();
     });
     // Check
@@ -909,10 +957,10 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     $$('[data-study]', v).forEach(i => i.onchange = () => { const d = +i.dataset.study; st.local.studyDays = i.checked ? [...new Set([...st.local.studyDays, d])] : st.local.studyDays.filter(x => x !== d); save(); });
     const mm = $('#mailMode', v); if (mm) mm.onchange = () => { st.local.mail = mm.value; save(); };
     const mf = $('#mailFrom', v); if (mf) mf.onchange = () => { st.local.from = mf.value.trim(); save(); };
-    const as = $('#aiSave', v); if (as) as.onclick = () => { st.local.ai = { key: $('#aiKey').value.trim(), model: $('#aiModel').value.trim() || 'openai/gpt-oss-120b' }; save(); toast('Сохранено'); };
+    const as = $('#aiSave', v); if (as) as.onclick = () => { st.local.ai = { key: $('#aiKey').value.trim(), model: $('#aiModel').value.trim() }; save(); toast('Сохранено'); render(); };
     const at = $('#aiTest', v);
     if (at) at.onclick = async () => {
-      st.local.ai = { key: $('#aiKey').value.trim(), model: $('#aiModel').value.trim() || 'openai/gpt-oss-120b' }; save();
+      st.local.ai = { key: $('#aiKey').value.trim(), model: $('#aiModel').value.trim() }; save();
       const msg = $('#aiMsg'); msg.textContent = 'Проверяю…';
       try { const t = await groq([{ role: 'user', content: 'Reply with the single word: ready' }]); msg.innerHTML = `<span style="color:var(--go)">Работает: ${esc(t.slice(0, 40))}</span>`; }
       catch (e) { msg.innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`; }

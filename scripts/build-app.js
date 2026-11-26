@@ -5,7 +5,7 @@
 'use strict';
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..'), out = path.join(root, 'dist-app');
-const LIB = ['quality.js', 'analyzer.js', 'store.js', 'extract.js', 'insights.js', 'market.js', 'i18n.js', 'followup.js', 'templates.js', 'prompt.js'];
+const LIB = ['quality.js', 'analyzer.js', 'store.js', 'extract.js', 'insights.js', 'market.js', 'i18n.js', 'followup.js', 'templates.js', 'prompt.js', 'fit.js', 'chance.js', 'llm.js'];
 fs.rmSync(out, { recursive: true, force: true });
 fs.cpSync(path.join(root, 'app'), out, { recursive: true });
 fs.mkdirSync(path.join(out, 'lib'), { recursive: true });
