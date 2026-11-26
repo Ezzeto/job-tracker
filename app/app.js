@@ -458,6 +458,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     return `
       <div class="head"><div><h1>Сегодня</h1><p class="lead">${new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</p></div>${st.cfg ? `<button class="btn quiet sm" id="refresh" aria-label="Обновить">Обновить</button>` : ''}</div>
       ${!st.cfg ? `<div class="note info">Подключи Google Таблицу, чтобы видеть заявки и дела: <a href="#setup">Настройки</a>. Разбор вакансий по тексту работает и без неё.</div>` : ''}
+      ${st.cfg ? `<button class="btn line block" id="voiceOpen" style="justify-content:flex-start;gap:12px"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" style="fill:none;stroke:var(--go);stroke-width:2;stroke-linecap:round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Заметка после звонка — голосом или текстом</button>` : ''}
       <section class="paper" aria-label="Неделя">
         <div class="week">${strip}</div>
         <div class="goals">${goal('B', w.B, t.B, 'рынок Б', 'с учёбой')}${goal('A', w.A, t.A, 'рынок А', 'стоит академа')}${goal('B', w.C, t.C, 'холодных писем', '<a href="#employers">работодатели</a>')}</div>
@@ -687,20 +688,106 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
         <div class="row"><a class="btn go sm" href="${esc(mailHref(to, m.subject, m.body))}" target="_blank" rel="noopener">Написать follow-up</a><button class="btn line sm" id="sheetSent">Отправил</button></div></div>` : ''}
       <div class="split"><label class="f">Следующий шаг<input class="input" id="nd" type="date" value="${esc(/^\d{4}-\d{2}-\d{2}$/.test(r.nextDate || '') ? r.nextDate : '')}"></label><div></div></div>
       <label class="f">Заметки<textarea class="input" id="notes" placeholder="Кто звонил, дата интервью, что спросили…" style="min-height:90px">${esc(r.notes || '')}</textarea></label>
-      <div class="row"><button class="btn go grow" id="saveNotes">Сохранить</button>${r.url ? `<a class="btn line grow" href="${esc(r.url)}" target="_blank" rel="noopener">Вакансия</a>` : ''}</div>
+      <div class="row"><button class="btn go grow" id="saveNotes">Сохранить</button><button class="btn line" id="sheetVoice">Заметка голосом</button>${r.url ? `<a class="btn line grow" href="${esc(r.url)}" target="_blank" rel="noopener">Вакансия</a>` : ''}</div>
       ${a.chance.tools.length ? `<div class="stack"><h3>Навыки</h3><div class="tags">${a.chance.matched.map(t => `<span class="tag ok">${esc(t)}</span>`).join('')}${a.chance.missing.map(t => `<span class="tag bad">${esc(t)}</span>`).join('')}</div></div>` : ''}
       ${r.description ? `<details class="fold"><summary><h3>Текст вакансии</h3></summary><div class="ad" style="margin-top:10px">${esc(r.description)}</div></details>
         <div class="row"><button class="btn line grow" id="reAnalyze">Разобрать снова</button><button class="btn line grow" id="sheetPrompt">Промпт для Claude</button></div>` : ''}`;
     sh.hidden = false; $('#scrim').hidden = false; $('#toast').hidden = true;
     $$('[data-set]', sh).forEach(b => b.onclick = () => { setStatus(r.id, b.dataset.set); closeSheet(); });
     const sent = $('#sheetSent', sh); if (sent) sent.onclick = () => { markSent(r.id); closeSheet(); };
+    $('#sheetVoice', sh).onclick = () => openVoice(`${r.company}: `);
     $('#saveNotes', sh).onclick = () => { patchRow(r, { notes: $('#notes').value, nextDate: $('#nd').value || '' }); closeSheet(); toast('Сохранено'); };
     const ra = $('#reAnalyze', sh);
     if (ra) ra.onclick = () => { closeSheet(); st.result = analyzeJob({ title: r.title, company: r.company, location: r.location, description: r.description, url: r.url, platform: r.platform }); st.letter = ''; location.hash = '#check'; render(); };
     const sp = $('#sheetPrompt', sh);
     if (sp) sp.onclick = () => { const res = claudePrompt(a); if (res.ok) copy(res.text, sp); else toast(res.error); };
   }
-  function closeSheet() { $('#sheet').hidden = true; $('#scrim').hidden = true; }
+  function closeSheet() { stopRec(); $('#sheet').hidden = true; $('#scrim').hidden = true; }
+
+  // ---------- Voice note after a call ----------
+  // Speak (Whisper on Groq) or type; AI turns it into a status, next step, calendar event and note; you check and apply.
+  let rec = null;
+  function stopRec() { if (rec && rec.state === 'recording') { rec.onstop = null; rec.stop(); rec.stream.getTracks().forEach(t => t.stop()); } rec = null; }
+  const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  function companiesList() {
+    const seen = new Set(), out = [];
+    st.rows.slice().sort((a, b) => (ACTIVE.includes(idOf(b.status)) - ACTIVE.includes(idOf(a.status))) || String(b.appliedAt).localeCompare(String(a.appliedAt)))
+      .forEach(r => { const c = String(r.company || '').trim(); if (c && !seen.has(c)) { seen.add(c); out.push(c); } });
+    return out;
+  }
+  function calLink(ev, details) {
+    const d = ev.date.replace(/-/g, '');
+    let dates;
+    if (ev.time) { const [h, m] = ev.time.split(':').map(Number); const s0 = new Date(+ev.date.slice(0, 4), +ev.date.slice(5, 7) - 1, +ev.date.slice(8, 10), h, m); const e0 = new Date(s0.getTime() + (ev.minutes || 60) * 60000); const f = x => `${isoOf(x).replace(/-/g, '')}T${String(x.getHours()).padStart(2, '0')}${String(x.getMinutes()).padStart(2, '0')}00`; dates = `${f(s0)}/${f(e0)}`; }
+    else { const n = new Date(+ev.date.slice(0, 4), +ev.date.slice(5, 7) - 1, +ev.date.slice(8, 10) + 1); dates = `${d}/${isoOf(n).replace(/-/g, '')}`; }
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(ev.title)}&dates=${dates}&details=${encodeURIComponent(details || '')}`;
+  }
+  function openVoice(preset) {
+    const sh = $('#sheet');
+    const canRec = !!(navigator.mediaDevices && window.MediaRecorder) && st.local.ai.key && LLM.providerOf(st.local.ai.key) === 'groq';
+    sh.innerHTML = `<div><h2 style="font-size:20px">Заметка после звонка</h2><p class="small muted">Например: «Звонила Сара из Harlow College, интервью во вторник в 10, взять паспорт». Трекер предложит статус, следующий шаг и событие в календаре — ты проверишь и применишь.</p></div>
+      ${canRec ? '<button class="btn go block" id="recBtn" style="min-height:64px;font-size:17px">● Записать</button>' : `<p class="small muted">${st.local.ai.key ? 'Запись голоса работает с ключом Groq. Можно надиктовать текст кнопкой микрофона на клавиатуре телефона.' : 'Нужен ключ AI (Настройки → AI). Пока можно надиктовать текст микрофоном клавиатуры и сохранить как заметку.'}</p>`}
+      <textarea class="input" id="vText" placeholder="Текст заметки" style="min-height:110px">${esc(preset || '')}</textarea>
+      <button class="btn ${canRec ? 'line' : 'go'} block" id="vParse" ${st.local.ai.key ? '' : 'disabled'}>Разобрать заметку</button>
+      <div id="vOut"></div>`;
+    sh.hidden = false; $('#scrim').hidden = false; $('#toast').hidden = true;
+    const rb = $('#recBtn', sh);
+    if (rb) rb.onclick = async () => {
+      if (rec) { rec.stop(); rb.disabled = true; rb.textContent = 'Распознаю…'; return; }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const chunks = [];
+        rec = new MediaRecorder(stream); rec.stream = stream;
+        rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+        rec.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop()); rec = null;
+          try { const text = await LLM.transcribe(aiCfg(), new Blob(chunks, { type: chunks[0] ? chunks[0].type : 'audio/webm' })); $('#vText').value = text; rb.textContent = '● Записать ещё'; rb.disabled = false; if (text) parseVoice(); }
+          catch (e) { toast(String(e.message || e)); rb.textContent = '● Записать'; rb.disabled = false; }
+        };
+        rec.start(); rb.textContent = '■ Остановить'; rb.style.background = 'var(--red)';
+      } catch (e) { toast('Нет доступа к микрофону: разреши его в настройках браузера'); }
+    };
+    $('#vParse', sh).onclick = parseVoice;
+  }
+  async function parseVoice() {
+    const text = $('#vText').value.trim(), out = $('#vOut');
+    if (!text) return toast('Сначала скажи или напиши заметку');
+    out.innerHTML = '<p class="small muted"><span class="spinner" style="display:inline-block;vertical-align:-4px"></span> Разбираю…</p>';
+    const now = new Date();
+    let r;
+    try { r = await LLM.voiceNote(aiCfg(), { text, companies: companiesList(), today: `${todayIso()} (${DOW[now.getDay()]})` }); }
+    catch (e) { out.innerHTML = `<p class="small" style="color:var(--red)">${esc(e.message)}</p>`; return; }
+    const comps = companiesList();
+    const row = r.company ? st.rows.filter(x => x.company === r.company).sort((a, b) => String(b.appliedAt).localeCompare(String(a.appliedAt)))[0] : null;
+    if (r.event && row && !/[—-]/.test(r.event.title)) r.event.title = `${r.event.title} — ${row.company}`;
+    out.innerHTML = `<div class="paper tight" style="background:var(--paper-2);border:0">
+      <label class="f">Заявка<select class="input" id="vRow"><option value="">— не привязывать —</option>${st.rows.filter(x => comps.includes(x.company)).sort((a, b) => String(b.appliedAt).localeCompare(String(a.appliedAt))).slice(0, 120).map(x => `<option value="${esc(x.id)}" ${row && x.id === row.id ? 'selected' : ''}>${esc(x.company)} — ${esc(x.title)}</option>`).join('')}</select></label>
+      <label class="f">Новый статус<select class="input" id="vStatus"><option value="">не менять</option>${ORDER.map(k => `<option value="${k}" ${r.status === k ? 'selected' : ''}>${RU[k]}</option>`).join('')}</select></label>
+      <div class="split"><label class="f">Следующий шаг<input class="input" type="date" id="vNext" value="${esc(r.nextDate || (r.event && r.event.date) || '')}"></label><div></div></div>
+      ${r.event ? `<label class="check"><input type="checkbox" id="vCal" checked> В календарь: ${esc(r.event.title)}, ${esc(r.event.date)}${r.event.time ? ' в ' + esc(r.event.time) : ''}</label>` : ''}
+      <label class="f">Заметка<textarea class="input" id="vNote" style="min-height:70px">${esc(r.note + (r.todo.length ? '\nСделать: ' + r.todo.join('; ') : ''))}</textarea></label>
+      <button class="btn go block" id="vApply">Применить</button></div>`;
+    $('#vApply').onclick = () => applyVoice(r);
+  }
+  async function applyVoice(r) {
+    const id = $('#vRow').value, status = $('#vStatus').value, next = $('#vNext').value, note = $('#vNote').value.trim(), cal = $('#vCal') && $('#vCal').checked;
+    const row = id && rowById(id);
+    if (row) {
+      const patch = { notes: [row.notes, `${ukDate(new Date())}: ${note}`].filter(Boolean).join('\n') };
+      if (status) patch.status = A.statusLabel(status);
+      if (next) patch.nextDate = next;
+      patchRow(row, patch, `${row.company}: заметка сохранена${status ? ', статус «' + RU[status] + '»' : ''}`);
+    }
+    if (cal && r.event) {
+      const ev = { ...r.event, description: note + (row && row.url ? '\n' + row.url : ''), remindMinutes: 60 };
+      if (st.scriptVersion >= 20) {
+        try { const d = await api('POST', null, { events: [ev] }); const e = (d.events || [])[0] || {}; if (!e.ok) throw new Error(e.error || 'не получилось'); toast(e.duplicate ? 'Событие уже есть в календаре' : 'Событие добавлено в Google Календарь'); }
+        catch (e) { window.open(calLink(ev, ev.description), '_blank'); toast('Открываю Google Календарь: ' + e.message); }
+      } else window.open(calLink(ev, ev.description), '_blank');
+    }
+    if (!row && !cal) toast('Ничего не выбрано: привяжи заявку или событие');
+    closeSheet();
+  }
 
   // ---------- Stats ----------
   function wilson(k, n) {
@@ -980,6 +1067,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     });
     $$('[data-inbox-skip]', v).forEach(b => b.onclick = () => { st.local.inboxDone.push(b.dataset.inboxSkip); save(); render(); api('POST', null, { inboxDismiss: [b.dataset.inboxSkip] }).catch(() => {}); });
     const si = $('#scanInbox', v); if (si) si.onclick = () => loadInbox(true);
+    const vo = $('#voiceOpen', v); if (vo) vo.onclick = () => openVoice();
     const sa = $('#staleAll', v);
     if (sa) sa.onclick = () => {
       const list = todayLists().stale; const before = list.map(a => [rowById(a.id), rowById(a.id).status]);
@@ -1159,5 +1247,5 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
     navigator.serviceWorker.register('sw.js').then(reg => reg.update()).catch(() => {});
   }
-  window.JT_App = { st, analyzeJob, readJob, setStatus, render, lockNow, toApp, todayLists, weekData, parseFollow, parseContacts };
+  window.JT_App = { st, openVoice, analyzeJob, readJob, setStatus, render, lockNow, toApp, todayLists, weekData, parseFollow, parseContacts };
 })();

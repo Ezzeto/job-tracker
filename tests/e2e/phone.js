@@ -35,8 +35,8 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
     const req = r.request();
     const u = new URL(req.url());
     let body;
-    if (req.method() === 'POST') { const b = JSON.parse(req.postData()); posts.push(b); (b.apps || []).forEach(a => rows.unshift(a)); (b.patches || []).forEach(p => Object.assign(rows.find(x => x.id === p.id) || {}, p)); (b.inboxDismiss || []).forEach(id => { const i = inbox.findIndex(x => x.id === id); if (i >= 0) inbox.splice(i, 1); }); body = { ok: true, version: 17 }; }
-    else if (u.searchParams.get('action') === 'ping') body = { ok: true, version: 17, name: 'Job search', rows: rows.length };
+    if (req.method() === 'POST') { const b = JSON.parse(req.postData()); posts.push(b); (b.apps || []).forEach(a => rows.unshift(a)); (b.patches || []).forEach(p => Object.assign(rows.find(x => x.id === p.id) || {}, p)); (b.inboxDismiss || []).forEach(id => { const i = inbox.findIndex(x => x.id === id); if (i >= 0) inbox.splice(i, 1); }); body = { ok: true, version: 20, events: (b.events || []).map(() => ({ ok: true, id: 'ev1' })) }; }
+    else if (u.searchParams.get('action') === 'ping') body = { ok: true, version: 20, name: 'Job search', rows: rows.length };
     else if (u.searchParams.get('action') === 'profile') body = { ok: true, profile: { skills: { 'Microsoft 365': 'strong', 'Active Directory': 'strong', 'Windows 10/11': 'strong', Intune: 'basic' }, areas: ['Hertfordshire', 'Broxbourne', 'Harlow', 'London'], workDays: [0, 1, 2, 5], hoursPerWeek: 32, experienceYears: 2, signName: 'Test Person', gmailAccounts: ['me@example.com'], pitch: 'a second-year Computing student who supports Microsoft 365 and Active Directory users' } };
     else if (u.searchParams.get('action') === 'inbox') body = { ok: true, items: inbox };
     else if (u.searchParams.get('action') === 'fetchJob') body = { ok: true, url: u.searchParams.get('url'), html: JOB_HTML };
@@ -50,6 +50,8 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
     const type = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webmanifest': 'application/manifest+json' }[path.extname(p)] || 'text/plain';
     r.fulfill({ status: 200, contentType: type, body: fs.readFileSync(p) });
   });
+  await ctx.route('https://api.groq.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' },
+    body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ company: 'Harlow College', status: 'interview1', event: { title: 'Interview', date: dayIso(-5), time: '10:00', minutes: 45 }, nextDate: null, note: 'Sara called: interview on Tuesday at 10.', todo: ['bring passport'] }) } }] }) }));
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
@@ -103,6 +105,16 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   await page.click('#toast button'); await wait(700);
   console.log('after undo:', JSON.stringify(posts.filter(p => (p.patches || []).length).pop().patches));
   for (const r of ['stats', 'employers', 'templates', 'setup', 'more', 'cv', 'learn']) { await page.goto('https://jt.example/index.html#' + r); await wait(500); if (r !== 'more' && (await page.$('.lock'))) await typePin('2580'); await wait(300); await shot('5-' + r); console.log(r + ':', (await page.textContent('h1')).trim()); }
+  await page.goto('https://jt.example/index.html#today'); await wait(500); if (await page.$('.lock')) await typePin('2580');
+  await page.evaluate(() => { window.JT_App.st.local.ai.key = 'gsk_test'; window.JT_App.render(); });
+  await page.click('#voiceOpen'); await wait(300);
+  await page.fill('#vText', 'Звонила Сара из Harlow College, интервью во вторник в 10, взять паспорт'); await page.click('#vParse'); await wait(800);
+  console.log('voice parsed:', await page.$eval('#vRow', s => s.options[s.selectedIndex].text), '|', await page.$eval('#vStatus', s => s.value), '|', await page.textContent('label.check').catch(() => 'NO EVENT'));
+  await shot('6-voice');
+  await page.click('#vApply'); await wait(900);
+  const vp = posts.filter(p => (p.patches || []).length).pop();
+  console.log('voice applied:', JSON.stringify(vp.patches[0]).slice(0, 160), '| events:', JSON.stringify(posts.filter(p => p.events).map(p => p.events[0].title)));
+  await page.goto('https://jt.example/index.html#learn'); await wait(500); if (await page.$('.lock')) await typePin('2580');
   console.log('learn items:', (await page.$$eval('[data-ldone]', l => l.map(x => x.dataset.ldone))).join(', '));
   await page.click('[data-ldone]'); await wait(600);
   console.log('learned sent:', JSON.stringify(posts.filter(p => p.learned).map(p => p.learned)));

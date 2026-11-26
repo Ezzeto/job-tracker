@@ -98,3 +98,17 @@ test('llm: contact details are scrubbed, JSON answers are parsed and cached, the
   assert.match(calls[1].url, /generativelanguage/);
   assert.equal(calls[1].body.model, 'gemini-2.5-flash');
 });
+
+test('voice note: the AI answer is checked, unknown companies and bad dates are dropped', async () => {
+  const answer = { company: 'Harlow College', status: 'interview1', event: { title: 'Interview', date: '2026-12-01', time: '10:00', minutes: 45 }, nextDate: '2026-12-01', note: 'Sara called, interview Tuesday 10am', todo: ['bring passport'] };
+  const fetch = async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify(answer) } }] }) });
+  const r = await L.voiceNote({ key: 'gsk_x', fetch }, { text: 'Sara from Harlow College called', companies: ['Harlow College', 'Cloudflare'], today: '2026-11-26 (Thursday)' });
+  assert.equal(r.company, 'Harlow College');
+  assert.equal(r.status, 'interview1');
+  assert.deepEqual(r.event, { title: 'Interview', date: '2026-12-01', time: '10:00', minutes: 45 });
+  assert.deepEqual(r.todo, ['bring passport']);
+  const bad = { ...answer, company: 'Made Up Ltd', status: 'hired', event: { title: 'x', date: 'Tuesday' }, nextDate: 'soon' };
+  const fetch2 = async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify(bad) } }] }) });
+  const r2 = await L.voiceNote({ key: 'gsk_x', fetch: fetch2 }, { text: 'x', companies: ['Harlow College'], today: '2026-11-26' });
+  assert.equal(r2.company, null); assert.equal(r2.status, null); assert.equal(r2.event, null); assert.equal(r2.nextDate, null);
+});

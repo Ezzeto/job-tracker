@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 19; // 19 = home lab tasks finished on the phone (learned skills); 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 20; // 20 = calendar events from voice notes on the phone; 19 = home lab tasks finished on the phone (learned skills); 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -499,6 +499,29 @@ function saveProfile_(profile) {
   sh.getRange(1, 1).setValue(JSON.stringify(profile).slice(0, 49000));
 }
 
+// Events from voice notes on the phone (an interview on Tuesday at 10): added to your default calendar.
+// Returns [{ ok, id?, error? }]. An event already there at the same time with the same title is not added twice.
+function addEvents_(list) {
+  let cal;
+  try { cal = CalendarApp.getDefaultCalendar(); } catch (e) { return list.map(() => ({ ok: false, error: 'Calendar is not allowed yet: run scanInbox in Apps Script once and approve' })); }
+  return list.map(ev => {
+    try {
+      const m = String(ev.date || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!m) return { ok: false, error: 'bad date' };
+      const title = String(ev.title || 'Interview').slice(0, 120);
+      const desc = String(ev.description || '').slice(0, 2000);
+      const t = String(ev.time || '').match(/^(\d{2}):(\d{2})$/);
+      if (!t) { const e = cal.createAllDayEvent(title, new Date(+m[1], +m[2] - 1, +m[3]), { description: desc }); return { ok: true, id: e.getId() }; }
+      const start = new Date(+m[1], +m[2] - 1, +m[3], +t[1], +t[2]);
+      const end = new Date(start.getTime() + Math.max(15, Math.min(480, Number(ev.minutes) || 60)) * 60000);
+      if (cal.getEvents(start, end).some(x => x.getTitle() === title)) return { ok: true, duplicate: true };
+      const e = cal.createEvent(title, start, end, { description: desc });
+      if (ev.remindMinutes) e.addPopupReminder(Math.min(1440, Number(ev.remindMinutes)));
+      return { ok: true, id: e.getId() };
+    } catch (err) { return { ok: false, error: String(err.message || err) }; }
+  });
+}
+
 // Skills practised in the home lab, marked on the phone: { tool: 'yyyy-mm-dd' }. The extension adds them
 // to your skills as Basic, from a home lab, on its next sync.
 const LEARNED_SHEET = '_learned';
@@ -748,11 +771,12 @@ function doPost(e) {
     if (body.profile && typeof body.profile === 'object') saveProfile_(body.profile);
     if (Array.isArray(body.inboxDismiss) && body.inboxDismiss.length) dismissInbox_(body.inboxDismiss);
     if (body.learned && typeof body.learned === 'object') saveLearned_(body.learned);
+    const events = Array.isArray(body.events) ? addEvents_(body.events.slice(0, 5)) : [];
 
     const del = (body.deletes || []).map(id => rowOf[id]).filter(Boolean).sort((x, y) => y - x);
     del.forEach(r => sh.deleteRow(r));
     if (updated || patched || appendRows.length || del.length) maybeSnapshot_();
-    return json_({ ok: true, version: SCRIPT_VERSION, updated, patched, added: appendRows.length, deleted: del.length });
+    return json_({ ok: true, version: SCRIPT_VERSION, updated, patched, added: appendRows.length, deleted: del.length, events });
   } finally { lock.releaseLock(); }
 }
 
