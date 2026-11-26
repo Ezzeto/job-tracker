@@ -18,20 +18,27 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
 (async () => {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ ...devices['Pixel 7'], ...(OUT ? {} : { deviceScaleFactor: 1 }) });
+  const dayIso = n => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+  const desc = 'Part-time IT support, 3 days a week, term-time. Microsoft 365, Active Directory, Windows 11, Intune. Excellent customer service.';
   const rows = [
-    { id: 'a1', ticket: 'APP-0231', title: 'Service Desk Analyst', company: 'Hays', status: 'Applied', appliedAt: '2026-11-14', chance: 72, url: 'https://www.reed.co.uk/jobs/1', updated: 1 },
-    { id: 'a2', ticket: 'APP-0228', title: 'IT Operations Specialist I', company: 'Cloudflare', status: 'Interview 1', appliedAt: '2026-11-03', chance: 82, updated: 1 },
-    { id: 'a3', ticket: 'APP-0190', title: '1st Line Support Engineer', company: 'Zachary Daniels', status: 'Rejected', appliedAt: '2026-10-20', chance: 64, updated: 1 },
-    { id: 'a4', ticket: 'APP-0150', title: 'Desktop Support Technician', company: 'Acme Systems', status: 'Applied', appliedAt: '2026-10-10', chance: 58, updated: 1 },
+    { id: 'a1', ticket: 'APP-0231', title: 'Service Desk Analyst', company: 'Hays', status: 'Applied', appliedAt: dayIso(8), chance: 72, url: 'https://www.reed.co.uk/jobs/1', contacts: 'Jane Smith: jane.smith@hays.com', tools: 'Microsoft 365, Active Directory, ServiceNow', missing: 'ServiceNow', description: 'Full-time, Monday to Friday. ' + desc, updated: 1 },
+    { id: 'a2', ticket: 'APP-0228', title: 'IT Operations Specialist I', company: 'Cloudflare', status: 'Interview 1', appliedAt: dayIso(20), chance: 82, nextDate: dayIso(0), description: 'Full-time role, 37.5 hours.', updated: 1 },
+    { id: 'a3', ticket: 'APP-0190', title: '1st Line Support Engineer', company: 'Zachary Daniels', status: 'Rejected', appliedAt: dayIso(30), chance: 64, rejDays: 2, updated: 1 },
+    { id: 'a4', ticket: 'APP-0150', title: 'Desktop Support Technician', company: 'Acme Systems', status: 'Applied', appliedAt: dayIso(40), chance: 58, updated: 1 },
+    { id: 'a5', ticket: 'APP-0240', title: 'IT Technician', company: 'Harlow College', status: 'Applied', appliedAt: dayIso(1), chance: 77, description: desc, followup: '', updated: 1 },
+    { id: 'a6', ticket: 'APP-0241', title: 'IT Support Assistant', company: 'Birchwood High School', status: 'Applied', appliedAt: dayIso(12), chance: 70, description: desc, followup: '1 · 20/11/2026', updated: 1 },
   ];
+  const inbox = [{ id: 't1', kind: 'rejected', subject: 'Your application to Acme Systems', from: 'Acme Systems Careers', date: new Date().toISOString(), rowId: 'a4', company: 'Acme Systems', human: false, link: 'https://mail.google.com/mail/#all/t1' },
+    { id: 't2', kind: 'interview', subject: 'Interview invitation', from: 'Tom Brown', date: new Date().toISOString(), rowId: 'a1', company: 'Hays', human: true, link: 'https://mail.google.com/mail/#all/t2' }];
   const posts = [];
   await ctx.route('https://script.google.com/**', async r => {
     const req = r.request();
     const u = new URL(req.url());
     let body;
-    if (req.method() === 'POST') { const b = JSON.parse(req.postData()); posts.push(b); (b.apps || []).forEach(a => rows.unshift(a)); (b.patches || []).forEach(p => Object.assign(rows.find(x => x.id === p.id) || {}, p)); body = { ok: true, version: 13 }; }
-    else if (u.searchParams.get('action') === 'ping') body = { ok: true, version: 13, name: 'Job search', rows: rows.length };
-    else if (u.searchParams.get('action') === 'profile') body = { ok: true, profile: { skills: { 'Microsoft 365': 'strong', 'Active Directory': 'strong', 'Windows 10/11': 'strong', Intune: 'basic' }, areas: ['Hertfordshire', 'Broxbourne', 'Harlow', 'London'], workDays: [0, 1, 2, 5], hoursPerWeek: 32, experienceYears: 2, pitch: 'a second-year Computing student who supports Microsoft 365 and Active Directory users' } };
+    if (req.method() === 'POST') { const b = JSON.parse(req.postData()); posts.push(b); (b.apps || []).forEach(a => rows.unshift(a)); (b.patches || []).forEach(p => Object.assign(rows.find(x => x.id === p.id) || {}, p)); (b.inboxDismiss || []).forEach(id => { const i = inbox.findIndex(x => x.id === id); if (i >= 0) inbox.splice(i, 1); }); body = { ok: true, version: 17 }; }
+    else if (u.searchParams.get('action') === 'ping') body = { ok: true, version: 17, name: 'Job search', rows: rows.length };
+    else if (u.searchParams.get('action') === 'profile') body = { ok: true, profile: { skills: { 'Microsoft 365': 'strong', 'Active Directory': 'strong', 'Windows 10/11': 'strong', Intune: 'basic' }, areas: ['Hertfordshire', 'Broxbourne', 'Harlow', 'London'], workDays: [0, 1, 2, 5], hoursPerWeek: 32, experienceYears: 2, signName: 'Test Person', gmailAccounts: ['me@example.com'], pitch: 'a second-year Computing student who supports Microsoft 365 and Active Directory users' } };
+    else if (u.searchParams.get('action') === 'inbox') body = { ok: true, items: inbox };
     else if (u.searchParams.get('action') === 'fetchJob') body = { ok: true, url: u.searchParams.get('url'), html: JOB_HTML };
     else body = { ok: true, rows };
     await r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(body) });
@@ -60,25 +67,35 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   await typePin('2580'); await typePin('2580');
   const stored = await page.evaluate(() => JSON.stringify(localStorage));
   console.log('token stored in plain text:', stored.includes('secret'), '| vault:', stored.includes('jt.vault'));
-  await wait(800);
-  const listCount = await page.$$eval('.app-row', l => l.length);
-  console.log('list rows (active):', listCount); await shot('1-list');
-  await page.click('a[data-tab="add"]'); await wait(300);
+  await wait(1200);
+  console.log('today sections:', (await page.$$eval('.sec-h h2', l => l.map(x => x.textContent.trim()))).join(' | '));
+  console.log('week goals:', (await page.$$eval('.goal b', l => l.map(x => x.textContent))).join(' | '));
+  await shot('1-today');
+  await page.click('[data-inbox-apply="t1"]'); await wait(700);
+  const pAfter = posts.filter(p => (p.patches || []).length).pop();
+  console.log('inbox hint applied:', JSON.stringify(pAfter && pAfter.patches[0].status), '| dismissed:', JSON.stringify(posts.filter(p => p.inboxDismiss).map(p => p.inboxDismiss)));
+  await page.click('[data-sent="a1"]'); await wait(700);
+  console.log('follow-up patch:', JSON.stringify(posts.filter(p => (p.patches || []).length).pop().patches));
+  const mailLink = await page.getAttribute('[data-mail]', 'href').catch(() => '');
+  console.log('follow-up mail link:', mailLink.slice(0, 60));
+  await page.click('a[data-tab="check"]'); await wait(300);
   await page.fill('#jobInput', 'https://www.linkedin.com/jobs/view/4499999999/?trk=abc'); await page.click('#go'); await wait(1200);
-  console.log('verdict:', await page.textContent('.verdict'), '| ring:', await page.textContent('.ring b'));
-  console.log('chips:', (await page.$$eval('#result .chip', l => l.map(x => x.textContent))).join(' | '));
+  console.log('verdict:', await page.textContent('.verdict .v'), '| score:', await page.textContent('.score'));
+  console.log('tags:', (await page.$$eval('#result .tag', l => l.map(x => x.textContent))).join(' | '));
   await shot('2-result');
-  await page.evaluate(() => document.querySelector('details.card').scrollIntoView()); await wait(200); await shot('3-answers');
-  await page.click('[data-add="applied"]'); await wait(800);
+  await page.click('#promptCopy').catch(() => {}); await wait(300);
+  await page.click('#applied'); await wait(800);
   const added = posts.find(p => (p.apps || []).length);
   console.log('added row:', added && added.apps[0].ticket, added && added.apps[0].title, '|', added && added.apps[0].status, '| desc chars', added && added.apps[0].description.length);
+  await page.click('a[data-tab="apps"]'); await wait(400); await shot('3-apps');
+  console.log('list rows (active):', await page.$$eval('.app-row', l => l.length));
   await page.click('.app-row'); await wait(400); await shot('4-sheet');
   await page.click('[data-set="screening"]'); await wait(700);
   console.log('patch sent:', JSON.stringify(posts.filter(p => (p.patches || []).length).pop().patches));
-  await shot('5-toast');
   await page.click('#toast button'); await wait(700);
   console.log('after undo:', JSON.stringify(posts.filter(p => (p.patches || []).length).pop().patches));
-  await page.click('a[data-tab="today"]'); await wait(400); await shot('6-today');
+  for (const r of ['stats', 'employers', 'templates', 'setup', 'more']) { await page.goto('https://jt.example/index.html#' + r); await wait(500); if (r !== 'more' && (await page.$('.lock'))) await typePin('2580'); await wait(300); await shot('5-' + r); console.log(r + ':', (await page.textContent('h1')).trim()); }
+  await page.goto('https://jt.example/index.html#today'); await wait(500); if (await page.$('.lock')) await typePin('2580');
   await page.evaluate(() => window.JT_App.lockNow()); await wait(300);
   await typePin('1111');
   console.log('wrong PIN:', await page.textContent('.pin-msg'));
@@ -88,7 +105,13 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   console.log('after reload:', await page.textContent('.lock h1'));
   await typePin('2580');
   console.log('after reload unlocked, rows:', await page.evaluate(() => window.JT_App.st.rows.length));
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  let overflow = false;
+  for (const r of ['today', 'check', 'apps', 'stats', 'employers', 'templates', 'setup']) { await page.evaluate(h => { location.hash = h; }, '#' + r); await wait(250); if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)) { overflow = true; console.log('overflow on', r); } }
+  if (OUT) {
+    await page.setViewportSize({ width: 1360, height: 860 }); await page.evaluate(() => { location.hash = '#today'; }); await wait(400); await shot('7-desktop-today');
+    await page.evaluate(() => { location.hash = '#stats'; }); await wait(400); await shot('7-desktop-stats');
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; location.hash = '#today'; }); await page.setViewportSize({ width: 412, height: 915 }); await wait(400); await shot('8-dark-today');
+  }
   console.log('horizontal overflow:', overflow);
   console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
   await browser.close();

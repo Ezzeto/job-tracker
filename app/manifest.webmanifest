@@ -1,13 +1,13 @@
 {
   "name": "Job Tracker",
   "short_name": "Job Tracker",
-  "description": "Разбор вакансии по ссылке, заявки и статусы с телефона",
+  "description": "Дела на сегодня, разбор вакансий, follow-up и статистика поиска работы",
   "lang": "ru",
-  "start_url": "./#add",
+  "start_url": "./#today",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f4f5f9",
-  "theme_color": "#2b45e8",
+  "background_color": "#e9ece6",
+  "theme_color": "#1d6b4f",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
