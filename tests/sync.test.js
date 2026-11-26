@@ -128,3 +128,18 @@ test('the profile reaches a version 13 sheet once, for the phone app', async () 
   assert.ok(withProfile[0].body.profile.skills, 'skills are sent');
   assert.equal(withProfile[0].body.profile.factBank, undefined, 'the fact bank stays on the computer');
 });
+
+test('a follow-up recorded on the phone comes back as a follow-up with its date', async () => {
+  const sheet = await setup();
+  const a = await S.addApp({ title: 'Service Desk Analyst', company: 'Acme', status: 'applied' });
+  await Sync.syncNow();
+  sheet.edit(a.id, { followup: '1 · 20/11/2026' });
+  await Sync.syncNow();
+  const [after] = await S.getApps();
+  assert.equal(after.followUps.length, 1);
+  assert.equal(after.followUps[0].at.slice(0, 10), '2026-11-20');
+  assert.ok(after.history.some(h => (h.fields || []).includes('followUps')), 'recorded as an event that can be undone');
+  sheet.edit(a.id, { followup: '1 · 20/11/2026' });
+  await Sync.syncNow();
+  assert.equal((await S.getApps())[0].followUps.length, 1, 'the same count adds nothing');
+});

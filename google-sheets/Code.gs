@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 16; // 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 17; // 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -77,6 +77,7 @@ function onOpen() {
     .addItem('Weekly email: turn on / change', 'setupWeeklyEmail')
     .addItem('Weekly email: send now', 'weeklyEmail')
     .addItem('Weekly email: turn off', 'stopWeeklyEmail')
+    .addItem('Check job emails now (phone app hints)', 'scanInbox')
     .addItem('Create a new sync token', 'resetToken')
     .addSeparator()
     .addItem('Expand all columns', 'expandAll')
@@ -416,6 +417,7 @@ function doGet(e) {
   if (p.action === 'ping') return json_({ ok: true, version: SCRIPT_VERSION, name: ss.getName(), rows: Math.max(0, sh.getLastRow() - 1) });
   if (p.action === 'fetchJob') return json_(fetchJob_(p.url));
   if (p.action === 'profile') return json_({ ok: true, profile: readProfile_() });
+  if (p.action === 'inbox') return json_(inbox_(p.force === '1'));
 
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
@@ -715,7 +717,7 @@ function doPost(e) {
     (body.patches || []).forEach(pt => {
       const r = rowOf[pt.id];
       if (!r) return;
-      ['status', 'notes', 'nextDate'].forEach(k => {
+      ['status', 'notes', 'nextDate', 'followup'].forEach(k => {
         if (pt[k] === undefined) return;
         let v = pt[k];
         if (k === 'nextDate') { const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); v = m && +m[1] >= 2000 ? new Date(+m[1], +m[2] - 1, +m[3]) : ''; }
@@ -726,10 +728,89 @@ function doPost(e) {
       patched++;
     });
     if (body.profile && typeof body.profile === 'object') saveProfile_(body.profile);
+    if (Array.isArray(body.inboxDismiss) && body.inboxDismiss.length) dismissInbox_(body.inboxDismiss);
 
     const del = (body.deletes || []).map(id => rowOf[id]).filter(Boolean).sort((x, y) => y - x);
     del.forEach(r => sh.deleteRow(r));
     if (updated || patched || appendRows.length || del.length) maybeSnapshot_();
     return json_({ ok: true, version: SCRIPT_VERSION, updated, patched, added: appendRows.length, deleted: del.length });
   } finally { lock.releaseLock(); }
+}
+
+
+// ---------- Status hints from Gmail (17) ----------
+// The phone app asks for action=inbox. Job emails of the last 10 days are read (read-only: nothing is
+// sent, labelled or archived), sorted into rejection / interview / assessment / offer and matched to a
+// row by company name. Nothing changes in the sheet by itself: the phone shows each hint and you
+// confirm it with one tap. Kept in a hidden _inbox sheet; a scan runs at most every 30 minutes.
+const INBOX_SHEET = '_inbox';
+const INBOX_QUERY = 'newer_than:10d -in:sent -in:chats -category:promotions -category:social (unfortunately OR unsuccessful OR "other candidates" OR "not to progress" OR "decided not to" OR "not be progressing" OR "not been successful" OR "move forward with" OR interview OR invitation OR "next steps" OR assessment OR "phone screen" OR shortlisted OR offer)';
+const INBOX_KIND = [
+  ['rejected', /unfortunately|unsuccessful|other candidates|not to progress|decided not to|not be progressing|not been successful|will not be (moving|taking)|regret to inform|no longer (being )?considered|position has been filled|move forward with (other|another)/i],
+  ['offer', /\boffer of employment\b|\bpleased to offer\b|\bjob offer\b|\boffer letter\b/i],
+  ['interview', /\binterview\b|\bphone screen\b|\bscreening call\b|\bvideo call\b|\bshortlisted\b|\bmeet (with )?the team\b|\bavailability for a (call|chat)\b/i],
+  ['assessment', /\bassessment\b|\bonline test\b|\btechnical test\b|\bcoding challenge\b|\bhirevue\b|\bpre-recorded\b/i],
+];
+const GENERIC_CO = /^(it|ltd|limited|group|the|uk|plc|services|solutions|support|recruitment|careers|jobs|talent|people|hr)$/i;
+
+function readInbox_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(INBOX_SHEET);
+  if (!sh) return { at: 0, items: [], dismissed: [] };
+  try { return Object.assign({ at: 0, items: [], dismissed: [] }, JSON.parse(sh.getRange(1, 1).getValue() || '{}')); } catch (e) { return { at: 0, items: [], dismissed: [] }; }
+}
+function writeInbox_(o) {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(INBOX_SHEET);
+  if (!sh) { sh = ss.insertSheet(INBOX_SHEET); sh.hideSheet(); }
+  o.dismissed = (o.dismissed || []).slice(-400);
+  sh.getRange(1, 1).setValue(JSON.stringify(o).slice(0, 49000));
+}
+function dismissInbox_(ids) {
+  const o = readInbox_();
+  o.dismissed = [...new Set((o.dismissed || []).concat(ids.map(String)))];
+  o.items = (o.items || []).filter(it => !o.dismissed.includes(it.id));
+  writeInbox_(o);
+}
+/** Menu item and the phone's 'check now': reads job emails and refreshes the hints. */
+function scanInbox() { return inbox_(true); }
+function inbox_(force) {
+  const o = readInbox_();
+  if (!force && Date.now() - (o.at || 0) < 30 * 60e3) return { ok: true, at: o.at, items: o.items };
+  const sh = ensureSheet_();
+  const last = sh.getLastRow();
+  const rows = last >= 2 ? sh.getRange(2, 1, last - 1, COLS.length).getValues().map(r => { const x = {}; COLS.forEach(([k], j) => { x[k] = r[j]; }); return x; }).filter(x => x.id && x.company) : [];
+  const norm = v => String(v || '').toLowerCase().replace(/\b(ltd|limited|plc|llp|group|uk|inc)\b/g, ' ').replace(/[^a-z0-9&]+/g, ' ').trim();
+  const companies = rows.map(r => ({ r, c: norm(r.company) })).filter(x => x.c.length >= 3 && !GENERIC_CO.test(x.c));
+  let threads = [];
+  try { threads = GmailApp.search(INBOX_QUERY, 0, 40); }
+  catch (e) { return { ok: false, error: 'Gmail is not allowed yet: in Apps Script run scanInbox once and approve the access, then deploy a new version.' }; }
+  const items = [];
+  threads.forEach(th => {
+    const id = th.getId();
+    if ((o.dismissed || []).includes(id)) return;
+    const msgs = th.getMessages();
+    const m = msgs[msgs.length - 1];
+    const subject = th.getFirstMessageSubject() || '';
+    const from = String(m.getFrom() || '');
+    const body = String(m.getPlainBody() || '').slice(0, 4000);
+    const text = subject + '\n' + body;
+    const kind = (INBOX_KIND.find(([, re]) => re.test(text)) || [null])[0];
+    if (!kind) return;
+    const hay = ' ' + norm(from + ' ' + subject + ' ' + body.slice(0, 1500)) + ' ';
+    const hits = companies.filter(x => hay.includes(' ' + x.c + ' '));
+    // The most recent application to that company that is still open
+    const open = ['Applied', 'Screening', 'Test task', 'Interview 1', 'Interview 2', 'Interview 3', 'No response'];
+    hits.sort((a, b) => (open.includes(String(b.r.status)) - open.includes(String(a.r.status))) || (new Date(b.r.appliedAt) - new Date(a.r.appliedAt)));
+    const row = hits[0] && hits[0].r;
+    const human = !/no-?reply|donotreply|notifications?@|jobs-noreply|talent@|careers@|recruit(ment|ing)@|workday|greenhouse|lever|smartrecruiters|ashby|teamtailor|indeed|linkedin|reed\.co\.uk|totaljobs/i.test(from);
+    items.push({
+      id, kind, subject: subject.slice(0, 200), from: from.replace(/<.*>/, '').replace(/"/g, '').trim().slice(0, 80),
+      date: th.getLastMessageDate().toISOString(), snippet: body.replace(/\s+/g, ' ').slice(0, 280),
+      rowId: row ? String(row.id) : '', company: row ? String(row.company) : '', title: row ? String(row.title) : '', status: row ? String(row.status) : '',
+      human, link: 'https://mail.google.com/mail/#all/' + id,
+    });
+  });
+  o.at = Date.now(); o.items = items;
+  writeInbox_(o);
+  return { ok: true, at: o.at, items };
 }
