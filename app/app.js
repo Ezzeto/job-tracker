@@ -8,7 +8,7 @@
   'use strict';
   const A = window.JT_Analyzer, S = window.JT_Store, E = window.JT_Extract, Q = window.JT_Quality, Mk = window.JT_Market,
     I = window.JT_Insights, T = window.JT_I18n, F = window.JT_Follow, TP = window.JT_Templates, P = window.JT_Prompt,
-    FIT = window.JT_Fit, CH = window.JT_Chance, LLM = window.JT_LLM, LRN = window.JT_Learn, TL = window.JT_Tailor, DX = window.JT_Docx;
+    FIT = window.JT_Fit, CH = window.JT_Chance, LLM = window.JT_LLM, LRN = window.JT_Learn, TL = window.JT_Tailor, DX = window.JT_Docx, OR = window.JT_Outreach;
   if (T) T.setLang('ru');
   const tr = s => (T ? T.tr(s) : s);
   const $ = (s, el) => (el || document).querySelector(s);
@@ -35,7 +35,7 @@ Certificates: CompTIA A+ in progress; Cisco "Introduction to Modern AI".
 Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   const DEFAULT_LOCAL = () => ({
     targets: { B: 7, A: 5, C: 3 }, studyDays: [3, 4], mail: 'auto', from: '',
-    ai: { key: '', model: '' }, facts: DEFAULT_FACTS, llmCache: {}, cvs: {}, learned: {}, learnTasks: {}, learnNotes: {},
+    ai: { key: '', model: '' }, facts: DEFAULT_FACTS, llmCache: {}, cvs: {}, learned: {}, learnTasks: {}, learnNotes: {}, outreach: { radius: 30, primary: false, osmAt: '' }, cvLink: '',
     snooze: {}, noChannel: {}, inboxDone: [], later: [], employers: null, templates: {}, tplJob: { title: '', company: '', name: '' }, why: '',
   });
   const st = {
@@ -165,6 +165,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       setOnline(true);
       if (!quiet) toast('Данные обновлены');
       if (st.scriptVersion >= 17) loadInbox(false);
+      if (st.scriptVersion >= 21) pullEmployers();
     } catch (e) {
       setOnline(navigator.onLine && !/fetch|network/i.test(String(e.message)));
       if (!quiet) toast(String(e.message || e));
@@ -405,7 +406,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return { iso: isoOf(d), d, apps: [], cold: 0 }; });
     const byIso = Object.fromEntries(days.map(x => [x.iso, x]));
     st.rows.forEach(r => { const x = byIso[r.appliedAt]; if (x) x.apps.push(toApp(r)); });
-    (st.local.employers || []).forEach(e => { if (e.contactedAt && byIso[e.contactedAt]) byIso[e.contactedAt].cold++; });
+    (st.local.employers || []).forEach(e => { if (e.contactedAt && byIso[e.contactedAt]) byIso[e.contactedAt].cold++; if (e.followedAt && byIso[e.followedAt]) byIso[e.followedAt].cold++; });
     const all = days.flatMap(x => x.apps);
     return { days, dow, B: all.filter(a => a.market === 'B').length, A: all.filter(a => a.market === 'A').length, C: days.reduce((t, x) => t + x.cold, 0) };
   }
@@ -419,13 +420,14 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     const done = new Set(st.local.inboxDone || []);
     const inbox = (st.inbox || []).filter(it => {
       if (done.has(it.id)) return false;
+      if (it.employerId) { const e = (st.local.employers || []).find(x => x.id === it.employerId); return !!e && (it.kind === 'vacancy' || e.status !== 'replied'); }
       const r = it.rowId && rowById(it.rowId); if (!r) return true;
       const s = idOf(r.status);
       return !(it.kind === 'rejected' && s === 'rejected') && !(['interview', 'assessment'].includes(it.kind) && (POS.includes(s))) && !(it.kind === 'offer' && ['offer', 'accepted', 'declined'].includes(s));
     });
     return { follow: q.due, soon: q.soon, due, stale, inbox };
   }
-  const KIND = { rejected: ['Отказ', 'bad', 'rejected'], interview: ['Приглашение', 'info', 'screening'], assessment: ['Тест / ассессмент', 'info', 'test'], offer: ['Оффер', 'ok', 'offer'] };
+  const KIND = { rejected: ['Отказ', 'bad', 'rejected'], interview: ['Приглашение', 'info', 'screening'], assessment: ['Тест / ассессмент', 'info', 'test'], offer: ['Оффер', 'ok', 'offer'], employer: ['Ответ работодателя', 'ok', ''], vacancy: ['Новое на странице вакансий', 'warn', ''] };
   function viewToday() {
     const w = weekData(), t = st.local.targets, L = todayLists(), p = profile();
     const study = st.local.studyDays || [];
@@ -436,6 +438,11 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
 
     const inbox = L.inbox.slice(0, 8).map(it => {
       const k = KIND[it.kind] || KIND.interview;
+      if (it.employerId) {
+        const e = (st.local.employers || []).find(x => x.id === it.employerId) || { name: it.from };
+        return `<div class="item"><div class="top"><div class="grow"><div class="tags"><span class="tag ${k[1]}">${k[0]}</span></div><div class="t" style="margin-top:8px">${esc(e.name)}</div><div class="s">${esc(it.subject || '')}</div></div><span class="when">${esc(ago(String(it.date).slice(0, 10)))}</span></div>
+          <div class="row">${it.kind === 'employer' ? `<button class="btn go sm" data-inbox-emp="${esc(it.id)}">Отметить: ответили</button>` : ''}<a class="btn line sm" href="${esc(it.link)}" target="_blank" rel="noopener">${it.kind === 'vacancy' ? 'Открыть страницу' : 'Открыть письмо'}</a><button class="btn quiet sm" data-inbox-skip="${esc(it.id)}">Скрыть</button></div></div>`;
+      }
       const r = it.rowId && rowById(it.rowId);
       return `<div class="item"><div class="top"><div class="grow"><div class="tags"><span class="tag ${k[1]}">${k[0]}</span>${it.human ? '<span class="tag warn">пишет человек — ответь</span>' : ''}</div>
         <div class="t" style="margin-top:8px">${esc(r ? `${r.company} — ${r.title}` : it.from)}</div><div class="s">${esc(it.subject)}${r ? '' : ' · заявку в таблице не нашёл'}</div></div><span class="when">${esc(ago(String(it.date).slice(0, 10)))}</span></div>
@@ -468,6 +475,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       ${st.scriptVersion >= 17 ? `<div class="sec-h"><h2>Из почты <span class="n">${L.inbox.length || ''}</span></h2><button class="btn quiet sm" id="scanInbox" ${st.inboxBusy ? 'disabled' : ''}>${st.inboxBusy ? 'Проверяю…' : 'Проверить почту'}</button></div>${inbox ? `<div class="group">${inbox}</div>` : '<p class="small muted" style="margin:0 2px">Новых писем об откликах нет. Ярлык и пересылка не нужны: скрипт читает весь ящик, ничего не меняя.</p>'}` : st.cfg ? '<div class="note small">Обнови Code.gs до версии 17 — тогда здесь появятся отказы и приглашения из Gmail, и статус меняется одним нажатием.</div>' : ''}
       ${due ? `<div class="sec-h"><h2>Следующий шаг <span class="n">${L.due.length}</span></h2></div><div class="group">${due}</div>` : ''}
       ${follow ? `<div class="sec-h"><h2>Follow-up <span class="n">${L.follow.length}</span></h2>${L.follow.length > 8 ? `<span class="small muted">первые 8 из ${L.follow.length}</span>` : ''}</div><div class="group">${follow}</div>` : ''}
+      ${(() => { const em = st.local.employers || []; const due = OR.followUpsDue(em).length; const left = Math.max(0, st.local.targets.C - weekData().C); return em.length && (due || left) ? `<a class="paper tight" href="#employers" style="text-decoration:none;color:var(--ink);flex-direction:row;align-items:center;gap:12px"><span class="grow"><b>Холодные письма</b><br><span class="small muted">${left ? `ещё ${left} до цели недели` : 'цель недели выполнена'}${due ? ` · второе письмо: ${due}` : ''}</span></span><span class="btn go sm">Открыть</span></a>` : ''; })()}
       ${L.stale.length ? `<div class="sec-h"><h2>Месяц без ответа <span class="n">${L.stale.length}</span></h2></div><div class="paper tight"><p class="small muted">Отклики старше 30 дней без ответа и без follow-up. Закрой их, чтобы статистика была честной.</p><button class="btn line block" id="staleAll">Отметить все как «Нет ответа»</button></div>` : ''}
       ${later ? `<div class="sec-h"><h2>Откликнуться с ПК <span class="n">${st.local.later.length}</span></h2></div><div class="group">${later}</div>` : ''}
       ${nothing && st.cfg ? `<div class="empty"><b>Срочных дел нет</b>Разбери новую вакансию или напиши местному работодателю.<div class="row" style="justify-content:center;margin-top:12px"><a class="btn go sm" href="#check">Разобрать вакансию</a><a class="btn line sm" href="#employers">Работодатели рядом</a></div></div>` : ''}
@@ -861,41 +869,192 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       <p class="tiny muted">Правки сохраняются на этом устройстве. «Сохранить как шаблон» запоминает текст вместе с подстановками — роль и компанию потом поменяй вручную.</p>`;
   }
 
-  // ---------- Employers nearby (market B) ----------
+  // ---------- Employers nearby (market B): map, OpenStreetMap list, today's five, second emails ----------
   const SEED = [
-    ['University of Hertfordshire', 'Университет', 'Hatfield'], ['Anglia Ruskin University', 'Университет', 'Cambridge, Chelmsford'], ['University of Cambridge', 'Университет', 'Cambridge'],
-    ['Northumbria University London: careers', 'Университет', 'London'], ['Harlow College', 'Колледж', 'Harlow'], ['Hertford Regional College', 'Колледж', 'Ware, Broxbourne'],
-    ['Cambridge Regional College', 'Колледж', 'Cambridge'], ['Chelmsford College', 'Колледж', 'Chelmsford'], ['North Hertfordshire College', 'Колледж', 'Stevenage'],
-    ['Bishop\'s Stortford College', 'Школа', 'Bishop\'s Stortford'], ['Hockerill Anglo-European College', 'Школа', 'Bishop\'s Stortford'], ['Birchwood High School', 'Школа', 'Bishop\'s Stortford'],
-    ['The Bishop\'s Stortford High School', 'Школа', 'Bishop\'s Stortford'], ['Herts and Essex High School', 'Школа', 'Bishop\'s Stortford'], ['Saffron Walden County High School', 'Школа', 'Saffron Walden'],
-    ['Felsted School', 'Школа', 'Felsted'], ['Haileybury', 'Школа', 'Hertford'], ['East Herts Council', 'Совет', 'Hertford, Bishop\'s Stortford'], ['Uttlesford District Council', 'Совет', 'Saffron Walden'],
-    ['Harlow Council', 'Совет', 'Harlow'], ['Hertfordshire County Council', 'Совет', 'Hertford'], ['Essex County Council', 'Совет', 'Chelmsford'],
-    ['The Princess Alexandra Hospital NHS Trust', 'NHS', 'Harlow'], ['Cambridge University Hospitals (Addenbrooke\'s)', 'NHS', 'Cambridge'], ['London Stansted Airport', 'Аэропорт', 'Stansted'],
-    ['Currys', 'Ритейл', 'Harlow'], ['Apple Store, Grand Arcade', 'Ритейл', 'Cambridge'], ['IT-компании (MSP) рядом', 'MSP', 'Bishop\'s Stortford, Harlow'],
+    ['University of Hertfordshire', 'university', 'Hatfield'], ['Anglia Ruskin University', 'university', 'Cambridge'], ['University of Cambridge', 'university', 'Cambridge'],
+    ['Northumbria University London: careers', 'university', 'London'], ['Harlow College', 'college', 'Harlow'], ['Hertford Regional College', 'college', 'Ware'],
+    ['Cambridge Regional College', 'college', 'Cambridge'], ['Chelmsford College', 'college', 'Chelmsford'], ['North Hertfordshire College', 'college', 'Stevenage'],
+    ['Bishop\'s Stortford College', 'school', 'Bishop\'s Stortford'], ['Hockerill Anglo-European College', 'school', 'Bishop\'s Stortford'], ['Birchwood High School', 'school', 'Bishop\'s Stortford'],
+    ['The Bishop\'s Stortford High School', 'school', 'Bishop\'s Stortford'], ['Herts and Essex High School', 'school', 'Bishop\'s Stortford'], ['Saffron Walden County High School', 'school', 'Saffron Walden'],
+    ['Felsted School', 'school', 'Felsted'], ['Haileybury', 'school', 'Hertford'], ['East Herts Council', 'council', 'Hertford'], ['Uttlesford District Council', 'council', 'Saffron Walden'],
+    ['Harlow Council', 'council', 'Harlow'], ['Hertfordshire County Council', 'council', 'Hertford'], ['Essex County Council', 'council', 'Chelmsford'],
+    ['The Princess Alexandra Hospital NHS Trust', 'hospital', 'Harlow'], ['Cambridge University Hospitals (Addenbrooke\'s)', 'hospital', 'Cambridge'], ['London Stansted Airport', 'other', 'Stansted'],
+    ['Currys', 'retail', 'Harlow'], ['Apple Store, Grand Arcade', 'retail', 'Cambridge'],
   ];
+  const OLD_TYPE = { 'Университет': 'university', 'Колледж': 'college', 'Школа': 'school', 'Совет': 'council', 'NHS': 'hospital', 'Аэропорт': 'other', 'Ритейл': 'retail', 'MSP': 'it', 'Другое': 'other' };
   const EST = { todo: ['Не писал', ''], sent: ['Написал', 'info'], replied: ['Ответили', 'ok'], no: ['Не подходит', 'bad'] };
+  const ECOL = { todo: '#8a968f', sent: '#2e5e8c', replied: '#1d6b4f', no: '#c23b22', queue: '#a85f00' };
+  function homeLL() { const p = profile(); const town = p.home || (p.areas || [])[0] || 'Bishop\'s Stortford'; return A.coordsOf(town) || A.coordsOf('Bishop\'s Stortford') || [51.872, 0.159]; }
   function employers() {
-    if (!st.local.employers) { st.local.employers = SEED.map(([name, type, town], i) => ({ id: 'e' + i, name, type, town, status: 'todo', contact: '', contactedAt: '', note: '' })); save(); }
-    return st.local.employers;
+    if (!st.local.employers) st.local.employers = [];
+    const list = st.local.employers;
+    let changed = false;
+    if (!list.some(e => e.src === 'seed' || /^e\d+$/.test(e.id))) { SEED.forEach(([name, type, town], i) => list.push({ id: 'e' + i, name, type, town, status: 'todo', src: 'seed' })); changed = true; }
+    const home = homeLL();
+    list.forEach(e => {
+      if (OLD_TYPE[e.type]) { e.type = OLD_TYPE[e.type]; changed = true; }
+      if (e.lat == null) { const c = A.coordsOf(String(e.town || '').split(',')[0].trim()); if (c) { e.lat = c[0]; e.lon = c[1]; e.approx = true; changed = true; } }
+      if (e.lat != null && e.km == null) { e.km = Math.round(OR.km(home, [e.lat, e.lon]) * 10) / 10; changed = true; }
+      if (e.contact && !e.email && /@/.test(e.contact)) { e.email = e.contact; changed = true; }
+      if (e.contact && !e.website && /^https?:/.test(e.contact)) { e.website = e.contact; changed = true; }
+    });
+    if (changed) save();
+    return list;
+  }
+  const empById = id => employers().find(e => e.id === id);
+  let empSyncTimer = null;
+  function touchEmp(e, patch) {
+    Object.assign(e, patch, { upd: Date.now() }); save();
+    clearTimeout(empSyncTimer);
+    if (st.cfg && st.scriptVersion >= 21) empSyncTimer = setTimeout(() => api('POST', null, { employers: OR.touched(employers()) }).catch(() => {}), 1500);
+  }
+  async function pullEmployers() {
+    try { const d = await api('GET', { action: 'employers' }); if (Array.isArray(d.employers)) { st.local.employers = OR.merge(employers(), d.employers); save(); } } catch (e) { /* older script */ }
+  }
+  const typeLabel = t => (OR.TYPES[t] || OR.TYPES.other)[0];
+  const kmText = e => e.km == null || (e.approx && e.km < 2) ? '' : `${e.approx ? '≈' : ''}${String(e.km).replace('.', ',')} км`;
+  const HOOK = {
+    school: 'I would love to help your IT team support staff and students, especially at busy times such as the start of term or the summer device refresh.',
+    college: 'I would love to help your IT team support staff and students, especially at busy times such as enrolment and the start of term.',
+    university: 'I would love to help your service desk support staff and students, especially at busy times such as the start of term.',
+    it: 'I would be glad to help your engineers with first-line tickets, new device setups and on-site visits.',
+    computer: 'I would be glad to help in store or in the workshop: diagnosing faults, setting up new devices and helping customers.',
+    hospital: 'I would be glad to support your service desk with first-line tickets and device setups.',
+    council: 'I would be glad to support your service desk with first-line tickets and device setups.',
+  };
+  function empMail(e, second) {
+    const p = profile();
+    const tpl = TP.merge(st.local.templates).speculative;
+    let body = TP.fill(tpl.body, { name: '', company: e.name.replace(/:.*$/, '') }, p);
+    const hook = HOOK[e.type];
+    if (hook) { const parts = body.split('\n\n'); parts.splice(Math.min(2, parts.length), 0, hook); body = parts.join('\n\n'); }
+    if (st.local.cvLink) body = body.replace(/My CV is attached\.?/, `My CV: ${st.local.cvLink}`).replace(/(\nKind regards)/, st.local.cvLink && !/My CV:/.test(body) ? `\nMy CV: ${st.local.cvLink}\n$1` : '$1');
+    if (second) body = `Hi,\n\nI wrote to you last week about helping with 1st line IT support part-time. I just wanted to follow up in case anything has come up — I can start immediately and I'm happy to come in for a chat.\n\n${st.local.cvLink ? 'My CV: ' + st.local.cvLink + '\n\n' : ''}Kind regards,\n${p.signName || '[My name]'}${p.signPhone ? '\n' + p.signPhone : ''}`;
+    const subject = second ? 'Following up: 1st line IT support' : TP.fill(tpl.subject, {}, p);
+    return { to: e.email || '', subject, body };
+  }
+  const empSearch = e => e.type === 'it' && /MSP|рядом/.test(e.name) ? `https://www.google.com/maps/search/${encodeURIComponent('IT support company near ' + (profile().home || 'Bishop\'s Stortford'))}` : `https://www.google.com/search?q=${encodeURIComponent(`"${e.name.replace(/:.*$/, '')}" ${e.town || ''} IT vacancies OR jobs`)}`;
+  async function importOsm() {
+    const o = st.local.outreach, home = homeLL();
+    st.osmBusy = true; render();
+    try {
+      const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(OR.overpassQuery(home[0], home[1], o.radius)) });
+      if (!res.ok) throw new Error(res.status === 429 || res.status === 504 ? 'OpenStreetMap сейчас перегружен, попробуй через пару минут' : 'OpenStreetMap ответил ошибкой ' + res.status);
+      const d = await res.json();
+      const found = OR.fromOsm(d.elements, home, { primary: o.primary });
+      const list = employers();
+      const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\b(the|school|college|ltd)\b/g, ' ').replace(/\s+/g, ' ').trim();
+      let added = 0;
+      found.forEach(f => {
+        const twin = list.find(e => e.id === f.id || (e.src !== 'osm' && norm(e.name) && (norm(e.name) === norm(f.name) || (norm(e.name).length > 8 && norm(f.name).includes(norm(e.name))))));
+        if (twin) { if (twin.approx || twin.lat == null) Object.assign(twin, { lat: f.lat, lon: f.lon, km: f.km, approx: false }); if (!twin.website && f.website) twin.website = f.website; if (!twin.email && f.email) twin.email = f.email; if (!twin.phone && f.phone) twin.phone = f.phone; return; }
+        list.push(f); added++;
+      });
+      o.osmAt = todayIso(); save();
+      toast(`Найдено ${found.length}, новых ${added}`);
+    } catch (e) { toast(String(e.message || e)); }
+    st.osmBusy = false; render();
   }
   function viewEmployers() {
-    const list = employers(), f = st.empFilter, w = weekData(), t = st.local.targets;
-    const shown = list.filter(e => f === 'all' || e.status === f);
-    const tpl = TP.merge(st.local.templates).speculative, p = profile();
-    const search = e => e.type === 'MSP' ? `https://www.google.com/maps/search/${encodeURIComponent('IT support company near Bishop\'s Stortford')}` : `https://www.google.com/search?q=${encodeURIComponent(`"${e.name.replace(/:.*$/, '')}" IT jobs OR vacancies`)}`;
+    const list = employers(), f = st.empFilter, w = weekData(), t = st.local.targets, o = st.local.outreach;
+    const q5 = OR.queue(list, 5), due = OR.followUpsDue(list);
+    const qset = new Set(q5.map(e => e.id));
+    const term = (st.empQ || '').toLowerCase();
+    const shown = list.filter(e => (f === 'all' || e.status === f) && (!st.empType || e.type === st.empType) && (!term || (e.name + ' ' + (e.town || '')).toLowerCase().includes(term)))
+      .sort((a, b) => OR.priority(b) - OR.priority(a));
+    const types = [...new Set(list.map(e => e.type))];
+    const card = (e, second) => { const m = empMail(e, second); return `<div class="item"><div class="top"><span class="dot" style="background:${ECOL[qset.has(e.id) && !second ? 'queue' : e.status]};margin-top:7px"></span><div class="grow"><div class="t">${esc(e.name)}</div><div class="s">${esc(typeLabel(e.type))}${e.town ? ', ' + esc(e.town) : ''}${kmText(e) ? ' · ' + kmText(e) : ''}${second ? ` · написал ${esc(ago(e.contactedAt))}` : ''}</div></div></div>
+      <p class="small ${e.email ? '' : 'muted'}">${e.email ? esc(e.email) : e.website ? 'Email не найден — найди на сайте страницу Vacancies / Contact' : 'Контактов нет — начни с поиска вакансий'}</p>
+      <div class="row"><a class="btn go sm" href="${esc(mailHref(m.to, m.subject, m.body))}" target="_blank" rel="noopener" data-emp-mail="${esc(e.id)}"${second ? ' data-second="1"' : ''}>${second ? 'Второе письмо' : 'Письмо'}</a>${e.website ? `<a class="btn line sm" href="${esc(e.website)}" target="_blank" rel="noopener">Сайт</a>` : ''}<a class="btn line sm" href="${esc(empSearch(e))}" target="_blank" rel="noopener">Вакансии</a>${second ? `<button class="btn quiet sm" data-emp-set="${esc(e.id)}:replied">Ответили</button><button class="btn quiet sm" data-emp-set="${esc(e.id)}:closed">Не ответили</button>` : `<button class="btn quiet sm" data-emp-open="${esc(e.id)}">Ещё</button>`}</div></div>`; };
     return `
-      <div><h1>Работодатели рядом</h1><p class="lead">Рынок Б без конкуренции LinkedIn: школы, колледжи, советы, больницы и местные IT-компании. Холодных писем на этой неделе: ${w.C} из ${t.C}.</p></div>
-      <div class="seg" role="group" aria-label="Фильтр">${[['all', 'Все'], ['todo', 'Не писал'], ['sent', 'Написал'], ['replied', 'Ответили']].map(([k, l]) => `<button data-emp-filter="${k}" aria-pressed="${f === k}">${l}</button>`).join('')}</div>
-      <div class="group">${shown.map(e => { const body = TP.fill(tpl.body, { name: '', company: e.name }, p); return `
-        <div class="item"><div class="top"><div class="grow"><div class="t">${esc(e.name)}</div><div class="s">${esc(e.type)}, ${esc(e.town)}${e.contactedAt ? ` · написал ${esc(ago(e.contactedAt))}` : ''}</div></div><span class="tag ${EST[e.status][1]}">${EST[e.status][0]}</span></div>
-          <input class="input" data-emp-contact="${esc(e.id)}" value="${esc(e.contact)}" placeholder="Email отдела IT/HR или ссылка на вакансии" aria-label="Контакт ${esc(e.name)}" style="padding:9px 12px;font-size:15px">
-          <div class="row"><a class="btn line sm" href="${esc(search(e))}" target="_blank" rel="noopener">${e.type === 'MSP' ? 'Найти на карте' : 'Вакансии'}</a><a class="btn go sm" href="${esc(mailHref(/@/.test(e.contact) ? e.contact : '', TP.fill(tpl.subject, {}, p), body))}" target="_blank" rel="noopener" data-emp-mail="${esc(e.id)}">Письмо</a>
-            <select class="input" data-emp-status="${esc(e.id)}" aria-label="Статус" style="width:auto;padding:7px 34px 7px 12px;font-size:14px;min-height:38px">${Object.entries(EST).map(([k, v]) => `<option value="${k}" ${e.status === k ? 'selected' : ''}>${v[0]}</option>`).join('')}</select>${e.id.startsWith('u') ? `<button class="btn quiet sm" data-emp-del="${esc(e.id)}">Удалить</button>` : ''}</div></div>`; }).join('') || '<div class="empty">Под этот фильтр никого нет.</div>'}</div>
+      <div><h1>Работодатели рядом</h1><p class="lead">Школы, колледжи, больницы, советы и IT-компании в радиусе ${o.radius} км. Холодных писем на этой неделе: ${w.C} из ${t.C}.</p></div>
+      <div id="empMap" style="height:340px;border-radius:var(--r-lg);overflow:hidden;border:1px solid var(--line-2);background:var(--paper-2)" aria-label="Карта работодателей"></div>
+      <div class="legend"><span><i style="background:${ECOL.queue}"></i>написать сегодня</span><span><i style="background:${ECOL.todo}"></i>не писал</span><span><i style="background:${ECOL.sent}"></i>написал</span><span><i style="background:${ECOL.replied}"></i>ответили</span><span><i style="background:${ECOL.no}"></i>не подходит</span></div>
+      <div class="paper tight"><div class="row"><select class="input" id="osmRadius" style="width:auto;min-height:40px;padding:6px 34px 6px 12px">${[15, 30, 50].map(r => `<option value="${r}" ${o.radius === r ? 'selected' : ''}>${r} км</option>`).join('')}</select><label class="check small"><input type="checkbox" id="osmPrimary" ${o.primary ? 'checked' : ''}>начальные школы</label></div><button class="btn go block" id="osmLoad" ${st.osmBusy ? 'disabled' : ''}>${st.osmBusy ? 'Загружаю…' : o.osmAt ? 'Обновить из OpenStreetMap' : 'Найти всех работодателей рядом'}</button>
+        <p class="tiny muted">${o.osmAt ? `Загружено ${esc(ago(o.osmAt))}, всего в списке ${list.length}.` : 'Сейчас в списке только 27 работодателей из стартового набора. OpenStreetMap добавит все школы, колледжи, больницы и IT-компании вокруг — бесплатно, без ключей.'}</p></div>
+      ${due.length ? `<div class="sec-h"><h2>Второе письмо <span class="n">${due.length}</span></h2><span class="small muted">7 дней без ответа</span></div><div class="group">${due.slice(0, 5).map(e => card(e, true)).join('')}</div>` : ''}
+      <div class="sec-h"><h2>5 писем на сегодня</h2></div>
+      <div class="group">${q5.map(e => card(e)).join('') || '<div class="empty">Всем из списка уже написал. Обнови список из OpenStreetMap или добавь работодателя вручную.</div>'}</div>
+      ${!st.local.cvLink ? '<p class="small muted">Из ссылки на письмо нельзя приложить файл. Добавь ссылку на CV в Google Drive в <a href="#setup">Настройках</a> — она встанет в письмо сама.</p>' : ''}
+      <div class="sec-h"><h2>Все <span class="n">${shown.length}</span></h2></div>
+      <input class="input" id="empQ" type="search" placeholder="Название или город" value="${esc(st.empQ || '')}" aria-label="Поиск работодателя">
+      <div class="seg" role="group" aria-label="Статус">${[['all', 'Все'], ['todo', 'Не писал'], ['sent', 'Написал'], ['replied', 'Ответили'], ['no', 'Не подходит']].map(([k, l]) => `<button data-emp-filter="${k}" aria-pressed="${f === k}">${l}</button>`).join('')}</div>
+      <div class="seg" role="group" aria-label="Тип"><button data-emp-type="" aria-pressed="${!st.empType}">Все типы</button>${types.map(k => `<button data-emp-type="${k}" aria-pressed="${st.empType === k}">${esc(typeLabel(k))}</button>`).join('')}</div>
+      <div class="group" id="empList">${shown.slice(0, st.empMore || 40).map(e => `<button class="app-row" data-emp-open="${esc(e.id)}"><i class="dot" style="background:${ECOL[qset.has(e.id) ? 'queue' : e.status]}"></i><span class="t">${esc(e.name)}</span><span class="r"><b>${EST[e.status][0]}</b>${kmText(e)}</span><span class="m">${esc(typeLabel(e.type))}${e.town ? ', ' + esc(e.town) : ''}${e.email ? ' · есть email' : ''}${e.watchUrl ? ' · слежу за вакансиями' : ''}</span></button>`).join('') || '<div class="empty">Никого не нашлось.</div>'}</div>
+      ${shown.length > (st.empMore || 40) ? `<button class="btn line block" id="empMore">Показать ещё</button>` : ''}
       <details class="paper fold"><summary><h2>Добавить работодателя</h2></summary>
         <label class="f">Название<input class="input" id="empName" placeholder="Например, местная IT-компания"></label>
-        <div class="split"><label class="f">Тип<select class="input" id="empType">${['MSP', 'Школа', 'Колледж', 'Университет', 'Совет', 'NHS', 'Ритейл', 'Другое'].map(x => `<option>${x}</option>`).join('')}</select></label><label class="f">Город<input class="input" id="empTown" placeholder="Harlow"></label></div>
-        <button class="btn go" id="empAdd">Добавить</button></details>
-      <p class="tiny muted">«Письмо» открывает шаблон «Email to a local IT company or school» и отмечает работодателя как «Написал». Список хранится на этом устройстве.</p>`;
+        <div class="split"><label class="f">Тип<select class="input" id="empType">${Object.entries(OR.TYPES).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('')}</select></label><label class="f">Город<input class="input" id="empTown" placeholder="Harlow"></label></div>
+        <label class="f">Email (если знаешь)<input class="input" id="empEmail" type="email"></label>
+        <button class="btn go" id="empAdd">Добавить</button></details>`;
+  }
+  function openEmployer(id) {
+    const e = empById(id); if (!e) return;
+    const m = empMail(e), sh = $('#sheet');
+    sh.innerHTML = `<div><p class="ticket">${esc(typeLabel(e.type))}${kmText(e) ? ' · ' + kmText(e) : ''}${e.src === 'osm' ? ' · OpenStreetMap' : ''}</p><h2 style="font-size:20px">${esc(e.name)}</h2><p class="muted">${esc([e.town, e.phone].filter(Boolean).join(' · '))}</p></div>
+      <div class="status-grid">${Object.entries(EST).map(([k, v]) => `<button data-eset="${k}" aria-pressed="${e.status === k}"><i class="dot" style="background:${ECOL[k]}"></i>${v[0]}</button>`).join('')}</div>
+      <label class="f">Email отдела IT или HR<input class="input" id="eEmail" type="email" value="${esc(e.email || '')}" placeholder="it@… или recruitment@…"></label>
+      <label class="f">Страница вакансий — трекер будет проверять её раз в 12 часов<input class="input" id="eWatch" value="${esc(e.watchUrl || '')}" placeholder="https://…/vacancies"></label>
+      <label class="f">Заметка<textarea class="input" id="eNote" style="min-height:70px">${esc(e.note || '')}</textarea></label>
+      <div class="row"><button class="btn go grow" id="eSave">Сохранить</button><a class="btn line grow" href="${esc(mailHref(m.to, m.subject, m.body))}" target="_blank" rel="noopener" data-emp-mail="${esc(e.id)}">Письмо</a></div>
+      <div class="row">${e.website ? `<a class="btn line sm" href="${esc(e.website)}" target="_blank" rel="noopener">Сайт</a>` : ''}<a class="btn line sm" href="${esc(empSearch(e))}" target="_blank" rel="noopener">Вакансии в Google</a>${e.lat != null ? `<a class="btn line sm" href="https://www.google.com/maps/dir/?api=1&destination=${e.lat},${e.lon}&travelmode=transit" target="_blank" rel="noopener">Как добраться</a>` : ''}${st.local.ai.key ? '<button class="btn quiet sm" id="eAi">Письмо от AI</button>' : ''}</div>
+      <div id="eAiOut"></div>
+      ${e.src === 'user' ? '<button class="btn danger block" id="eDel">Удалить</button>' : ''}`;
+    sh.hidden = false; $('#scrim').hidden = false; $('#toast').hidden = true;
+    $$('[data-eset]', sh).forEach(b => b.onclick = () => { setEmpStatus(e, b.dataset.eset); closeSheet(); });
+    $('#eSave', sh).onclick = () => { touchEmp(e, { email: $('#eEmail').value.trim(), watchUrl: $('#eWatch').value.trim(), note: $('#eNote').value.trim() }); closeSheet(); render(); toast('Сохранено'); };
+    $$('[data-emp-mail]', sh).forEach(a => a.addEventListener('click', () => mailSent(a.dataset.empMail, false)));
+    const del = $('#eDel', sh); if (del) del.onclick = () => { st.local.employers = employers().filter(x => x.id !== e.id); save(); closeSheet(); render(); };
+    const ai = $('#eAi', sh);
+    if (ai) ai.onclick = async () => {
+      const out = $('#eAiOut'); out.innerHTML = '<p class="small muted">Пишу…</p>';
+      try {
+        const text = await LLM.draft(aiCfg(), { task: `Write a short speculative email (under 130 words) to ${e.name} (${typeLabel(e.type)} in ${e.town || 'the area'}, near Bishop's Stortford) asking about part-time or weekend 1st line IT support work alongside a Computing degree, available 3–4 days a week including weekends. Make the second sentence specific to this kind of employer. End with a polite ask for a short chat. No sign-off.`, facts: st.local.facts || DEFAULT_FACTS, words: 120 });
+        const p = profile(); const full = text.trim() + `\n\n${st.local.cvLink ? 'My CV: ' + st.local.cvLink + '\n\n' : ''}Kind regards,\n${p.signName || '[My name]'}${p.signPhone ? '\n' + p.signPhone : ''}`;
+        const warn = LLM.unknownTools(full, st.local.facts || DEFAULT_FACTS, profile());
+        out.innerHTML = `<textarea class="out" id="eAiText">${esc(full)}</textarea>${warn.length ? `<p class="small" style="color:var(--red)">Проверь: ${esc(warn.join(', '))} нет в твоих фактах.</p>` : ''}<a class="btn go block" id="eAiSend" target="_blank" rel="noopener">Открыть в почте</a>`;
+        const send = $('#eAiSend'); const upd = () => { send.href = mailHref($('#eEmail').value.trim(), m.subject, $('#eAiText').value); };
+        upd(); $('#eAiText').oninput = upd; send.addEventListener('click', () => mailSent(e.id, false));
+      } catch (err) { out.innerHTML = `<p class="small" style="color:var(--red)">${esc(err.message)}</p>`; }
+    };
+  }
+  function setEmpStatus(e, status) {
+    const prev = { status: e.status, contactedAt: e.contactedAt, followedAt: e.followedAt };
+    const patch = { status: status === 'closed' ? 'no' : status };
+    if (status === 'sent' && !e.contactedAt) patch.contactedAt = todayIso();
+    if (status === 'closed') patch.note = [e.note, 'Без ответа после двух писем'].filter(Boolean).join('\n');
+    touchEmp(e, patch); render();
+    toast(`${e.name}: ${EST[patch.status][0].toLowerCase()}`, 'Отменить', () => { touchEmp(e, prev); render(); });
+  }
+  function mailSent(id, second) {
+    const e = empById(id); if (!e) return;
+    setTimeout(() => {
+      if (second) touchEmp(e, { followedAt: todayIso() }); else if (e.status === 'todo') touchEmp(e, { status: 'sent', contactedAt: todayIso() });
+      render(); toast(second ? 'Второе письмо отмечено' : 'Отмечено: написал. Напомню через 7 дней, если не ответят', 'Отменить', () => { if (second) touchEmp(e, { followedAt: '' }); else touchEmp(e, { status: 'todo', contactedAt: '' }); render(); });
+    }, 500);
+  }
+  let empMap = null;
+  async function drawMap() {
+    const el = $('#empMap'); if (!el) return;
+    try {
+      if (!window.L) {
+        if (!document.querySelector('link[data-leaflet]')) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'lib/vendor/leaflet/leaflet.css'; l.dataset.leaflet = '1'; document.head.appendChild(l); }
+        await loadScript('lib/vendor/leaflet/leaflet.js');
+      }
+    } catch (e) { el.innerHTML = '<p class="small muted" style="padding:16px">Карта не загрузилась — нет интернета. Список ниже работает.</p>'; return; }
+    if (!$('#empMap')) return;
+    if (empMap) { empMap.remove(); empMap = null; }
+    const L = window.L, home = homeLL(), list = employers(), q5 = new Set(OR.queue(list, 5).map(e => e.id));
+    empMap = L.map(el, { zoomControl: true, attributionControl: true }).setView(home, st.local.outreach.radius > 30 ? 9 : 10);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(empMap);
+    L.circle(home, { radius: st.local.outreach.radius * 1000, color: '#1d6b4f', weight: 1.5, fillOpacity: 0.04 }).addTo(empMap);
+    L.circleMarker(home, { radius: 8, color: '#14201b', fillColor: '#14201b', fillOpacity: 1 }).addTo(empMap).bindTooltip('Дом');
+    list.filter(e => e.lat != null && (st.empFilter === 'all' || e.status === st.empFilter) && (!st.empType || e.type === st.empType)).forEach(e => {
+      const col = ECOL[q5.has(e.id) ? 'queue' : e.status];
+      L.circleMarker([e.lat, e.lon], { radius: q5.has(e.id) ? 8 : (OR.TYPES[e.type] || [0, 1])[1] >= 2.4 ? 6 : 4.5, color: '#fff', weight: 1.2, fillColor: col, fillOpacity: 0.95 })
+        .addTo(empMap).bindPopup(`<b>${esc(e.name)}</b><br>${esc(typeLabel(e.type))}${kmText(e) ? ' · ' + kmText(e) : ''}<br>${EST[e.status][0]}<br><a href="#" data-emp-open="${esc(e.id)}">Открыть</a>`);
+    });
+    el.onclick = ev => { const a = ev.target.closest('[data-emp-open]'); if (a) { ev.preventDefault(); openEmployer(a.dataset.empOpen); } };
   }
 
   // ---------- More (phone) and Settings ----------
@@ -930,7 +1089,8 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       <section class="paper"><h2>Почта</h2>
         <label class="f">Как открывать письма<select class="input" id="mailMode"><option value="auto" ${l.mail === 'auto' ? 'selected' : ''}>Само: на телефоне — приложение, на компьютере — Gmail</option><option value="mailto" ${l.mail === 'mailto' ? 'selected' : ''}>Приложение почты</option><option value="gmail" ${l.mail === 'gmail' ? 'selected' : ''}>Gmail в браузере</option></select></label>
         <label class="f">Отправлять из Gmail-аккаунта<input class="input" id="mailFrom" list="accts" value="${esc(l.from)}" placeholder="oleh.poratui@gmail.com"><datalist id="accts">${accounts.map(x => `<option value="${esc(x)}">`).join('')}</datalist></label>
-        <p class="small muted">Письмо всегда только открывается готовым — отправляешь ты.</p></section>
+        <label class="f">Ссылка на CV в Google Drive (для холодных писем)<input class="input" id="cvLink" value="${esc(l.cvLink || '')}" placeholder="https://drive.google.com/…"></label>
+        <p class="small muted">Письмо всегда только открывается готовым — отправляешь ты. Файл из ссылки mailto приложить нельзя, поэтому CV идёт ссылкой: в Drive «Открыть доступ → Все, у кого есть ссылка».</p></section>
       <section class="paper"><h2>AI</h2>
         <p class="small muted">Нужен один бесплатный ключ — любой из трёх. Ключ хранится только на этом устройстве, зашифрованный PIN-кодом. В AI уходят текст вакансии и факты ниже, без имени, телефона и почты.</p>
         <ul class="small" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px">
@@ -1029,7 +1189,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   function updateBadges() {
     if (st.lock) return;
     const L = todayLists();
-    $('#cntToday').textContent = (L.inbox.length + L.due.length + L.follow.length) || '';
+    $('#cntToday').textContent = (L.inbox.length + L.due.length + L.follow.length + OR.followUpsDue(st.local.employers || []).length) || '';
     setOnline(true);
   }
   function render() {
@@ -1067,6 +1227,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     });
     $$('[data-inbox-skip]', v).forEach(b => b.onclick = () => { st.local.inboxDone.push(b.dataset.inboxSkip); save(); render(); api('POST', null, { inboxDismiss: [b.dataset.inboxSkip] }).catch(() => {}); });
     const si = $('#scanInbox', v); if (si) si.onclick = () => loadInbox(true);
+    $$('[data-inbox-emp]', v).forEach(b => b.onclick = () => { const it = st.inbox.find(x => x.id === b.dataset.inboxEmp); if (!it) return; const e = empById(it.employerId); st.local.inboxDone.push(it.id); if (e) touchEmp(e, { status: 'replied' }); save(); render(); api('POST', null, { inboxDismiss: [it.id] }).catch(() => {}); toast((e ? e.name : 'Работодатель') + ': ответили'); });
     const vo = $('#voiceOpen', v); if (vo) vo.onclick = () => openVoice();
     const sa = $('#staleAll', v);
     if (sa) sa.onclick = () => {
@@ -1154,14 +1315,19 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     $$('[data-tsave]', v).forEach(b => b.onclick = () => { const k = b.dataset.tsave; st.local.templates[k] = { ...(st.local.templates[k] || {}), body: $(`[data-tbody="${k}"]`, v).value }; save(); toast('Шаблон сохранён'); render(); });
     $$('[data-treset]', v).forEach(b => b.onclick = () => { delete st.local.templates[b.dataset.treset]; save(); render(); });
     // Employers
-    $$('[data-emp-filter]', v).forEach(b => b.onclick = () => { st.empFilter = b.dataset.empFilter; render(); });
-    const emp = id => employers().find(e => e.id === id);
-    $$('[data-emp-contact]', v).forEach(i => i.onchange = () => { const e = emp(i.dataset.empContact); if (e) { e.contact = i.value.trim(); save(); render(); } });
-    $$('[data-emp-status]', v).forEach(s => s.onchange = () => { const e = emp(s.dataset.empStatus); if (!e) return; e.status = s.value; if (s.value === 'sent' && !e.contactedAt) e.contactedAt = todayIso(); save(); render(); });
-    $$('[data-emp-mail]', v).forEach(a => a.addEventListener('click', () => { const e = emp(a.dataset.empMail); if (e && e.status === 'todo') { e.status = 'sent'; e.contactedAt = todayIso(); save(); setTimeout(render, 400); } }));
-    $$('[data-emp-del]', v).forEach(b => b.onclick = () => { st.local.employers = employers().filter(e => e.id !== b.dataset.empDel); save(); render(); });
+    if ($('#empMap', v)) drawMap();
+    $$('[data-emp-filter]', v).forEach(b => b.onclick = () => { st.empFilter = b.dataset.empFilter; st.empMore = 40; render(); });
+    $$('[data-emp-type]', v).forEach(b => b.onclick = () => { st.empType = b.dataset.empType; st.empMore = 40; render(); });
+    $$('[data-emp-open]', v).forEach(b => b.onclick = e => { e.preventDefault(); openEmployer(b.dataset.empOpen); });
+    $$('[data-emp-set]', v).forEach(b => b.onclick = () => { const [id, stt] = b.dataset.empSet.split(':'); const e = empById(id); if (e) setEmpStatus(e, stt); });
+    $$('[data-emp-mail]', v).forEach(a => a.addEventListener('click', () => mailSent(a.dataset.empMail, !!a.dataset.second)));
+    const eq = $('#empQ', v); if (eq) eq.onchange = () => { st.empQ = eq.value; render(); };
+    const em = $('#empMore', v); if (em) em.onclick = () => { st.empMore = (st.empMore || 40) + 60; render(); };
+    const orad = $('#osmRadius', v); if (orad) orad.onchange = () => { st.local.outreach.radius = +orad.value; save(); };
+    const opr = $('#osmPrimary', v); if (opr) opr.onchange = () => { st.local.outreach.primary = opr.checked; save(); };
+    const ol = $('#osmLoad', v); if (ol) ol.onclick = importOsm;
     const ea = $('#empAdd', v);
-    if (ea) ea.onclick = () => { const name = $('#empName').value.trim(); if (!name) return toast('Впиши название'); employers().unshift({ id: 'u' + Date.now().toString(36), name, type: $('#empType').value, town: $('#empTown').value.trim() || '—', status: 'todo', contact: '', contactedAt: '', note: '' }); save(); render(); toast('Добавлено'); };
+    if (ea) ea.onclick = () => { const name = $('#empName').value.trim(); if (!name) return toast('Впиши название'); const e = { id: 'u' + Date.now().toString(36), name, type: $('#empType').value, town: $('#empTown').value.trim(), email: $('#empEmail').value.trim(), status: 'todo', src: 'user' }; employers().unshift(e); touchEmp(e, {}); render(); toast('Добавлено'); };
     // Settings
     const cs = $('#cfgSave', v);
     if (cs) cs.onclick = async () => {
@@ -1179,6 +1345,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     $$('[data-study]', v).forEach(i => i.onchange = () => { const d = +i.dataset.study; st.local.studyDays = i.checked ? [...new Set([...st.local.studyDays, d])] : st.local.studyDays.filter(x => x !== d); save(); });
     const mm = $('#mailMode', v); if (mm) mm.onchange = () => { st.local.mail = mm.value; save(); };
     const mf = $('#mailFrom', v); if (mf) mf.onchange = () => { st.local.from = mf.value.trim(); save(); };
+    const cl2 = $('#cvLink', v); if (cl2) cl2.onchange = () => { st.local.cvLink = cl2.value.trim(); save(); toast('Ссылка на CV сохранена'); };
     const as = $('#aiSave', v); if (as) as.onclick = () => { st.local.ai = { key: $('#aiKey').value.trim(), model: $('#aiModel').value.trim() }; save(); toast('Сохранено'); render(); };
     const at = $('#aiTest', v);
     if (at) at.onclick = async () => {
@@ -1247,5 +1414,5 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
     navigator.serviceWorker.register('sw.js').then(reg => reg.update()).catch(() => {});
   }
-  window.JT_App = { st, openVoice, analyzeJob, readJob, setStatus, render, lockNow, toApp, todayLists, weekData, parseFollow, parseContacts };
+  window.JT_App = { st, openVoice, employers, importOsm, analyzeJob, readJob, setStatus, render, lockNow, toApp, todayLists, weekData, parseFollow, parseContacts };
 })();

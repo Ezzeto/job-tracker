@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 20; // 20 = calendar events from voice notes on the phone; 19 = home lab tasks finished on the phone (learned skills); 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 21; // 21 = employers you contacted (synced with the phone), their replies and vacancy pages watched; 20 = calendar events from voice notes on the phone; 19 = home lab tasks finished on the phone (learned skills); 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -419,6 +419,7 @@ function doGet(e) {
   if (p.action === 'fetchJob') return json_(fetchJob_(p.url));
   if (p.action === 'profile') return json_({ ok: true, profile: readProfile_(), learned: readLearned_() });
   if (p.action === 'inbox') return json_(inbox_(p.force === '1'));
+  if (p.action === 'employers') return json_({ ok: true, employers: readEmployers_() });
 
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
@@ -497,6 +498,30 @@ function saveProfile_(profile) {
   let sh = ss.getSheetByName(PROFILE_SHEET);
   if (!sh) { sh = ss.insertSheet(PROFILE_SHEET); sh.hideSheet(); }
   sh.getRange(1, 1).setValue(JSON.stringify(profile).slice(0, 49000));
+}
+
+// Employers you contacted from the phone (cold outreach), so the phone and the laptop see the same list
+const EMPLOYERS_SHEET = '_employers';
+function readEmployers_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(EMPLOYERS_SHEET);
+  if (!sh) return [];
+  try { return JSON.parse(sh.getRange(1, 1).getValue() || '[]'); } catch (e) { return []; }
+}
+function saveEmployers_(list) {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(EMPLOYERS_SHEET);
+  if (!sh) { sh = ss.insertSheet(EMPLOYERS_SHEET); sh.hideSheet(); }
+  const keep = ['id', 'name', 'type', 'town', 'lat', 'lon', 'km', 'status', 'email', 'website', 'phone', 'watchUrl', 'note', 'contactedAt', 'followedAt', 'src', 'skip', 'upd'];
+  const byId = {};
+  readEmployers_().concat(list.slice(0, 400)).forEach(e => { if (!e || !e.id) return; const c = byId[e.id]; if (!c || (e.upd || 0) >= (c.upd || 0)) { const o = {}; keep.forEach(k => { if (e[k] != null && e[k] !== '') o[k] = typeof e[k] === 'string' ? e[k].slice(0, 500) : e[k]; }); byId[e.id] = o; } });
+  sh.getRange(1, 1).setValue(JSON.stringify(Object.values(byId)).slice(0, 49000));
+}
+function domainOf_(x) {
+  const s = String(x || '').trim().toLowerCase();
+  const m = s.match(/@([a-z0-9.-]+\.[a-z]{2,})>?$/) || s.match(/^(?:https?:\/\/)?(?:www\.)?([a-z0-9.-]+\.[a-z]{2,})/);
+  if (!m) return '';
+  const d = m[1].replace(/^www\./, '');
+  return /^(gmail|googlemail|outlook|hotmail|yahoo|icloud|live|aol)\./.test(d) ? '' : d;
 }
 
 // Events from voice notes on the phone (an interview on Tuesday at 10): added to your default calendar.
@@ -772,6 +797,7 @@ function doPost(e) {
     if (Array.isArray(body.inboxDismiss) && body.inboxDismiss.length) dismissInbox_(body.inboxDismiss);
     if (body.learned && typeof body.learned === 'object') saveLearned_(body.learned);
     const events = Array.isArray(body.events) ? addEvents_(body.events.slice(0, 5)) : [];
+    if (Array.isArray(body.employers)) saveEmployers_(body.employers);
 
     const del = (body.deletes || []).map(id => rowOf[id]).filter(Boolean).sort((x, y) => y - x);
     del.forEach(r => sh.deleteRow(r));
@@ -853,6 +879,41 @@ function inbox_(force) {
       human, link: 'https://mail.google.com/mail/#all/' + id,
     });
   });
+  // Replies from employers you wrote to (matched by the domain of their email or website)
+  try {
+    const emps = readEmployers_().filter(e => e.status === 'sent' || e.status === 'replied');
+    const byDomain = {};
+    emps.forEach(e => { [e.email, e.website, e.contact].forEach(x => { const d = domainOf_(x); if (d) byDomain[d] = e; }); });
+    const doms = Object.keys(byDomain).slice(0, 25);
+    if (doms.length) {
+      GmailApp.search('newer_than:14d -in:sent -in:chats from:(' + doms.map(d => '@' + d).join(' OR ') + ')', 0, 20).forEach(th => {
+        const id = th.getId();
+        if ((o.dismissed || []).includes(id)) return;
+        const msgs = th.getMessages(), m = msgs[msgs.length - 1];
+        const d = domainOf_(m.getFrom()), e = byDomain[d];
+        if (!e) return;
+        items.push({ id, kind: 'employer', employerId: e.id, subject: (th.getFirstMessageSubject() || '').slice(0, 200), from: String(m.getFrom()).replace(/<.*>/, '').replace(/"/g, '').trim().slice(0, 80), date: th.getLastMessageDate().toISOString(), link: 'https://mail.google.com/mail/#all/' + id });
+      });
+    }
+  } catch (e) { /* replies are optional */ }
+  // Vacancy pages you asked to watch: checked at most every 12 hours, a change becomes a hint
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const seen = JSON.parse(props.getProperty('WATCH') || '{}');
+    readEmployers_().filter(e => /^https?:\/\//.test(e.watchUrl || '')).slice(0, 25).forEach(e => {
+      const w = seen[e.id] || {};
+      if (w.url === e.watchUrl && Date.now() - (w.at || 0) < 12 * 3600e3) { if (w.changed && !(o.dismissed || []).includes(w.changed)) items.push({ id: w.changed, kind: 'vacancy', employerId: e.id, subject: 'Страница вакансий изменилась', from: e.name, date: new Date(w.at).toISOString(), link: e.watchUrl }); return; }
+      let text = '';
+      try { const r = UrlFetchApp.fetch(e.watchUrl, { muteHttpExceptions: true, followRedirects: true, headers: { 'User-Agent': 'Mozilla/5.0 (job tracker page watcher)' } }); if (r.getResponseCode() !== 200) return; text = r.getContentText(); } catch (err) { return; }
+      // Only the words of links and headings, digits removed: dates and tokens change on every load
+      const parts = (text.match(/<(a|h[1-4])\b[^>]*>[\s\S]*?<\/\1>/gi) || []).map(x => x.replace(/<[^>]+>/g, ' ').replace(/\d+/g, '').replace(/\s+/g, ' ').trim()).filter(x => x.length > 3);
+      const h = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, parts.join('|')));
+      const changed = w.url === e.watchUrl && w.h && w.h !== h ? 'w' + e.id + Date.now().toString(36) : (w.url === e.watchUrl ? w.changed || '' : '');
+      seen[e.id] = { url: e.watchUrl, h, at: Date.now(), changed };
+      if (changed && !(o.dismissed || []).includes(changed)) items.push({ id: changed, kind: 'vacancy', employerId: e.id, subject: 'Страница вакансий изменилась', from: e.name, date: new Date().toISOString(), link: e.watchUrl });
+    });
+    props.setProperty('WATCH', JSON.stringify(seen).slice(0, 8000));
+  } catch (e) { /* watching is optional */ }
   o.at = Date.now(); o.items = items;
   writeInbox_(o);
   return { ok: true, at: o.at, items };

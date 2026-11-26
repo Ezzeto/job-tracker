@@ -35,10 +35,11 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
     const req = r.request();
     const u = new URL(req.url());
     let body;
-    if (req.method() === 'POST') { const b = JSON.parse(req.postData()); posts.push(b); (b.apps || []).forEach(a => rows.unshift(a)); (b.patches || []).forEach(p => Object.assign(rows.find(x => x.id === p.id) || {}, p)); (b.inboxDismiss || []).forEach(id => { const i = inbox.findIndex(x => x.id === id); if (i >= 0) inbox.splice(i, 1); }); body = { ok: true, version: 20, events: (b.events || []).map(() => ({ ok: true, id: 'ev1' })) }; }
-    else if (u.searchParams.get('action') === 'ping') body = { ok: true, version: 20, name: 'Job search', rows: rows.length };
+    if (req.method() === 'POST') { const b = JSON.parse(req.postData()); posts.push(b); (b.apps || []).forEach(a => rows.unshift(a)); (b.patches || []).forEach(p => Object.assign(rows.find(x => x.id === p.id) || {}, p)); (b.inboxDismiss || []).forEach(id => { const i = inbox.findIndex(x => x.id === id); if (i >= 0) inbox.splice(i, 1); }); body = { ok: true, version: 21, events: (b.events || []).map(() => ({ ok: true, id: 'ev1' })) }; }
+    else if (u.searchParams.get('action') === 'ping') body = { ok: true, version: 21, name: 'Job search', rows: rows.length };
     else if (u.searchParams.get('action') === 'profile') body = { ok: true, profile: { skills: { 'Microsoft 365': 'strong', 'Active Directory': 'strong', 'Windows 10/11': 'strong', Intune: 'basic' }, areas: ['Hertfordshire', 'Broxbourne', 'Harlow', 'London'], workDays: [0, 1, 2, 5], hoursPerWeek: 32, experienceYears: 2, signName: 'Test Person', gmailAccounts: ['me@example.com'], pitch: 'a second-year Computing student who supports Microsoft 365 and Active Directory users' } };
     else if (u.searchParams.get('action') === 'inbox') body = { ok: true, items: inbox };
+    else if (u.searchParams.get('action') === 'employers') body = { ok: true, employers: [] };
     else if (u.searchParams.get('action') === 'fetchJob') body = { ok: true, url: u.searchParams.get('url'), html: JOB_HTML };
     else body = { ok: true, rows };
     await r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(body) });
@@ -52,9 +53,14 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   });
   await ctx.route('https://api.groq.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' },
     body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ company: 'Harlow College', status: 'interview1', event: { title: 'Interview', date: dayIso(-5), time: '10:00', minutes: 45 }, nextDate: null, note: 'Sara called: interview on Tuesday at 10.', todo: ['bring passport'] }) } }] }) }));
+  await ctx.route('https://overpass-api.de/**', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ elements: [
+    { type: 'node', id: 11, lat: 51.88, lon: 0.18, tags: { amenity: 'school', name: 'Birchwood High School', website: 'https://www.birchwoodhigh.org' } },
+    { type: 'node', id: 12, lat: 51.87, lon: 0.16, tags: { office: 'it', name: 'Stortford IT Ltd', email: 'hello@stortfordit.co.uk' } },
+    { type: 'node', id: 13, lat: 51.86, lon: 0.16, tags: { amenity: 'school', name: 'Thorley Hill Primary School' } } ] }) }));
+  await ctx.route('https://tile.openstreetmap.org/**', r => r.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64') }));
   const page = await ctx.newPage();
   const errors = [];
-  page.on('pageerror', e => errors.push(String(e)));
+  page.on('pageerror', e => errors.push(String(e.stack || e)));
   page.on('console', m => { if (m.type() === 'error' && !/fonts\.g/.test(m.text())) errors.push(m.text()); });
   const fresh = await ctx.newPage();
   await fresh.goto('https://jt.example/index.html'); await wait(600);
@@ -114,6 +120,17 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   await page.click('#vApply'); await wait(900);
   const vp = posts.filter(p => (p.patches || []).length).pop();
   console.log('voice applied:', JSON.stringify(vp.patches[0]).slice(0, 160), '| events:', JSON.stringify(posts.filter(p => p.events).map(p => p.events[0].title)));
+  await page.goto('https://jt.example/index.html#employers'); await wait(800); if (await page.$('.lock')) await typePin('2580');
+  await page.click('#osmLoad'); await wait(900);
+  console.log('employers:', await page.$$eval('#empList .app-row', l => l.length), '| queue:', (await page.$$eval('[data-emp-mail]', l => l.map(a => a.closest('.item').querySelector('.t').textContent))).slice(0, 5).join(', '));
+  console.log('map:', await page.$eval('#empMap', el => el.querySelector('.leaflet-container, .leaflet-pane') ? 'leaflet ok' : el.textContent.trim().slice(0, 60) || 'empty'));
+  const firstMail = await page.$('[data-emp-mail]'); const href = await firstMail.getAttribute('href');
+  console.log('cold email:', decodeURIComponent(href).slice(0, 140).replace(/\n/g, ' '));
+  await page.evaluate(() => { document.querySelector('[data-emp-mail]').addEventListener('click', e => e.preventDefault(), { capture: true }); });
+  await firstMail.click(); await wait(2600);
+  console.log('after mail:', await page.evaluate(() => window.JT_App.employers().filter(e => e.status === 'sent').map(e => e.name + ' ' + e.contactedAt).join(', ')));
+  console.log('synced employers:', JSON.stringify(posts.filter(p => p.employers).map(p => p.employers.map(e => e.name + ':' + e.status))).slice(0, 200));
+  await shot('7-employers');
   await page.goto('https://jt.example/index.html#learn'); await wait(500); if (await page.$('.lock')) await typePin('2580');
   console.log('learn items:', (await page.$$eval('[data-ldone]', l => l.map(x => x.dataset.ldone))).join(', '));
   await page.click('[data-ldone]'); await wait(600);
