@@ -29,16 +29,20 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
     { id: 'a6', ticket: 'APP-0241', title: 'IT Support Assistant', company: 'Birchwood High School', status: 'Applied', appliedAt: dayIso(12), chance: 70, description: desc, followup: '1 · 20/11/2026', missing: 'ITIL', tools: 'ITIL, Microsoft 365', updated: 1 },
   ];
   const inbox = [{ id: 't1', kind: 'rejected', subject: 'Your application to Acme Systems', from: 'Acme Systems Careers', date: new Date().toISOString(), rowId: 'a4', company: 'Acme Systems', human: false, link: 'https://mail.google.com/mail/#all/t1' },
-    { id: 't2', kind: 'interview', subject: 'Interview invitation', from: 'Tom Brown', date: new Date().toISOString(), rowId: 'a1', company: 'Hays', human: true, link: 'https://mail.google.com/mail/#all/t2' }];
+    { id: 't2', kind: 'interview', subject: 'Interview invitation', from: 'Tom Brown', fromEmail: 'tom.brown@hays.com', date: new Date().toISOString(), rowId: 'a1', company: 'Hays', human: true, link: 'https://mail.google.com/mail/#all/t2' },
+    { id: 't3', kind: 'applied', subject: 'Thank you for applying', from: 'Ware Academy', company: 'Ware Academy', title: '', date: new Date().toISOString(), link: 'https://mail.google.com/mail/#all/t3' }];
+  const alerts = [{ key: 'li4199', url: 'https://www.linkedin.com/jobs/view/4199/', title: 'IT Support Assistant (Part-time)', after: 'Hockerill Anglo-European College · Bishop\'s Stortford', source: 'LinkedIn', date: new Date().toISOString() },
+    { key: 'in00aa', url: 'https://uk.indeed.com/viewjob?jk=00aa', title: 'Senior Network Architect', after: 'BigCo · London', source: 'Indeed', date: new Date().toISOString() }];
   const posts = [];
   await ctx.route('https://script.google.com/**', async r => {
     const req = r.request();
     const u = new URL(req.url());
     let body;
-    if (req.method() === 'POST') { const b = JSON.parse(req.postData()); posts.push(b); (b.apps || []).forEach(a => rows.unshift(a)); (b.patches || []).forEach(p => Object.assign(rows.find(x => x.id === p.id) || {}, p)); (b.inboxDismiss || []).forEach(id => { const i = inbox.findIndex(x => x.id === id); if (i >= 0) inbox.splice(i, 1); }); body = { ok: true, version: 21, events: (b.events || []).map(() => ({ ok: true, id: 'ev1' })) }; }
-    else if (u.searchParams.get('action') === 'ping') body = { ok: true, version: 21, name: 'Job search', rows: rows.length };
+    if (req.method() === 'POST') { const b = JSON.parse(req.postData()); posts.push(b); (b.apps || []).forEach(a => rows.unshift(a)); (b.patches || []).forEach(p => Object.assign(rows.find(x => x.id === p.id) || {}, p)); (b.inboxDismiss || []).forEach(id => { const i = inbox.findIndex(x => x.id === id); if (i >= 0) inbox.splice(i, 1); }); body = { ok: true, version: 22, events: (b.events || []).map(() => ({ ok: true, id: 'ev1' })) }; }
+    else if (u.searchParams.get('action') === 'ping') body = { ok: true, version: 22, name: 'Job search', rows: rows.length };
     else if (u.searchParams.get('action') === 'profile') body = { ok: true, profile: { skills: { 'Microsoft 365': 'strong', 'Active Directory': 'strong', 'Windows 10/11': 'strong', Intune: 'basic' }, areas: ['Hertfordshire', 'Broxbourne', 'Harlow', 'London'], workDays: [0, 1, 2, 5], hoursPerWeek: 32, experienceYears: 2, signName: 'Test Person', gmailAccounts: ['me@example.com'], pitch: 'a second-year Computing student who supports Microsoft 365 and Active Directory users' } };
-    else if (u.searchParams.get('action') === 'inbox') body = { ok: true, items: inbox };
+    else if (u.searchParams.get('action') === 'inbox') body = { ok: true, items: inbox, alerts, added: 0 };
+    else if (u.searchParams.get('action') === 'slots') body = { ok: true, busy: [] };
     else if (u.searchParams.get('action') === 'employers') body = { ok: true, employers: [] };
     else if (u.searchParams.get('action') === 'fetchJob') body = { ok: true, url: u.searchParams.get('url'), html: JOB_HTML };
     else body = { ok: true, rows };
@@ -76,6 +80,13 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   const stored = await page.evaluate(() => JSON.stringify(localStorage));
   console.log('token stored in plain text:', stored.includes('secret'), '| vault:', stored.includes('jt.vault'));
   await wait(1200);
+  console.log('alerts on today:', (await page.$$eval('[data-alert-check]', l => l.map(b => b.closest('.item').querySelector('.t').textContent))).join(' | '));
+  await page.click('[data-slots="t2"]'); await wait(700);
+  console.log('slots reply:', (await page.inputValue('#slotText')).split('\n').filter(l => l.startsWith('•')).join(' / '), '| to:', decodeURIComponent(await page.getAttribute('#slotMail', 'href')).slice(0, 40));
+  await page.keyboard.press('Escape'); await wait(200);
+  await page.click('[data-inbox-add="t3"]'); await wait(300); await page.fill('#qaTi', 'IT Technician'); await page.click('#qaGo'); await wait(700);
+  const qa = posts.filter(p => (p.apps || []).length).pop();
+  console.log('quick add:', qa && qa.apps[0].company, qa && qa.apps[0].title, qa && qa.apps[0].status);
   console.log('today sections:', (await page.$$eval('.sec-h h2', l => l.map(x => x.textContent.trim()))).join(' | '));
   console.log('week goals:', (await page.$$eval('.goal b', l => l.map(x => x.textContent))).join(' | '));
   await shot('1-today');
@@ -101,7 +112,7 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   console.log('tailored:', (await page.textContent('details.paper.fold[open] p').catch(() => 'NO')).replace(/\s+/g, ' '));
   const dl = page.waitForEvent('download', { timeout: 5000 }).catch(() => null); await page.click('#cvDocx'); const d = await dl; console.log('docx download:', d ? d.suggestedFilename() : 'NONE');
   await page.click('#applied'); await wait(800);
-  const added = posts.find(p => (p.apps || []).length);
+  const added = posts.filter(p => (p.apps || []).length).pop();
   console.log('added row:', added && added.apps[0].ticket, added && added.apps[0].title, '|', added && added.apps[0].status, '| desc chars', added && added.apps[0].description.length);
   await page.click('a[data-tab="apps"]'); await wait(400); await shot('3-apps');
   console.log('list rows (active):', await page.$$eval('.app-row', l => l.length));

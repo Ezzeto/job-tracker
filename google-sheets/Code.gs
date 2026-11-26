@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 21; // 21 = employers you contacted (synced with the phone), their replies and vacancy pages watched; 20 = calendar events from voice notes on the phone; 19 = home lab tasks finished on the phone (learned skills); 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 22; // 22 = jobs from alert emails, forgotten applications added from confirmations, free calendar slots, Telegram; 21 = employers you contacted (synced with the phone), their replies and vacancy pages watched; 20 = calendar events from voice notes on the phone; 19 = home lab tasks finished on the phone (learned skills); 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -79,6 +79,8 @@ function onOpen() {
     .addItem('Weekly email: send now', 'weeklyEmail')
     .addItem('Weekly email: turn off', 'stopWeeklyEmail')
     .addItem('Check job emails now (phone app hints)', 'scanInbox')
+    .addItem('Telegram: connect', 'setupTelegram')
+    .addItem('Telegram: turn off', 'stopTelegram')
     .addItem('Create a new sync token', 'resetToken')
     .addSeparator()
     .addItem('Expand all columns', 'expandAll')
@@ -420,6 +422,7 @@ function doGet(e) {
   if (p.action === 'profile') return json_({ ok: true, profile: readProfile_(), learned: readLearned_() });
   if (p.action === 'inbox') return json_(inbox_(p.force === '1'));
   if (p.action === 'employers') return json_({ ok: true, employers: readEmployers_() });
+  if (p.action === 'slots') return json_(busy_(Math.min(21, Number(p.days) || 10)));
 
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
@@ -844,7 +847,7 @@ function dismissInbox_(ids) {
 function scanInbox() { return inbox_(true); }
 function inbox_(force) {
   const o = readInbox_();
-  if (!force && Date.now() - (o.at || 0) < 30 * 60e3) return { ok: true, at: o.at, items: o.items };
+  if (!force && Date.now() - (o.at || 0) < 30 * 60e3) return { ok: true, at: o.at, items: o.items, alerts: readAlerts_().items, added: 0 };
   const sh = ensureSheet_();
   const last = sh.getLastRow();
   const rows = last >= 2 ? sh.getRange(2, 1, last - 1, COLS.length).getValues().map(r => { const x = {}; COLS.forEach(([k], j) => { x[k] = r[j]; }); return x; }).filter(x => x.id && x.company) : [];
@@ -876,7 +879,7 @@ function inbox_(force) {
       id, kind, subject: subject.slice(0, 200), from: from.replace(/<.*>/, '').replace(/"/g, '').trim().slice(0, 80),
       date: th.getLastMessageDate().toISOString(), snippet: body.replace(/\s+/g, ' ').slice(0, 280),
       rowId: row ? String(row.id) : '', company: row ? String(row.company) : '', title: row ? String(row.title) : '', status: row ? String(row.status) : '',
-      human, link: 'https://mail.google.com/mail/#all/' + id,
+      human, link: 'https://mail.google.com/mail/#all/' + id, fromEmail: (from.match(/<([^>]+)>/) || [, from])[1].trim().slice(0, 120),
     });
   });
   // Replies from employers you wrote to (matched by the domain of their email or website)
@@ -914,7 +917,246 @@ function inbox_(force) {
     });
     props.setProperty('WATCH', JSON.stringify(seen).slice(0, 8000));
   } catch (e) { /* watching is optional */ }
+  let added = 0;
+  try { added = confirmations_(items, o, rows); } catch (e) { /* optional */ }
+  try { scanAlerts_(); } catch (e) { /* optional */ }
   o.at = Date.now(); o.items = items;
   writeInbox_(o);
-  return { ok: true, at: o.at, items };
+  return { ok: true, at: o.at, items, alerts: readAlerts_().items, added };
+}
+
+
+// ---------- Jobs from alert emails (22) ----------
+// LinkedIn, Indeed, Reed and other boards already email you new jobs. Their links are read from those
+// emails (no job board is fetched), kept for 7 days in a hidden _alerts sheet and ranked on the phone.
+const ALERT_QUERY = 'newer_than:3d -in:sent (from:linkedin.com OR from:indeed.com OR from:indeedemail.com OR from:reed.co.uk OR from:totaljobs.com OR from:cv-library.co.uk OR from:cwjobs.co.uk OR from:adzuna.co.uk OR from:jobs.ac.uk) (subject:job OR subject:jobs OR subject:alert OR subject:vacancies OR subject:vacancy OR subject:roles)';
+const ALERTS_SHEET = '_alerts';
+function jobKey_(href) {
+  const h = String(href || '');
+  let m;
+  if ((m = h.match(/linkedin\.com\/(?:comm\/)?jobs\/view\/(?:[\w-]*?-)?(\d{6,})/))) return { key: 'li' + m[1], url: 'https://www.linkedin.com/jobs/view/' + m[1] + '/', source: 'LinkedIn' };
+  if ((m = h.match(/indeed\.[\w.]+\/.*?[?&]jk=([0-9a-f]{16})/i))) return { key: 'in' + m[1], url: 'https://uk.indeed.com/viewjob?jk=' + m[1], source: 'Indeed' };
+  if ((m = h.match(/reed\.co\.uk\/jobs\/[\w-]+\/(\d{6,})/))) return { key: 're' + m[1], url: 'https://www.reed.co.uk/jobs/job/' + m[1], source: 'Reed' };
+  if ((m = h.match(/(totaljobs|cwjobs)\.co(?:m|\.uk)\/job\/[\w-]*?(\d{7,})/))) return { key: m[1].slice(0, 2) + m[2], url: h.split('?')[0], source: m[1] === 'cwjobs' ? 'CWJobs' : 'Totaljobs' };
+  if ((m = h.match(/cv-library\.co\.uk\/job\/(\d{6,})/))) return { key: 'cv' + m[1], url: 'https://www.cv-library.co.uk/job/' + m[1], source: 'CV-Library' };
+  if ((m = h.match(/adzuna\.co\.uk\/(?:details|land\/ad)\/(\d{6,})/))) return { key: 'ad' + m[1], url: 'https://www.adzuna.co.uk/details/' + m[1], source: 'Adzuna' };
+  if ((m = h.match(/jobs\.ac\.uk\/job\/([A-Z0-9]{5,})/))) return { key: 'ac' + m[1], url: 'https://www.jobs.ac.uk/job/' + m[1], source: 'jobs.ac.uk' };
+  return null;
+}
+const strip_ = h => String(h || '').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|td|li|h\d)>/gi, '\n').replace(/<[^>]+>/g, ' ')
+  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#39;|&rsquo;/g, "'").replace(/&quot;/g, '"').replace(/&pound;/g, '£').replace(/&middot;/g, '·').replace(/[ \t ]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
+/** Job links in one alert email: [{ key, url, source, title, after }]. Pure. */
+function parseAlertHtml_(html) {
+  const out = [], seen = {};
+  const re = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    const k = jobKey_(m[1].replace(/&amp;/g, '&'));
+    if (!k) continue;
+    const title = strip_(m[2]).replace(/\n+/g, ' ').trim();
+    if (title.length < 4 || title.length > 120 || /^(view|see|apply|more|search|unsubscribe|manage|settings|show|jobs? like)/i.test(title)) continue;
+    if (seen[k.key]) { if (!seen[k.key].title) seen[k.key].title = title; continue; }
+    const rest = html.slice(re.lastIndex, re.lastIndex + 1600);
+    const stop = rest.search(/<a\b[^>]*href=["'][^"']*(jobs\/view\/\d|[?&]jk=|reed\.co\.uk\/jobs\/|\/job\/)/i);
+    const after = strip_(stop > 0 ? rest.slice(0, stop) : rest).split('\n').map(x => x.trim()).filter(x => x && x.length < 120 && !/^(view|apply|easy apply|see|actively|promoted|new|be an early)/i.test(x)).slice(0, 3).join(' · ');
+    const item = { key: k.key, url: k.url, source: k.source, title, after: after.slice(0, 220) };
+    seen[k.key] = item; out.push(item);
+  }
+  return out.slice(0, 40);
+}
+function readAlerts_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(ALERTS_SHEET);
+  if (!sh) return { items: [], at: 0 };
+  try { return Object.assign({ items: [], at: 0 }, JSON.parse(sh.getRange(1, 1).getValue() || '{}')); } catch (e) { return { items: [], at: 0 }; }
+}
+function scanAlerts_() {
+  const o = readAlerts_();
+  const have = {}; o.items.forEach(x => { have[x.key] = 1; });
+  GmailApp.search(ALERT_QUERY, 0, 25).forEach(th => {
+    th.getMessages().slice(-3).forEach(msg => {
+      const date = msg.getDate().toISOString();
+      parseAlertHtml_(msg.getBody()).forEach(x => { if (!have[x.key]) { have[x.key] = 1; o.items.push(Object.assign(x, { date })); } });
+    });
+  });
+  const weekAgo = Date.now() - 7 * 864e5;
+  o.items = o.items.filter(x => Date.parse(x.date) > weekAgo).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 200);
+  o.at = Date.now();
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(ALERTS_SHEET);
+  if (!sh) { sh = ss.insertSheet(ALERTS_SHEET); sh.hideSheet(); }
+  let json = JSON.stringify(o);
+  while (json.length > 49000 && o.items.length) { o.items.pop(); json = JSON.stringify(o); }
+  sh.getRange(1, 1).setValue(json);
+  return o;
+}
+
+// ---------- Forgotten applications (22) ----------
+// "Thank you for applying" emails for jobs that are not in the sheet: with a company and a job title
+// the row is added (Status Applied, a note says where it came from); with only a company it becomes a hint.
+const CONFIRM_QUERY = 'newer_than:4d -in:sent ("thank you for applying" OR "thanks for applying" OR "application received" OR "received your application" OR "your application was sent" OR "application has been submitted" OR "successfully applied" OR "application submitted" OR subject:"Indeed Application")';
+const PLATFORM_FROM = /linkedin|indeed|reed|totaljobs|cv-library|cwjobs|workday|myworkday|greenhouse|lever|smartrecruiters|ashby|teamtailor|workable|bamboohr|icims|taleo|successfactors|jobvite|recruitee|tes\.com|eteach|nhs|jobs\.ac\.uk|applytojob|no-?reply|careers|recruitment|talent/i;
+/** { company, title, platform } from a confirmation email. Pure. */
+function parseConfirmation_(subject, from, body) {
+  const sub = String(subject || '').trim(), b = String(body || '').replace(/\s+/g, ' ').slice(0, 3000);
+  const name = String(from || '').replace(/<.*>/, '').replace(/"/g, '').trim();
+  const fromAddr = (String(from || '').match(/<([^>]+)>/) || [, String(from || '')])[1];
+  const platform = /linkedin/i.test(fromAddr) ? 'LinkedIn' : /indeed/i.test(fromAddr) ? 'Indeed' : /reed\.co\.uk/i.test(fromAddr) ? 'Reed' : /totaljobs/i.test(fromAddr) ? 'Totaljobs' : /cv-library/i.test(fromAddr) ? 'CV-Library' : 'Company website';
+  let company = '', title = '', m;
+  const cut = x => String(x || '').replace(/^(the|a|an)\s+/i, '').replace(/[\s.,!:;-]+$/, '').trim();
+  if ((m = sub.match(/your application was sent to (.+)$/i))) company = cut(m[1]);
+  if ((m = sub.match(/^indeed application:\s*(.+)$/i))) title = cut(m[1]);
+  if (!title && (m = (sub + ' ' + b).match(/(?:for the|for our|for)\s+(?:position|role|post|vacancy)?\s*(?:of\s+)?["“']?([A-Z][\w/&+(),' -]{2,70}?)["”']?\s+(?:role|position|post|vacancy|job)\b/))) title = cut(m[1]);
+  if (!title && (m = (sub + ' ' + b).match(/(?:position|role|post|vacancy) of ["“']?([A-Z][\w/&+(),' -]{2,70}?)["”']?(?:[.,!]| at | with |$)/))) title = cut(m[1]);
+  if (!company && (m = sub.match(/(?:applying|application|applied)\s+(?:to|at|with)\s+([A-Z][\w&.' -]{1,60})/))) company = cut(m[1]);
+  if (!company && (m = (sub + ' ' + b).match(/(?:position|role|post|vacancy)\s+(?:of\s+)?[^.]{2,80}?\s+at\s+([A-Z][\w&.' -]{1,50}?)(?:[.,!]|\s+(?:we|and|is|has)\b|$)/))) company = cut(m[1]);
+  if (!company && (m = b.match(/(?:interest in|applying to|applying at|application to|apply(?:ing)? with|joining)\s+([A-Z][\w&.' -]{1,50}?)(?:[.,!]| and | for |$)/))) company = cut(m[1]);
+  const domain = (fromAddr.split('@')[1] || '').toLowerCase();
+  if (!company && name && !PLATFORM_FROM.test(domain) && !/linkedin|indeed|workday|greenhouse|lever|no-?reply/i.test(name) && name.length <= 60) company = cut(name.replace(/\b(careers?|recruitment|talent|hr|jobs?|team)\b/gi, ''));
+  if (/^(you|your|us|our|this|the role|the position)$/i.test(company)) company = '';
+  if (title.length > 80) title = '';
+  return { company, title, platform };
+}
+function confirmations_(items, o, rows) {
+  const sh = ensureSheet_();
+  const norm = v => String(v || '').toLowerCase().replace(/\b(ltd|limited|plc|llp|group|uk|inc)\b/g, ' ').replace(/[^a-z0-9&]+/g, ' ').trim();
+  const known = (o.confirmed || []);
+  let added = 0;
+  GmailApp.search(CONFIRM_QUERY, 0, 20).forEach(th => {
+    const id = th.getId();
+    if (known.includes(id) || (o.dismissed || []).includes(id)) return;
+    const m = th.getMessages()[0];
+    const c = parseConfirmation_(th.getFirstMessageSubject(), m.getFrom(), m.getPlainBody());
+    if (!c.company) return;
+    const when = m.getDate();
+    const nc = norm(c.company);
+    const dup = rows.some(r => { const rc = norm(r.company); return rc && (rc === nc || (nc.length > 4 && (rc.includes(nc) || nc.includes(rc)))) && Math.abs(new Date(r.appliedAt) - when) < 21 * 864e5; });
+    known.push(id);
+    if (dup) return;
+    if (c.title) {
+      const last = sh.getLastRow();
+      const tickets = last >= 2 ? sh.getRange(2, C.ticket, last - 1, 1).getValues().map(x => parseInt(String(x[0]).replace(/\D/g, ''), 10) || 0) : [];
+      const row = { id: 'g' + id, ticket: 'APP-' + String(Math.max(0, ...tickets) + 1).padStart(4, '0'), title: c.title, company: c.company, platform: c.platform, appliedAt: when, status: 'Applied', notes: 'Добавлено из письма-подтверждения: ' + th.getFirstMessageSubject().slice(0, 120), updated: Date.now() };
+      const vals = COLS.map(([k]) => row[k] == null ? '' : row[k]);
+      sh.getRange(last + 1, 1, 1, COLS.length).setValues([vals]);
+      sh.setRowHeightsForced(last + 1, 1, ROW_H);
+      decorateRows_(sh, last + 1, 1);
+      rows.push(row);
+      added++;
+      items.push({ id: 'a' + id, kind: 'added', subject: th.getFirstMessageSubject().slice(0, 200), from: c.company, company: c.company, title: c.title, rowId: row.id, date: when.toISOString(), link: 'https://mail.google.com/mail/#all/' + id });
+    } else {
+      items.push({ id, kind: 'applied', subject: th.getFirstMessageSubject().slice(0, 200), from: c.company, company: c.company, title: '', platform: c.platform, date: when.toISOString(), link: 'https://mail.google.com/mail/#all/' + id });
+    }
+  });
+  o.confirmed = known.slice(-300);
+  return added;
+}
+
+// ---------- Free time for interviews (22) ----------
+/** Busy times in your default calendar for the next days, for the phone to suggest interview slots. */
+function busy_(days) {
+  try {
+    const now = new Date(), end = new Date(now.getTime() + days * 864e5);
+    const ev = CalendarApp.getDefaultCalendar().getEvents(now, end).map(e => ({ s: e.getStartTime().toISOString(), e: e.getEndTime().toISOString(), allDay: e.isAllDayEvent(), title: e.getTitle().slice(0, 60) }));
+    return { ok: true, busy: ev, tz: Session.getScriptTimeZone() };
+  } catch (e) { return { ok: false, error: 'Calendar is not allowed yet: run scanInbox in Apps Script once and approve' }; }
+}
+
+// ---------- Telegram (22) ----------
+// Job Tracker → Telegram: connect. Create a bot with @BotFather, send it /start, paste its token.
+// The token stays in Script Properties. Every 15 minutes: replies from people, invitations, offers,
+// employers' replies and new vacancies on watched pages. 8:30: a morning digest. 18:00: tomorrow's interviews.
+// Quiet from 22:00 to 8:00; on Thursdays and Fridays from 9:00 to 17:00 only invitations and offers come.
+function tgApi_(method, payload) {
+  const token = PropertiesService.getScriptProperties().getProperty('TG_TOKEN');
+  if (!token) return null;
+  const r = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/' + method, { method: 'post', contentType: 'application/json', payload: JSON.stringify(payload || {}), muteHttpExceptions: true });
+  try { return JSON.parse(r.getContentText()); } catch (e) { return null; }
+}
+function tg_(html, buttons) {
+  const chat = PropertiesService.getScriptProperties().getProperty('TG_CHAT');
+  if (!chat) return;
+  tgApi_('sendMessage', { chat_id: chat, text: html.slice(0, 4000), parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: buttons && buttons.length ? { inline_keyboard: [buttons.slice(0, 3).map(b => ({ text: b[0], url: b[1] }))] } : undefined });
+}
+const tgEsc_ = x => String(x == null ? '' : x).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function appUrl_() { return PropertiesService.getScriptProperties().getProperty('APP_URL') || 'https://jobs.oleh-poratui.dev/'; }
+function setupTelegram() {
+  const ui = SpreadsheetApp.getUi(), props = PropertiesService.getScriptProperties();
+  const a = ui.prompt('Telegram', '1. In Telegram open @BotFather, send /newbot and follow the steps.\n2. Open your new bot and send it /start.\n3. Paste the token BotFather gave you:', ui.ButtonSet.OK_CANCEL);
+  if (a.getSelectedButton() !== ui.Button.OK) return;
+  const token = a.getResponseText().trim();
+  if (!/^\d+:[\w-]{30,}$/.test(token)) { ui.alert('That does not look like a bot token (numbers, a colon, then letters).'); return; }
+  props.setProperty('TG_TOKEN', token);
+  const me = tgApi_('getMe');
+  if (!me || !me.ok) { props.deleteProperty('TG_TOKEN'); ui.alert('Telegram did not accept the token.'); return; }
+  const up = tgApi_('getUpdates', { limit: 20 });
+  const msg = up && up.ok ? up.result.map(u => u.message).filter(Boolean).pop() : null;
+  if (!msg) { ui.alert('Send /start to @' + me.result.username + ' in Telegram, then run Telegram: connect again.'); return; }
+  props.setProperty('TG_CHAT', String(msg.chat.id));
+  const u = ui.prompt('Telegram', 'Link to open the tracker from messages (Enter to keep ' + appUrl_() + '):', ui.ButtonSet.OK_CANCEL);
+  if (u.getSelectedButton() === ui.Button.OK && /^https:\/\//.test(u.getResponseText().trim())) props.setProperty('APP_URL', u.getResponseText().trim());
+  ScriptApp.getProjectTriggers().filter(t => /^telegram/.test(t.getHandlerFunction())).forEach(t => ScriptApp.deleteTrigger(t));
+  const tz = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
+  ScriptApp.newTrigger('telegramTick').timeBased().everyMinutes(15).create();
+  ScriptApp.newTrigger('telegramMorning').timeBased().atHour(8).nearMinute(30).everyDays(1).inTimezone(tz).create();
+  ScriptApp.newTrigger('telegramEvening').timeBased().atHour(18).nearMinute(0).everyDays(1).inTimezone(tz).create();
+  tg_('<b>Job Tracker подключён.</b>\nСюда будут приходить ответы живых людей, приглашения, офферы, ответы работодателей и новые вакансии на страницах, за которыми ты следишь. Утром в 8:30 — сводка, в 18:00 — напоминание об интервью на завтра. Ночью тихо.', [['Открыть трекер', appUrl_()]]);
+  ui.alert('Done: a test message was sent to Telegram.');
+}
+function stopTelegram() {
+  ScriptApp.getProjectTriggers().filter(t => /^telegram/.test(t.getHandlerFunction())).forEach(t => ScriptApp.deleteTrigger(t));
+  ['TG_TOKEN', 'TG_CHAT', 'TG_SENT'].forEach(k => PropertiesService.getScriptProperties().deleteProperty(k));
+  try { SpreadsheetApp.getUi().alert('Telegram turned off.'); } catch (e) { /* from the editor */ }
+}
+/** Which hints are worth a message now. Pure. hour: 0–23, dow: 0 = Sunday. */
+function tgShouldSend_(it, hour, dow) {
+  if (hour >= 22 || hour < 8) return false;
+  const urgent = it.kind === 'offer' || (it.kind === 'interview' || it.kind === 'assessment');
+  if ((dow === 4 || dow === 5) && hour >= 9 && hour < 17) return urgent;
+  return urgent || it.kind === 'employer' || it.kind === 'vacancy' || (it.human && it.kind !== 'rejected');
+}
+function telegramTick() {
+  const props = PropertiesService.getScriptProperties();
+  if (!props.getProperty('TG_CHAT')) return;
+  const now = new Date(), hour = Number(Utilities.formatDate(now, Session.getScriptTimeZone(), 'H')), dow = Number(Utilities.formatDate(now, Session.getScriptTimeZone(), 'u')) % 7;
+  if (hour >= 22 || hour < 8) return;
+  const r = inbox_(true);
+  const sent = JSON.parse(props.getProperty('TG_SENT') || '[]');
+  const label = { interview: '📅 Приглашение', assessment: '📝 Тест / ассессмент', offer: '🎉 Оффер', employer: '✉️ Ответ работодателя', vacancy: '🔔 Новое на странице вакансий', added: '➕ Отклик добавлен из письма' };
+  (r.items || []).forEach(it => {
+    if (sent.includes(it.id) || !tgShouldSend_(it, hour, dow)) return;
+    const who = it.company ? `${tgEsc_(it.company)}${it.title ? ' — ' + tgEsc_(it.title) : ''}` : tgEsc_(it.from);
+    tg_(`<b>${label[it.kind] || '✉️ Письмо'}</b>${it.human ? ' · пишет человек, ответь' : ''}\n${who}\n<i>${tgEsc_(it.subject)}</i>`, [['Открыть', it.link], ['Трекер', appUrl_() + '#today']]);
+    sent.push(it.id);
+  });
+  props.setProperty('TG_SENT', JSON.stringify(sent.slice(-300)));
+}
+function telegramMorning() {
+  if (!PropertiesService.getScriptProperties().getProperty('TG_CHAT')) return;
+  const sh = ensureSheet_(), tz = Session.getScriptTimeZone();
+  const vals = sh.getLastRow() >= 2 ? sh.getRange(2, 1, sh.getLastRow() - 1, COLS.length).getValues() : [];
+  const rows = vals.filter(r => r[C.id - 1]).map(r => { const o = {}; COLS.forEach(([k], j) => { o[k] = r[j]; }); return o; });
+  const today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  const next = rows.filter(r => r.nextDate && Utilities.formatDate(new Date(r.nextDate), tz, 'yyyy-MM-dd') <= today && !/Rejected|No response|Withdrawn|declined|accepted/.test(String(r.status)));
+  const waiting = rows.filter(r => String(r.status) === 'Applied' && r.appliedAt && (Date.now() - new Date(r.appliedAt)) / 864e5 >= 6 && !r.followup).length;
+  const TARGET = /support|service desk|help ?desk|technician|1st line|first line|desktop|it operations|end user|it assistant|infrastructure|it analyst/i, NOT = /senior|lead|manager|head of|principal|architect|developer|software engineer|sales|recruit/i;
+  const have = rows.map(r => String(r.url || ''));
+  const jobs = (readAlerts_().items || []).filter(x => TARGET.test(x.title) && !NOT.test(x.title) && !have.some(u => u && u.indexOf(x.key.slice(2)) >= 0) && Date.now() - Date.parse(x.date) < 2 * 864e5).slice(0, 5);
+  const rej = (readInbox_().items || []).filter(x => x.kind === 'rejected').length;
+  const lines = ['<b>Доброе утро. План на сегодня</b>'];
+  if (jobs.length) lines.push('\n<b>Новые вакансии из рассылок</b>\n' + jobs.map(x => `• <a href="${x.url}">${tgEsc_(x.title)}</a>${x.after ? ' — ' + tgEsc_(x.after.split(' · ')[0]) : ''}`).join('\n'));
+  if (next.length) lines.push('\n<b>Следующий шаг сегодня</b>\n' + next.slice(0, 6).map(r => `• ${tgEsc_(r.company)} — ${tgEsc_(r.title)}`).join('\n'));
+  if (waiting) lines.push(`\nFollow-up ждут: ${waiting}`);
+  if (rej) lines.push(`Отказов в почте за последние дни: ${rej} — отметь их в трекере.`);
+  if (lines.length === 1) lines.push('Срочных дел нет: разбери 1–2 вакансии рынка Б или напиши работодателю рядом.');
+  tg_(lines.join('\n'), [['Открыть трекер', appUrl_() + '#today']]);
+}
+function telegramEvening() {
+  if (!PropertiesService.getScriptProperties().getProperty('TG_CHAT')) return;
+  const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(0, 0, 0, 0);
+  const e = new Date(t.getTime() + 864e5);
+  let ev = [];
+  try { ev = CalendarApp.getDefaultCalendar().getEvents(t, e).filter(x => /interview|call|screen|assessment|собеседован|интервью/i.test(x.getTitle())); } catch (err) { return; }
+  if (!ev.length) return;
+  const tz = Session.getScriptTimeZone();
+  tg_('<b>Завтра</b>\n' + ev.map(x => `• ${Utilities.formatDate(x.getStartTime(), tz, 'HH:mm')} — ${tgEsc_(x.getTitle())}`).join('\n') + '\n\nПроверь адрес или ссылку на звонок, подготовь 2–3 истории STAR и вопросы работодателю.', [['Открыть трекер', appUrl_() + '#apps']]);
 }

@@ -8,7 +8,7 @@
   'use strict';
   const A = window.JT_Analyzer, S = window.JT_Store, E = window.JT_Extract, Q = window.JT_Quality, Mk = window.JT_Market,
     I = window.JT_Insights, T = window.JT_I18n, F = window.JT_Follow, TP = window.JT_Templates, P = window.JT_Prompt,
-    FIT = window.JT_Fit, CH = window.JT_Chance, LLM = window.JT_LLM, LRN = window.JT_Learn, TL = window.JT_Tailor, DX = window.JT_Docx, OR = window.JT_Outreach;
+    FIT = window.JT_Fit, CH = window.JT_Chance, LLM = window.JT_LLM, LRN = window.JT_Learn, TL = window.JT_Tailor, DX = window.JT_Docx, OR = window.JT_Outreach, AS = window.JT_Assist;
   if (T) T.setLang('ru');
   const tr = s => (T ? T.tr(s) : s);
   const $ = (s, el) => (el || document).querySelector(s);
@@ -35,11 +35,11 @@ Certificates: CompTIA A+ in progress; Cisco "Introduction to Modern AI".
 Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   const DEFAULT_LOCAL = () => ({
     targets: { B: 7, A: 5, C: 3 }, studyDays: [3, 4], mail: 'auto', from: '',
-    ai: { key: '', model: '' }, facts: DEFAULT_FACTS, llmCache: {}, cvs: {}, learned: {}, learnTasks: {}, learnNotes: {}, outreach: { radius: 30, primary: false, osmAt: '' }, cvLink: '',
+    ai: { key: '', model: '' }, facts: DEFAULT_FACTS, llmCache: {}, cvs: {}, learned: {}, learnTasks: {}, learnNotes: {}, outreach: { radius: 30, primary: false, osmAt: '' }, cvLink: '', alertsHidden: {},
     snooze: {}, noChannel: {}, inboxDone: [], later: [], employers: null, templates: {}, tplJob: { title: '', company: '', name: '' }, why: '',
   });
   const st = {
-    cfg: null, rows: [], profile: null, queue: [], syncedAt: 0, local: DEFAULT_LOCAL(), inbox: [], scriptVersion: 0,
+    cfg: null, rows: [], profile: null, queue: [], syncedAt: 0, local: DEFAULT_LOCAL(), inbox: [], alerts: [], scriptVersion: 0,
     filter: LS.get('filter', 'active'), market: LS.get('marketFilter', 'all'), q: '', input: LS.get('draft', ''), result: null, busy: false, error: '',
     letter: '', letterBusy: false, letterWarn: [], empFilter: 'all', inboxBusy: false,
     lock: null, pin: '', pin1: '', pinMsg: '', pendingCfg: null, pendingShare: null,
@@ -47,8 +47,8 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   let K = null;
   let hiddenAt = 0;
   const LOCK_AFTER_MS = 5 * 60e3, MAX_FAILS = 10;
-  const VAULT_KEYS = ['cfg', 'rows', 'profile', 'queue', 'syncedAt', 'local', 'inbox', 'scriptVersion'];
-  const EMPTY = { rows: [], queue: [], inbox: [], syncedAt: 0, scriptVersion: 0 };
+  const VAULT_KEYS = ['cfg', 'rows', 'profile', 'queue', 'syncedAt', 'local', 'inbox', 'scriptVersion', 'alerts'];
+  const EMPTY = { rows: [], queue: [], inbox: [], alerts: [], syncedAt: 0, scriptVersion: 0 };
   const legacy = () => { const o = {}; let any = false; ['cfg', 'rows', 'profile', 'queue', 'syncedAt'].forEach(k => { const v = LS.get(k, undefined); if (v !== undefined) { o[k] = v; any = true; } }); return any ? o : null; };
   const fixLocal = () => { const d = DEFAULT_LOCAL(); const l = st.local || {}; st.local = { ...d, ...l, targets: { ...d.targets, ...(l.targets || {}) }, ai: { ...d.ai, ...(l.ai || {}) }, tplJob: { ...d.tplJob, ...(l.tplJob || {}) } }; };
   let saving = Promise.resolve();
@@ -176,7 +176,8 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     st.inboxBusy = true; if (force) render();
     try {
       const d = await api('GET', { action: 'inbox', ...(force ? { force: '1' } : {}) });
-      st.inbox = d.items || []; save();
+      st.inbox = d.items || []; if (Array.isArray(d.alerts)) st.alerts = d.alerts; save();
+      if (d.added) { toast(`Из писем-подтверждений добавлено откликов: ${d.added}`); setTimeout(() => refresh(true), 300); }
       if (force) toast(`Почта проверена: ${st.inbox.length ? 'есть ' + st.inbox.length + ' ' + plural(st.inbox.length, 'письмо', 'письма', 'писем') : 'новых писем о вакансиях нет'}`);
     } catch (e) { if (force) toast(String(e.message || e)); }
     st.inboxBusy = false; render();
@@ -421,13 +422,61 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     const inbox = (st.inbox || []).filter(it => {
       if (done.has(it.id)) return false;
       if (it.employerId) { const e = (st.local.employers || []).find(x => x.id === it.employerId); return !!e && (it.kind === 'vacancy' || e.status !== 'replied'); }
+      if (it.kind === 'added' || it.kind === 'applied') return true;
       const r = it.rowId && rowById(it.rowId); if (!r) return true;
       const s = idOf(r.status);
       return !(it.kind === 'rejected' && s === 'rejected') && !(['interview', 'assessment'].includes(it.kind) && (POS.includes(s))) && !(it.kind === 'offer' && ['offer', 'accepted', 'declined'].includes(s));
     });
     return { follow: q.due, soon: q.soon, due, stale, inbox };
   }
-  const KIND = { rejected: ['Отказ', 'bad', 'rejected'], interview: ['Приглашение', 'info', 'screening'], assessment: ['Тест / ассессмент', 'info', 'test'], offer: ['Оффер', 'ok', 'offer'], employer: ['Ответ работодателя', 'ok', ''], vacancy: ['Новое на странице вакансий', 'warn', ''] };
+  const KIND = { rejected: ['Отказ', 'bad', 'rejected'], interview: ['Приглашение', 'info', 'screening'], assessment: ['Тест / ассессмент', 'info', 'test'], offer: ['Оффер', 'ok', 'offer'], added: ['Отклик добавлен из письма', 'ok', ''], applied: ['Похоже, ты откликнулся', 'warn', ''], employer: ['Ответ работодателя', 'ok', ''], vacancy: ['Новое на странице вакансий', 'warn', ''] };
+  // ---------- Jobs from alert emails ----------
+  function alertsHtml() {
+    if (st.scriptVersion < 22) return '';
+    const list = AS.rankAlerts(st.alerts || [], st.rows, st.local.alertsHidden, profile()).slice(0, 5);
+    if (!list.length) return (st.alerts || []).length ? '' : '<div class="sec-h"><h2>Вакансии из рассылок</h2></div><p class="small muted" style="margin:0 2px">Пока пусто. Включи рассылки вакансий на LinkedIn, Indeed и Reed (поиск «IT support», твой город, раз в день) — скрипт прочитает письма и покажет здесь 5 лучших.</p>';
+    return `<div class="sec-h"><h2>Вакансии из рассылок</h2><span class="small muted">лучшие из ${(st.alerts || []).length}</span></div><div class="group">${list.map(x => `<div class="item"><div class="top"><span class="tag ${x.market}">${mkRu(x.market)}</span><div class="grow"><div class="t">${esc(x.title)}</div><div class="s">${esc(x.after || x.source)}</div></div><span class="when">${esc(ago(String(x.date).slice(0, 10)))}</span></div>
+      <div class="tags">${x.why.map(w => `<span class="tag">${esc(w)}</span>`).join('')}<span class="tag">${esc(x.source)}</span></div>
+      <div class="row"><button class="btn go sm" data-alert-check="${esc(x.key)}">Разобрать</button><a class="btn line sm" href="${esc(x.url)}" target="_blank" rel="noopener">Вакансия</a><button class="btn quiet sm" data-alert-hide="${esc(x.key)}">Скрыть</button></div></div>`).join('')}</div>`;
+  }
+  // ---------- Interview slots ----------
+  async function openSlots(it) {
+    const sh = $('#sheet');
+    sh.innerHTML = '<p class="small muted"><span class="spinner" style="display:inline-block;vertical-align:-4px"></span> Смотрю календарь…</p>';
+    sh.hidden = false; $('#scrim').hidden = false;
+    let busy = [];
+    try { const d = await api('GET', { action: 'slots', days: '10' }); busy = d.busy || []; } catch (e) { toast(String(e.message || e)); }
+    const study = st.local.studyDays || [3, 4];
+    const slots = AS.freeSlots(busy, { studyDays: study });
+    const r = it.rowId && rowById(it.rowId), p = profile();
+    const name = /\s/.test(it.from || '') && !/@/.test(it.from) ? it.from : '';
+    const draft = AS.replyDraft({ name, company: r ? r.company : it.company, title: r ? r.title : '', slots, signName: p.signName, phone: p.signPhone });
+    sh.innerHTML = `<div><h2 style="font-size:20px">Ответ на приглашение</h2><p class="small muted">Свободные окна из твоего календаря: будни с 9 до 17, кроме дней с парами и воскресенья, с запасом 30 минут вокруг событий.</p></div>
+      <textarea class="out" id="slotText" style="min-height:240px">${esc(draft)}</textarea>
+      <div class="row"><a class="btn go grow" id="slotMail" target="_blank" rel="noopener">Открыть ответ в почте</a><button class="btn line" id="slotCopy">Копировать</button></div>
+      <p class="tiny muted">Когда договоритесь о времени, добавь интервью через «Заметку после звонка» — оно попадёт в календарь с напоминанием.</p>`;
+    const upd = () => { $('#slotMail').href = mailHref(it.fromEmail || '', 'Re: ' + (it.subject || 'Interview'), $('#slotText').value); };
+    upd(); $('#slotText').oninput = upd;
+    $('#slotCopy').onclick = () => copy($('#slotText').value, $('#slotCopy'));
+  }
+  function quickAdd(it) {
+    const sh = $('#sheet');
+    sh.innerHTML = `<div><h2 style="font-size:20px">Добавить отклик</h2><p class="small muted">${esc(it.subject)}</p></div>
+      <label class="f">Компания<input class="input" id="qaCo" value="${esc(it.company || '')}"></label>
+      <label class="f">Должность<input class="input" id="qaTi" value="${esc(it.title || '')}" placeholder="IT Support Technician"></label>
+      <label class="f">Дата отклика<input class="input" id="qaDate" type="date" value="${esc(String(it.date || '').slice(0, 10) || todayIso())}"></label>
+      <button class="btn go block" id="qaGo">Добавить</button>`;
+    sh.hidden = false; $('#scrim').hidden = false;
+    $('#qaGo').onclick = () => {
+      const company = $('#qaCo').value.trim(), title = $('#qaTi').value.trim();
+      if (!company || !title) return toast('Нужны компания и должность');
+      const nums = st.rows.map(x => parseInt(String(x.ticket || '').replace(/\D/g, ''), 10) || 0);
+      addRow({ id: 'm' + Date.now().toString(36), ticket: 'APP-' + String(Math.max(0, ...nums) + 1).padStart(4, '0'), title, company, platform: it.platform || 'Company website', appliedAt: $('#qaDate').value || todayIso(), status: 'Applied', notes: 'Добавлено из письма-подтверждения', updated: Date.now() });
+      st.local.inboxDone.push(it.id); save(); api('POST', null, { inboxDismiss: [it.id] }).catch(() => {});
+      closeSheet(); render();
+    };
+  }
+
   function viewToday() {
     const w = weekData(), t = st.local.targets, L = todayLists(), p = profile();
     const study = st.local.studyDays || [];
@@ -443,10 +492,14 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
         return `<div class="item"><div class="top"><div class="grow"><div class="tags"><span class="tag ${k[1]}">${k[0]}</span></div><div class="t" style="margin-top:8px">${esc(e.name)}</div><div class="s">${esc(it.subject || '')}</div></div><span class="when">${esc(ago(String(it.date).slice(0, 10)))}</span></div>
           <div class="row">${it.kind === 'employer' ? `<button class="btn go sm" data-inbox-emp="${esc(it.id)}">Отметить: ответили</button>` : ''}<a class="btn line sm" href="${esc(it.link)}" target="_blank" rel="noopener">${it.kind === 'vacancy' ? 'Открыть страницу' : 'Открыть письмо'}</a><button class="btn quiet sm" data-inbox-skip="${esc(it.id)}">Скрыть</button></div></div>`;
       }
+      if (it.kind === 'added' || it.kind === 'applied') {
+        return `<div class="item"><div class="top"><div class="grow"><div class="tags"><span class="tag ${k[1]}">${k[0]}</span></div><div class="t" style="margin-top:8px">${esc([it.company, it.title].filter(Boolean).join(' — '))}</div><div class="s">${esc(it.subject)}</div></div><span class="when">${esc(ago(String(it.date).slice(0, 10)))}</span></div>
+          <div class="row">${it.kind === 'applied' ? `<button class="btn go sm" data-inbox-add="${esc(it.id)}">Добавить в трекер</button>` : it.rowId && rowById(it.rowId) ? `<button class="btn line sm" data-open="${esc(it.rowId)}">Открыть заявку</button>` : ''}<a class="btn line sm" href="${esc(it.link)}" target="_blank" rel="noopener">Письмо</a><button class="btn quiet sm" data-inbox-skip="${esc(it.id)}">${it.kind === 'added' ? 'Понятно' : 'Не то'}</button></div></div>`;
+      }
       const r = it.rowId && rowById(it.rowId);
       return `<div class="item"><div class="top"><div class="grow"><div class="tags"><span class="tag ${k[1]}">${k[0]}</span>${it.human ? '<span class="tag warn">пишет человек — ответь</span>' : ''}</div>
         <div class="t" style="margin-top:8px">${esc(r ? `${r.company} — ${r.title}` : it.from)}</div><div class="s">${esc(it.subject)}${r ? '' : ' · заявку в таблице не нашёл'}</div></div><span class="when">${esc(ago(String(it.date).slice(0, 10)))}</span></div>
-        <div class="row">${r ? `<button class="btn go sm" data-inbox-apply="${esc(it.id)}">Отметить: ${k[0].toLowerCase()}</button>` : ''}<a class="btn line sm" href="${esc(it.link)}" target="_blank" rel="noopener">Открыть письмо</a><button class="btn quiet sm" data-inbox-skip="${esc(it.id)}">Не то</button></div></div>`;
+        <div class="row">${r ? `<button class="btn go sm" data-inbox-apply="${esc(it.id)}">Отметить: ${k[0].toLowerCase()}</button>` : ''}${it.kind === 'interview' && st.scriptVersion >= 22 ? `<button class="btn line sm" data-slots="${esc(it.id)}">Предложить время</button>` : ''}<a class="btn line sm" href="${esc(it.link)}" target="_blank" rel="noopener">Открыть письмо</a><button class="btn quiet sm" data-inbox-skip="${esc(it.id)}">Не то</button></div></div>`;
     }).join('');
 
     const follow = L.follow.slice(0, 8).map(x => {
@@ -473,6 +526,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
         <div class="legend"><span><i></i>Б</span><span><i class="A"></i>А</span><span><i class="C"></i>письмо работодателю</span><span><i class="S"></i>пары</span></div>
       </section>
       ${st.scriptVersion >= 17 ? `<div class="sec-h"><h2>Из почты <span class="n">${L.inbox.length || ''}</span></h2><button class="btn quiet sm" id="scanInbox" ${st.inboxBusy ? 'disabled' : ''}>${st.inboxBusy ? 'Проверяю…' : 'Проверить почту'}</button></div>${inbox ? `<div class="group">${inbox}</div>` : '<p class="small muted" style="margin:0 2px">Новых писем об откликах нет. Ярлык и пересылка не нужны: скрипт читает весь ящик, ничего не меняя.</p>'}` : st.cfg ? '<div class="note small">Обнови Code.gs до версии 17 — тогда здесь появятся отказы и приглашения из Gmail, и статус меняется одним нажатием.</div>' : ''}
+      ${alertsHtml()}
       ${due ? `<div class="sec-h"><h2>Следующий шаг <span class="n">${L.due.length}</span></h2></div><div class="group">${due}</div>` : ''}
       ${follow ? `<div class="sec-h"><h2>Follow-up <span class="n">${L.follow.length}</span></h2>${L.follow.length > 8 ? `<span class="small muted">первые 8 из ${L.follow.length}</span>` : ''}</div><div class="group">${follow}</div>` : ''}
       ${(() => { const em = st.local.employers || []; const due = OR.followUpsDue(em).length; const left = Math.max(0, st.local.targets.C - weekData().C); return em.length && (due || left) ? `<a class="paper tight" href="#employers" style="text-decoration:none;color:var(--ink);flex-direction:row;align-items:center;gap:12px"><span class="grow"><b>Холодные письма</b><br><span class="small muted">${left ? `ещё ${left} до цели недели` : 'цель недели выполнена'}${due ? ` · второе письмо: ${due}` : ''}</span></span><span class="btn go sm">Открыть</span></a>` : ''; })()}
@@ -1102,6 +1156,10 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
         <div class="row"><button class="btn go" id="aiSave">Сохранить</button><button class="btn line" id="aiTest">Проверить ключ</button></div><div id="aiMsg" class="small"></div>
         <label class="f">Факты о тебе — единственный источник для AI и промпта Claude<textarea class="input" id="facts" style="min-height:200px">${esc(l.facts)}</textarea></label>
         <div class="row"><button class="btn line" id="factsSave">Сохранить факты</button><button class="btn quiet" id="factsReset">Вернуть исходные</button></div></section>
+      <section class="paper"><h2>Telegram</h2>
+        <p class="small muted">Важное приходит в Telegram, даже когда приложение закрыто и компьютер выключен: ответы живых людей, приглашения, офферы, ответы работодателей, новые вакансии на страницах, за которыми следишь. Утром в 8:30 — сводка с лучшими вакансиями из рассылок, в 18:00 — интервью на завтра. Ночью тихо, в чт/пт днём — только приглашения.</p>
+        <ol class="small" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px"><li>В Telegram открой <b>@BotFather</b> → <code>/newbot</code> → придумай имя. Он пришлёт токен.</li><li>Открой своего нового бота и напиши ему <code>/start</code>.</li><li>В Google Таблице: меню <b>Job Tracker → Telegram: connect</b> → вставь токен. Токен хранится в скрипте, сюда его вводить не нужно.</li></ol>
+        ${st.scriptVersion && st.scriptVersion < 22 ? '<p class="small" style="color:var(--amber)">Нужен Code.gs версии 22.</p>' : ''}</section>
       ${K ? `<section class="paper"><h2>PIN-код</h2><p class="small muted">Приложение блокируется через 5 минут в фоне. После 10 неверных попыток данные на устройстве стираются (в таблице всё остаётся).</p><div class="row"><button class="btn line grow" id="lockNow">Заблокировать</button><button class="btn line grow" id="changePin">Сменить PIN</button></div></section>` : ''}
       <section class="paper"><h2>На главный экран</h2><p class="small muted">Chrome на Android: меню ⋮ → «Установить приложение». После этого Job Tracker появится в меню «Поделиться» в LinkedIn, Indeed и Reed. На компьютере: значок установки в адресной строке Chrome.</p></section>
       <div class="seg" role="group" aria-label="Тема">${[['auto', 'Тема как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([k, lb]) => `<button data-theme-set="${k}" aria-pressed="${(LS.get('theme', 'auto') || 'auto') === k}">${lb}</button>`).join('')}</div>
@@ -1229,6 +1287,10 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     const si = $('#scanInbox', v); if (si) si.onclick = () => loadInbox(true);
     $$('[data-inbox-emp]', v).forEach(b => b.onclick = () => { const it = st.inbox.find(x => x.id === b.dataset.inboxEmp); if (!it) return; const e = empById(it.employerId); st.local.inboxDone.push(it.id); if (e) touchEmp(e, { status: 'replied' }); save(); render(); api('POST', null, { inboxDismiss: [it.id] }).catch(() => {}); toast((e ? e.name : 'Работодатель') + ': ответили'); });
     const vo = $('#voiceOpen', v); if (vo) vo.onclick = () => openVoice();
+    $$('[data-alert-hide]', v).forEach(b => b.onclick = () => { st.local.alertsHidden[b.dataset.alertHide] = 1; save(); render(); });
+    $$('[data-alert-check]', v).forEach(b => b.onclick = () => { const x = (st.alerts || []).find(a => a.key === b.dataset.alertCheck); if (!x) return; st.local.alertsHidden[x.key] = 1; save(); st.input = x.url; LS.set('draft', x.url); location.hash = '#check'; analyze(x.url); });
+    $$('[data-slots]', v).forEach(b => b.onclick = () => { const it = st.inbox.find(x => x.id === b.dataset.slots); if (it) openSlots(it); });
+    $$('[data-inbox-add]', v).forEach(b => b.onclick = () => { const it = st.inbox.find(x => x.id === b.dataset.inboxAdd); if (it) quickAdd(it); });
     const sa = $('#staleAll', v);
     if (sa) sa.onclick = () => {
       const list = todayLists().stale; const before = list.map(a => [rowById(a.id), rowById(a.id).status]);

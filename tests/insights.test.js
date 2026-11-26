@@ -83,7 +83,7 @@ test('a new application keeps apply, posting, reqs and outcome, and they reach t
   const a = await S.addApp({ title: 'IT Support', company: 'Acme', status: 'rejected', apply: { method: 'easy', cover: 'none', cv: 'CV v2' }, posting: { daysAgo: 9, applicants: 120 }, reqs: ['priorExp'], outcome: { reason: 'experience' } });
   const got = (await S.getApps())[0];
   assert.equal(got.apply.method, 'easy'); assert.equal(got.posting.applicants, 120);
-  const sheet = createFakeSheet({ version: 19 });
+  const sheet = createFakeSheet({ version: 22 });
   globalThis.fetch = sheet.fetch;
   await S.set({ sheetCfg: { url: sheet.url, token: 'secret' } });
   const r = await Sync.syncNow();
