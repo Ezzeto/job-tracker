@@ -1182,10 +1182,12 @@
     try {
       const r = JT_Templates.readSettings(JSON.parse(await f.text()));
       Object.assign(profile, r.profile);
+      if (Object.keys(r.skills).length) profile.skills = { ...(profile.skills || {}), ...r.skills };
       await S.saveProfile(profile);
       if (Object.keys(r.templates).length) await S.set({ templates: { ...(await getTemplates()), ...r.templates } });
+      if (Object.keys(r.autofill).length) { const cur = (await S.get('autofillMe')).autofillMe || {}; await S.set({ autofillMe: { ...cur, ...r.autofill } }); $$('[data-me]').forEach(i => { if (r.autofill[i.dataset.me] != null) i.value = r.autofill[i.dataset.me]; }); }
       renderSettings();
-      $('#importMsg').textContent = `Imported: ${Object.keys(r.profile).length} settings, ${Object.keys(r.templates).length} templates.` + (r.skipped.length ? ` Skipped: ${r.skipped.join(', ')}.` : '') + ' Check the fields below, then press Recalculate fit for all applications.';
+      $('#importMsg').textContent = `Imported: ${Object.keys(r.profile).length} settings, ${Object.keys(r.skills).length} skills, ${Object.keys(r.templates).length} templates, ${Object.keys(r.autofill).length} form details.` + (r.skipped.length ? ` Skipped: ${r.skipped.join(', ')}.` : '') + ' Check the fields below, then press Recalculate fit for all applications.';
       // A new language reloads the page; the message is lost then, which is fine
     } catch (err) { $('#importMsg').textContent = "This file can't be used: " + err.message + '.'; }
     e.target.value = '';
