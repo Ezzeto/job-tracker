@@ -638,6 +638,12 @@
     $$('#planAi [data-ai]').forEach(cb => cb.onchange = async () => { w.aiDone[cb.dataset.ai] = cb.checked; await saveWeekPlan(key, w); renderPlan(); });
     $('#planPrompt').onclick = async () => {
       const text = P.aiPrompt(live, profile, null, lang());
+      const { llmCfg } = await S.get('llmCfg');
+      if (llmCfg && llmCfg.key) {
+        $('#planMsg').textContent = 'Writing the plan…';
+        try { const ans = await JT_LLM.chat(llmCfg, [{ role: 'user', content: text }], { cacheKey: false, temperature: 0.4, maxTokens: 1500 }); $('#planAiText').hidden = false; $('#planAiText').value = ans; await useAi(); $('#planMsg').textContent = 'Plan written by AI from your numbers.'; return; }
+        catch (e) { $('#planMsg').textContent = e.message + ' — copying the prompt instead.'; }
+      }
       try { await navigator.clipboard.writeText(text); $('#planMsg').textContent = 'Copied. Paste it into Claude or ChatGPT, then paste the answer below.'; }
       catch (e) { $('#planAiText').hidden = false; $('#planAiText').value = text; $('#planAiText').select(); $('#planMsg').textContent = 'The browser blocked the clipboard: the prompt is in the box, copy it with Ctrl+C.'; }
     };
@@ -1063,12 +1069,44 @@
     });
   }
 
+  // ---------- Markets A and B, AI, form details (3.10) ----------
+  function renderMarkets() {
+    const t = profile.targets || { B: 7, A: 5, C: 3 }, study = profile.studyDays || [3, 4];
+    $('#mTargetB').value = t.B; $('#mTargetA').value = t.A; $('#mTargetC').value = t.C;
+    $('#mThreshold').value = profile.salaryThresholdA || 30000;
+    $('#mSalaryB').value = profile.salaryB || ''; $('#mSalaryA').value = profile.salaryA || '';
+    $('#mBig').value = (profile.bigTechList && profile.bigTechList.length ? profile.bigTechList : (window.JT_Market ? JT_Market.BIG : [])).join(', ');
+    $('#mStudy').innerHTML = JT_Plan.DAYS.en.map((d, i) => `<button type="button" class="chip" data-sd="${i}" aria-pressed="${study.includes(i)}">${d.slice(0, 3)}</button>`).join('');
+    $$('#mStudy .chip').forEach(ch => ch.onclick = async () => { ch.setAttribute('aria-pressed', ch.getAttribute('aria-pressed') !== 'true'); profile.studyDays = $$('#mStudy .chip[aria-pressed=true]').map(x => +x.dataset.sd); await S.saveProfile(profile); });
+  }
+  const saveMarkets = async () => {
+    const n = (id, d) => { const v = parseInt($(id).value, 10); return isNaN(v) ? d : Math.max(0, Math.min(40, v)); };
+    profile.targets = { B: n('#mTargetB', 7), A: n('#mTargetA', 5), C: n('#mTargetC', 3) };
+    profile.salaryThresholdA = Math.max(15000, Math.min(100000, parseInt($('#mThreshold').value, 10) || 30000));
+    profile.salaryB = $('#mSalaryB').value.trim(); profile.salaryA = $('#mSalaryA').value.trim();
+    const big = $('#mBig').value.split(',').map(x => x.trim()).filter(Boolean);
+    profile.bigTechList = window.JT_Market && big.join(',') === JT_Market.BIG.join(',') ? [] : big;
+    await S.saveProfile(profile);
+  };
+  ['#mTargetB', '#mTargetA', '#mTargetC', '#mThreshold', '#mSalaryB', '#mSalaryA', '#mBig'].forEach(id => $(id).addEventListener('change', saveMarkets));
+  (async () => {
+    const { llmCfg = {}, autofillMe = {} } = await S.get(['llmCfg', 'autofillMe']);
+    $('#aiKey').value = llmCfg.key || ''; $('#aiModel').value = llmCfg.model || '';
+    const saveAi = async () => { await S.set({ llmCfg: { key: $('#aiKey').value.trim(), model: $('#aiModel').value.trim() } }); };
+    $('#aiKey').addEventListener('change', saveAi); $('#aiModel').addEventListener('change', saveAi);
+    $('#aiTest').onclick = async () => {
+      await saveAi(); $('#aiMsg').textContent = 'Checking…';
+      try { const t = await JT_LLM.chat({ key: $('#aiKey').value.trim(), model: $('#aiModel').value.trim() }, [{ role: 'user', content: 'Reply with the single word: ready' }], { cacheKey: false }); $('#aiMsg').textContent = 'Works: ' + t.slice(0, 30); }
+      catch (e) { $('#aiMsg').textContent = e.message; }
+    };
+    $$('[data-me]').forEach(i => { i.value = autofillMe[i.dataset.me] || ''; i.addEventListener('change', async () => { const cur = (await S.get('autofillMe')).autofillMe || {}; cur[i.dataset.me] = i.value.trim(); await S.set({ autofillMe: cur }); }); });
+  })();
+
   // ---------- SKILLS AND SETTINGS ----------
   function renderSettings() {
     $('#pDays').value = profile.daysPerWeek; $('#pHours').value = profile.hoursPerWeek;
     $('#pExp').value = profile.experienceYears == null ? 1 : profile.experienceYears;
     $('#pComm').value = profile.commercialYears == null ? '' : profile.commercialYears;
-    $('#pDaily').value = profile.dailyLimit || 5;
     $('#pIntern').checked = !!profile.showInternships;
     $('#pFacts').value = profile.factBank || '';
     $('#pLicence').checked = !!profile.hasDrivingLicence; $('#pRtw').checked = !!profile.timeLimitedRtw; $('#pLangs').value = (profile.languages || []).join(', ');
@@ -1076,7 +1114,7 @@
     $('#pStale').value = profile.autoNoResponseDays == null ? 30 : profile.autoNoResponseDays;
     $('#pCover').innerHTML = I.COVERS.filter(c => c.id !== 'unknown').map(c => `<option value="${c.id}" ${c.id === ((profile.applyDefaults && profile.applyDefaults.cover) || 'none') ? 'selected' : ''}>${esc(c.label)}</option>`).join('');
     $('#pPreview').checked = profile.showPreview !== false;
-    $('#pSched').checked = !!profile.penalizeSchedule;
+    renderMarkets();
     $('#pList').checked = profile.listScan !== false;
     $('#pSignName').value = profile.signName || ''; $('#pSignPhone').value = profile.signPhone || '';
     $('#pSignLi').value = profile.signLinkedIn || ''; $('#pMail').value = profile.mailClient || 'gmail';
@@ -1156,7 +1194,6 @@
     profile.daysPerWeek = +$('#pDays').value || 5; profile.hoursPerWeek = +$('#pHours').value || 37.5;
     const yrs = parseFloat($('#pExp').value); profile.experienceYears = isNaN(yrs) ? 1 : yrs;
     const com = parseFloat($('#pComm').value); profile.commercialYears = isNaN(com) ? null : com;
-    profile.dailyLimit = Math.max(1, Math.min(50, parseInt($('#pDaily').value, 10) || 5));
     const internChanged = profile.showInternships !== $('#pIntern').checked;
     profile.showInternships = $('#pIntern').checked;
     profile.factBank = $('#pFacts').value.trim();
@@ -1167,7 +1204,7 @@
     profile.autoNoResponseDays = Math.max(0, Math.min(180, parseInt($('#pStale').value, 10) || 0));
     profile.applyDefaults = { ...(profile.applyDefaults || {}), cover: $('#pCover').value };
     profile.showPreview = $('#pPreview').checked;
-    profile.penalizeSchedule = $('#pSched').checked;
+    profile.penalizeSchedule = false; // replaced by markets A and B
     profile.listScan = $('#pList').checked;
     profile.signName = $('#pSignName').value.trim(); profile.signPhone = $('#pSignPhone').value.trim();
     profile.signLinkedIn = $('#pSignLi').value.trim(); profile.mailClient = $('#pMail').value;
@@ -1181,7 +1218,7 @@
     // and doing it earlier put the old values back into the boxes still to be read
     if (internChanged) { applyInternVisibility(); renderAll(); }
   };
-  ['#pExp', '#pComm', '#pDaily', '#pIntern', '#pFacts', '#pDays', '#pHours', '#pLicence', '#pRtw', '#pLangs', '#pAuto', '#pPreview', '#pSched', '#pList', '#pAreas', '#pHome', '#pCommute', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pGmail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
+  ['#pExp', '#pComm', '#pIntern', '#pFacts', '#pDays', '#pHours', '#pLicence', '#pRtw', '#pLangs', '#pAuto', '#pPreview', '#pList', '#pAreas', '#pHome', '#pCommute', '#pSignName', '#pSignPhone', '#pSignLi', '#pMail', '#pGmail', '#pPitch', '#pHighlights'].forEach(id => $(id).addEventListener('change', saveProfileFields));
   $('#resetSkills').onclick = async () => {
     if (!confirm(`Clear all ${skTrack === 'intern' ? 'internship' : 'job'} skill levels?`)) return;
     if (skTrack === 'intern') profile.intern.skills = {}; else profile.skills = { ...A.DEFAULT_SKILLS };

@@ -76,7 +76,7 @@
   async function viewQueue() {
     const [list, all, cvs, me, llm, session] = await Promise.all([items(), packs(), get('cvs'), get('autofillMe'), get('llmCfg'), get('session')]);
     const ready = list.filter(x => all[x.key] && all[x.key].status === 'ready' && !all[x.key].done).length;
-    const warn = [!(cvs && cvs.job && cvs.job.text) && 'нет CV — загрузи его на странице <a href="dashboard.html#cv">CV & ATS</a>, иначе пакет будет без подогнанного CV', !(me && me.email) && 'не заполнены <a href="#me">данные для анкет</a> (имя, email, телефон)', !(llm && llm.key) && 'нет ключа AI — письмо будет из шаблона, ответов на вопросы не будет (<a href="#me">добавить</a>)'].filter(Boolean);
+    const warn = [!(cvs && cvs.job && cvs.job.text) && 'нет CV — загрузи его на странице <a href="dashboard.html#cv">CV & ATS</a>, иначе пакет будет без подогнанного CV', !(me && me.email) && 'не заполнены <a href="dashboard.html#settings">данные для анкет</a> (Skills & settings → Details for application forms)', !(llm && llm.key) && 'нет ключа AI — письмо будет из шаблона, ответов на вопросы не будет (<a href="dashboard.html#settings">Skills & settings → AI</a>)'].filter(Boolean);
     const done = location.hash === '#done' && session && session.finished;
     return `${done ? `<div class="note ok">Сессия завершена: ${session.queue.length} ${session.queue.length === 1 ? 'вакансия' : 'вакансий'} за ${Math.round((Date.parse(session.finished) - session.startedAt) / 60000)} мин. Отклики записаны в трекер.</div>` : ''}
       ${warn.length ? `<div class="note">${warn.map(w => '• ' + w).join('<br>')}</div>` : ''}
@@ -104,21 +104,9 @@
       <label style="display:flex;flex-direction:column;gap:4px;max-width:360px"><b>Зарплатные ожидания</b><input type="text" data-salary="${esc(p.key)}" value="${esc(p.salary || '')}"></label>
     </div>`;
   }
-  async function viewMe() {
-    const me = (await get('autofillMe')) || {}, llm = (await get('llmCfg')) || {};
-    const f = (k, label, ph, type) => `<label>${label}<input type="${type || 'text'}" data-me="${k}" value="${esc(me[k] || '')}" placeholder="${esc(ph || '')}"></label>`;
-    return `<div class="panel"><h2>Данные для анкет</h2><p class="hint">Хранятся только в этом браузере: не синхронизируются с таблицей и не попадают в экспорт.</p>
-      <div class="grid">${f('firstName', 'Имя', 'Oleh')}${f('lastName', 'Фамилия', '')}${f('email', 'Email для откликов', 'oleh.poratui@gmail.com', 'email')}${f('phone', 'Телефон', '+44 …', 'tel')}${f('address1', 'Адрес (улица, дом)', '')}${f('town', 'Город', "Bishop's Stortford")}${f('postcode', 'Индекс', 'CM23 …')}${f('linkedin', 'LinkedIn', 'https://www.linkedin.com/in/…')}${f('website', 'GitHub или портфолио', 'https://github.com/…')}${f('notice', 'Когда можешь выйти', 'Immediately')}${f('salaryB', 'Зарплата для рынка Б', '£12.50 an hour, pro rata')}${f('salaryA', 'Зарплата для рынка А', '£30,000–£35,000')}${f('source', 'Как узнал о вакансии (по умолчанию)', 'Job board')}</div>
-      <p class="hint" style="margin-top:10px">Право на работу — «Yes», спонсорство — «No», водительские права — из Skills & settings. Вопросы о поле, этничности, инвалидности — «Prefer not to say». Галочки согласия ты ставишь сам.</p>
-      <button class="btn primary" id="saveMe">Сохранить</button> <span id="meMsg" class="hint"></span></div>
-      <div class="panel"><h2>AI</h2><p class="hint">Один бесплатный ключ: Groq (console.groq.com/keys), Gemini (aistudio.google.com/apikey) или OpenRouter (openrouter.ai/keys). В AI уходят текст вакансии и твоё CV без контактов.</p>
-        <div class="grid"><label>Ключ<input type="password" id="llmKey" value="${esc(llm.key || '')}" placeholder="gsk_… / AIza… / sk-or-…"></label><label>Модель (можно не трогать)<input type="text" id="llmModel" value="${esc(llm.model || '')}" placeholder="${esc(llm.key ? LLM.modelFor(llm.key, '') : 'выберется сама')}"></label></div>
-        <div class="btns" style="margin-top:10px"><button class="btn primary" id="saveLlm">Сохранить</button><button class="btn" id="testLlm">Проверить</button><span id="llmMsg" class="hint"></span></div></div>`;
-  }
   async function render() {
-    const tab = location.hash === '#me' ? 'me' : 'queue';
-    $$('.tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
-    $('#view').innerHTML = tab === 'me' ? await viewMe() : await viewQueue();
+    if (location.hash === '#me') { location.href = 'dashboard.html#settings'; return; }
+    $('#view').innerHTML = await viewQueue();
     bind();
   }
   function renderBusy(key) { const el = $(`.item[data-key="${CSS.escape(key)}"] .tag:last-child`); if (el) el.textContent = 'готовлю: ' + st.busy[key]; }
@@ -136,9 +124,6 @@
     $$('[data-letter]').forEach(t => t.onchange = () => edit(t.dataset.letter, p => { p.letter = t.value; }));
     $$('[data-ans]').forEach(t => t.onchange = () => { const [k, i] = t.dataset.ans.split(':'); edit(k, p => { p.answers[+i].a = t.value; }); });
     $$('[data-salary]').forEach(t => t.onchange = () => edit(t.dataset.salary, p => { p.salary = t.value; }));
-    on('#saveMe', async () => { const me = {}; $$('[data-me]').forEach(i => { me[i.dataset.me] = i.value.trim(); }); await set({ autofillMe: me }); $('#meMsg').textContent = 'Сохранено'; });
-    on('#saveLlm', async () => { await set({ llmCfg: { key: $('#llmKey').value.trim(), model: $('#llmModel').value.trim() } }); $('#llmMsg').textContent = 'Сохранено'; });
-    on('#testLlm', async () => { const cfg = { key: $('#llmKey').value.trim(), model: $('#llmModel').value.trim() }; await set({ llmCfg: cfg }); $('#llmMsg').textContent = 'Проверяю…'; try { const t = await LLM.chat(cfg, [{ role: 'user', content: 'Reply with the single word: ready' }], { cacheKey: false }); $('#llmMsg').textContent = 'Работает: ' + t.slice(0, 30); } catch (e) { $('#llmMsg').textContent = e.message; } });
   }
   window.addEventListener('hashchange', render);
   chrome.storage.onChanged.addListener(ch => { if ((ch.packs || ch.session) && !Object.keys(st.busy).length && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') render(); });
