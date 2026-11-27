@@ -10,7 +10,9 @@
     I = window.JT_Insights, T = window.JT_I18n, F = window.JT_Follow, TP = window.JT_Templates, P = window.JT_Prompt,
     FIT = window.JT_Fit, CH = window.JT_Chance, LLM = window.JT_LLM, LRN = window.JT_Learn, TL = window.JT_Tailor, DX = window.JT_Docx, OR = window.JT_Outreach, AS = window.JT_Assist, RV = window.JT_Review;
   if (T) T.setLang('ru');
-  const tr = s => (T ? T.tr(s) : s);
+  // The analyzer writes English; in Russian it is translated with lib/i18n.js, in English it stays as it is
+  const EN_UI = (() => { try { return JSON.parse(localStorage.getItem('jt.lang') || '"ru"') === 'en'; } catch (e) { return false; } })();
+  const tr = s => (T && !EN_UI ? T.tr(s) : s);
   const $ = (s, el) => (el || document).querySelector(s);
   const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -25,6 +27,10 @@
     get(k, d) { try { const v = localStorage.getItem('jt.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('jt.' + k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
   };
+  // English: the app is written in Russian; lib/en.js swaps the text on the page. Kept outside the encrypted data,
+  // so the PIN screen is in the chosen language too. Switching back to Russian reloads the page.
+  if (LS.get('lang', 'ru') === 'en' && window.JT_EN) JT_EN.start(document);
+  function setLang(l) { LS.set('lang', l); location.reload(); }
   const V = window.JT_Vault;
   // Facts for AI drafts and the Claude prompt. Only what is true; edit them in Settings.
   const DEFAULT_FACTS = `Education: BSc Computing with AI Technology, Northumbria University London, second year (classes on Thursdays and Fridays).
@@ -1249,6 +1255,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       ${link('#cv', '<path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5" />', 'CV и навыки', 'версии А и Б, чего не хватает и задания')}
       ${link('#templates', '<path d="M4 6l8 6 8-6M4 6h16v12H4z" />', 'Шаблоны писем', 'cover letter, письмо работодателю, ответы')}
       ${link('#setup', '<circle cx="12" cy="12" r="3" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3" />', 'Настройки', 'таблица, цели, почта, AI, PIN')}</div>
+      <div class="paper tight"><h3>Язык · Language</h3><div class="seg" role="group" aria-label="Language">${[['ru', 'Русский'], ['en', 'English']].map(([k, l]) => `<button data-lang-set="${k}" aria-pressed="${LS.get('lang', 'ru') === k}" class="no-i18n">${l}</button>`).join('')}</div></div>
       <div class="paper tight"><h3>Тема</h3><div class="seg" role="group" aria-label="Тема">${[['auto', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([k, l]) => `<button data-theme-set="${k}" aria-pressed="${(LS.get('theme', 'auto') || 'auto') === k}">${l}</button>`).join('')}</div></div>`;
   }
   function viewSetup() {
@@ -1293,6 +1300,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
         ${st.scriptVersion && st.scriptVersion < 22 ? '<p class="small" style="color:var(--amber)">Нужен Code.gs версии 22.</p>' : ''}</section>
       ${K ? `<section class="paper"><h2>PIN-код</h2><p class="small muted">Приложение блокируется через 5 минут в фоне. После 10 неверных попыток данные на устройстве стираются (в таблице всё остаётся).</p><div class="row"><button class="btn line grow" id="lockNow">Заблокировать</button><button class="btn line grow" id="changePin">Сменить PIN</button></div></section>` : ''}
       <section class="paper"><h2>На главный экран</h2><p class="small muted">Chrome на Android: меню ⋮ → «Установить приложение». После этого Job Tracker появится в меню «Поделиться» в LinkedIn, Indeed и Reed. На компьютере: значок установки в адресной строке Chrome.</p></section>
+      <div class="seg" role="group" aria-label="Language">${[['ru', 'Русский'], ['en', 'English']].map(([k, l]) => `<button data-lang-set="${k}" aria-pressed="${LS.get('lang', 'ru') === k}" class="no-i18n">${l}</button>`).join('')}</div>
       <div class="seg" role="group" aria-label="Тема">${[['auto', 'Тема как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([k, lb]) => `<button data-theme-set="${k}" aria-pressed="${(LS.get('theme', 'auto') || 'auto') === k}">${lb}</button>`).join('')}</div>
       ${st.cfg ? '<button class="btn danger block" id="disconnect">Отключить таблицу на этом устройстве</button>' : ''}`;
   }
@@ -1398,6 +1406,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     $$('[data-filter]', v).forEach(b => b.onclick = () => { st.filter = b.dataset.filter; LS.set('filter', st.filter); render(); });
     $$('[data-market]', v).forEach(b => b.onclick = () => { st.market = b.dataset.market; LS.set('marketFilter', st.market); render(); });
     $$('[data-theme-set]', v).forEach(b => b.onclick = () => setTheme(b.dataset.themeSet));
+    $$('[data-lang-set]', v).forEach(b => b.onclick = () => { if (b.dataset.langSet !== LS.get('lang', 'ru')) setLang(b.dataset.langSet); });
     const rf = $('#refresh', v); if (rf) rf.onclick = () => refresh();
     // Today
     $$('[data-sent]', v).forEach(b => b.onclick = () => markSent(b.dataset.sent));

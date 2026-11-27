@@ -21,6 +21,7 @@
     host.setAttribute('data-jt-panel', '1');
     host.style.cssText = PANEL_CSS;
     shadow = host.attachShadow({ mode: 'open' });
+    try { chrome.storage.local.get('profile', r => { if (((r && r.profile) || {}).lang !== 'ru' && globalThis.JT_EN) JT_EN.start(shadow); }); } catch (e) { /* context gone */ }
     shadow.innerHTML = `<style>
       .b{background:#1d6b4f;color:#fff;border:0;border-radius:14px;padding:12px 16px;font:600 14px system-ui;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.18)}
       .p{background:#fbfcfa;border:1px solid #d3d9d0;border-radius:18px;padding:14px;width:320px;max-height:70vh;overflow:auto;box-shadow:0 12px 32px rgba(0,0,0,.2)}

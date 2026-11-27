@@ -400,6 +400,8 @@
     host.id = 'job-tracker-host';
     shadow = host.attachShadow({ mode: 'open' });
     if (globalThis.JT_I18n) JT_I18n.watch(shadow);
+    // English mode: Russian text in the panel (the chance of an invitation) becomes English
+    try { chrome.storage.local.get('profile', r => { if (((r && r.profile) || {}).lang !== 'ru' && globalThis.JT_EN) JT_EN.start(shadow); }); } catch (e) { /* context gone */ }
     shadow.innerHTML = `<style>${CSS}</style><div id="root"></div>`;
     document.documentElement.appendChild(host);
   }

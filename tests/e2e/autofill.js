@@ -49,7 +49,7 @@ const FORM = `<!doctype html><html><head><title>Apply: IT Support Technician at 
   const [form] = await Promise.all([ctx.waitForEvent('page'), sp.click('#start')]);
   form.on('pageerror', e => errors.push('form: ' + e.message));
   await form.waitForLoadState(); await wait(1500);
-  await form.click('text=Заполнить анкету'); await wait(1500);
+  await form.click('[data-jt-panel] >> css=#go'); await wait(1500);
   const v = await form.evaluate(() => ({ fn: fn.value, ln: ln.value, em: em.value, ph: ph.value, li: li.value, cv: cv.files.length ? cv.files[0].name : '', cl: cl.value.slice(0, 40), rtw: document.querySelector('[name=rtw]:checked') && document.querySelector('[name=rtw]:checked').parentElement.textContent.trim(), sp: sp.value, gd: gd.value, why: why.value.slice(0, 30), gdpr: gdpr.checked, outlined: document.querySelectorAll('[data-jt-filled]').length }));
   console.log('filled:', JSON.stringify(v));
   console.log('report:', (await form.textContent('[data-jt-panel] >> css=.p')).replace(/\s+/g, ' ').slice(0, 160));

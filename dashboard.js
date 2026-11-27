@@ -1,4 +1,5 @@
 /* Job Tracker — dashboard */
+try { chrome.storage.local.get('profile', r => { if (((r && r.profile) || {}).lang !== 'ru' && globalThis.JT_EN) JT_EN.start(document); }); } catch (e) { /* tests */ }
 (async function () {
   'use strict';
   const A = JT_Analyzer, S = JT_Store, I = JT_Insights;

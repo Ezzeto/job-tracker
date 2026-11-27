@@ -1,236 +1,307 @@
 # Job Tracker
 
-A Chrome extension that records every job you apply for, scores how well each one fits your skills, and keeps the whole pipeline (applications, interviews, offers, follow-ups) in one dashboard, with an optional two-way sync to your own Google Sheet.
+A job search assistant for entry-level IT roles in the UK, in three parts that share one set of data:
 
-I built it for my own job search in the UK, to keep track of applications spread across several job boards, know when to follow up, and see which skills kept coming up in ads.
+- **A Chrome extension** for where you apply. It scores a job before you apply, writes the cover letter and form answers, tailors your CV, fills in application forms and records every application.
+- **A web app for the phone and the laptop.** It shows what to do today, checks a job from a link, finds employers nearby and has statistics.
+- **Your own Google Sheet** keeps everything in sync. It reads job emails from Gmail and can send updates to Telegram.
 
-![The panel on a job page: four questions at the top (do I fit, will they answer, does it suit me, risks) and tabs for the analysis, skills, the job, the application and documents](docs/screenshots/panel.jpg)
+I built it for my own job search: a Computing student looking for part-time IT support work alongside study, and full-time only where a role is worth a study break.
 
-![The Application tab: status, salary, notes, history with undo, and "I did not apply"](docs/screenshots/panel-app.jpg)
+![The panel on a job page: the key facts, four questions answered, and tabs for the analysis, skills, the job, the application and documents](docs/screenshots/job-panel.jpg)
+
+*All screenshots use invented companies and demo data. AI answers in them are fixed sample text.*
+
+## Contents
+
+- [What it does](#what-it-does)
+  - [On a job page](#on-a-job-page)
+  - [The dashboard](#the-dashboard)
+  - [Application session and autofill](#application-session-and-autofill)
+  - [The web app on the phone and the laptop](#the-web-app-on-the-phone-and-the-laptop)
+  - [Google Sheet, Gmail and Telegram](#google-sheet-gmail-and-telegram)
+- [How it works](#how-it-works)
+- [Privacy](#privacy)
+- [Install](#install)
+- [Development](#development)
 
 ## What it does
 
-- **Captures applications automatically.** Press *Apply* on LinkedIn, Indeed, Reed, Totaljobs, CV-Library, IT-Jobs, CWJobs, Glassdoor or jobs.ac.uk and the job is saved with its title, company, location, salary, description and any recruiter contacts. On any other site, one click in the popup adds the page.
-- **Scores fit before you apply.** A badge on the job page shows a 0–100 score and the reasons behind it: which tools in the ad you know, which you don't, seniority, years of experience, and hard constraints such as a driving licence or security clearance.
-- **Scores search results.** Each card in a results list gets a badge, and a small panel filters out jobs below a minimum score, jobs you already applied to, or senior roles.
-- **Tracks the pipeline.** Twelve statuses from *Applied* to *Offer accepted*, a full history per application, a weekly chart, response rate per job board, and a list of what needs attention (follow-ups due, next steps, offer deadlines).
-- **Drafts follow-ups.** Email, LinkedIn note (kept under the 200-character limit) or a phone script, tailored to the job and to whether it was posted by an agency.
-- **Compares offers.** Salary, pension, hours, commute time and cost, holidays and training, weighted by sliders for what matters to you, including an effective hourly rate once the commute is counted.
-- **Handles internships separately.** Internships and placements get their own skills profile, target roles and score. Paste your university's placement briefing and the extension reads the rules (dates, minimum weeks, hours, days a week, remote-only for overseas companies, paid preferred, deadlines) and checks every internship against them: dates, length, hours, location, pay, relevance to the degree and whether the duties are graduate-level.
-- **Reads your CV and checks it like an ATS.** Drop a PDF or Word CV and skill levels are set from it (skills section and experience count as confident; working knowledge, in progress and projects as basic). The CV gets an ATS check (readable text, contact details, standard sections, length, action verbs, numbers, tables, images, template leftovers) and every job shows which of its keywords are in your CV, which you could add honestly, and which you lack. The file is parsed in the browser and never uploaded.
-- **Syncs with Google Sheets.** Applications are copied to a sheet you own; status or notes changed in the sheet (on your phone, say) come back to the extension.
+### On a job page
 
-| Phone: Today | Phone: checking a job | Application session | Autofill |
+Open a job on LinkedIn, Indeed, Reed, Totaljobs, CV-Library, CWJobs, Glassdoor, jobs.ac.uk or one of a dozen other boards. A badge in the corner shows the score. Click it and the panel opens.
+
+**At the top**, the facts that decide most things: pay (also read from LinkedIn's chips such as *35K GBP/yr*), part-time or full-time, hybrid or remote with office days, the ad's age and how many people applied. Under them, four questions:
+
+| Question | What answers it |
+| --- | --- |
+| **Do I fit?** | Two scores side by side. The skills score compares the tools in the ad with your skill levels. The requirements score uses the ad's requirements, read by AI or from its sections and checked against your evidence for each skill: real work counts 1, a home lab 0.6, a similar tool 0.4. |
+| **Will they answer?** | Your own history: channel, level, ad age, applicants, tailored CV. Under 5 screenings it only says *above / below / about your usual* and why; the percentage appears from 5 screenings. |
+| **Suits me?** | Market B (alongside study) or A (full-time, only if worth a study break: a known company, the salary threshold, a growth path), office days, and hard blocks such as a driving licence. |
+| **Risks** | An agency or a job board posting under its own name (DICE, CV-Library…) hiding the employer, an old ad, 100+ applicants, a repost, a job you already applied for through another site. |
+
+**Five tabs** do the rest without opening the dashboard:
+
+![The five tabs of the job panel: Analysis, Skills, Job, Application, Documents](docs/screenshots/job-panel-tabs.jpg)
+
+- **Analysis.** Each requirement marked ✓ ~ ✕ ?, the chance of an invitation, why the skills score is what it is, and *Wrong verdict?* to collect cases for tests.
+- **Skills.** Tools in the ad: the ones you know well, know basically, or lack. Also requirements you do not meet, what to prepare for the interview, and your CV against the ad (which of your skills the CV does not mention).
+- **Job.** Pay, posting, benefits, key details and the full description. What the employer does and offers (from the ad), with links to Google, Glassdoor, Companies House and LinkedIn.
+- **Application.** Status, salary, how you applied, the cover letter you sent, notes and the job details. The history has *undo* on every change, *I applied — save it* and *I did not apply — remove*.
+- **Documents.** *Tailor the CV* as Word or PDF, a cover letter written from your facts, answers to the form questions, and *Prepare a pack for tonight's session*.
+
+Pressing *Apply* on the site saves the application by itself, with the description, benefits, contacts, the CV you used and how you applied.
+
+![A cover letter written in the panel](docs/screenshots/job-panel-letter.jpg)
+
+The letter is written only from your facts. The reason for wanting this employer is suggested from the ad, and you can edit it before writing. The letter comes out complete: no placeholders. Any tool it names that is not in your facts is flagged.
+
+The toolbar popup checks the page you are on, adds it by hand, fills in a form or opens the session and the dashboard.
+
+<img src="docs/screenshots/popup.jpg" alt="The toolbar popup" width="300">
+
+### The dashboard
+
+**Progress** is the first screen. It shows:
+- the week against your targets for markets A and B;
+- what to do now: follow-ups due after 4 working days, next steps;
+- the last 30 days against the 30 before;
+- what works: answer rates by channel, tailored against standard CV;
+- the week's plan with ticks, and the latest applications.
+
+Detailed statistics are folded underneath.
+
+The **assistant** on the same page answers *What should I do today?*, *How did this week go?*, *Make a plan for the week* (the plan lands in the week's tasks) and questions about your applications. The tracker counts the numbers; AI only talks about them. A question such as *how many did I send to schools this month?* first runs a query on your data.
+
+![The Progress page with the assistant](docs/screenshots/progress.jpg)
+
+**Applications** is a table with search and filters by status, source and role type. Each row opens a card with the follow-up message, the job details, the CV and letter for that job, and the history.
+
+![Applications](docs/screenshots/applications.jpg)
+
+![An application card with a follow-up ready](docs/screenshots/application-card.jpg)
+
+**CV & skills.** Drop in a PDF or Word CV. It is read in the browser and never uploaded:
+- skill levels are set from it;
+- it gets an ATS check (readable text, contacts, sections, length, action verbs, numbers, dates).
+
+*Facts about you* is the only source the AI writes from. *What you lack most often* lists the tools your jobs ask for that you do not have, each with a home lab task of about an hour. *Done* marks the skill as home lab, so Fit for those jobs goes up and you can put it in your CV honestly.
+
+![CV & skills](docs/screenshots/cv-skills.jpg)
+
+![What you lack most often](docs/screenshots/what-you-lack.jpg)
+
+The other pages:
+- **Follow-ups:** who to write to and when, with the message ready.
+- **Templates:** a cover letter, a cold email, a LinkedIn note and form answers.
+- **Offers:** salary against commute, holidays and training, and an effective hourly rate.
+- **Internships:** placement rules from your university, checked against every internship.
+- **Settings:**
+  - first the settings file (import everything at once), then the AI key;
+  - markets A and B (weekly targets, salary threshold, companies worth a study break);
+  - days you can work, details for application forms, follow-up signature, the Google Sheet and the phone link.
+
+![Settings](docs/screenshots/settings.jpg)
+
+### Application session and autofill
+
+For evenings at the PC. During the day you put jobs *for tonight* from the job panel or *for later* on the phone. For each job a pack is prepared in advance: your CV reordered for the ad as a Word file, a cover letter, and answers to the ad's own questions and the usual form questions.
+
+![The application session](docs/screenshots/session.jpg)
+
+*Start the session* opens the jobs one by one. On the application form, *Fill in this application form* fills in what it can:
+- your name, contacts, right to work, sponsorship, notice and salary;
+- the letter and the answers;
+- which CV file to attach.
+
+Anything it is unsure of is outlined in orange, what is left for you in red. You check and press *Submit* yourself. The application is recorded with the time it took, and the next job opens.
+
+![A form after autofill](docs/screenshots/autofill.jpg)
+
+### The web app on the phone and the laptop
+
+The same data, through your Google Sheet. It installs from Chrome's menu, you can share a job to it from the LinkedIn, Indeed or Reed apps, and it is locked with a PIN (the data on the device is encrypted). Russian and English.
+
+| Today | Check a job | Statistics | More |
 | --- | --- | --- | --- |
-| ![Today on the phone](docs/screenshots/phone-today.jpg) | ![Checking a job on the phone](docs/screenshots/phone-check.jpg) | ![Application session](docs/screenshots/session.jpg) | ![A form after Fill in the form](docs/screenshots/autofill.jpg) |
+| ![Today on the phone](docs/screenshots/phone-today.jpg) | ![Checking a job](docs/screenshots/phone-check.jpg) | ![Statistics](docs/screenshots/phone-stats.jpg) | ![More](docs/screenshots/phone-more.jpg) |
 
-*Screenshots use invented companies and demo data.*
+What each page does:
+- **Today:** the week against the targets with study days hatched, then the to-do list:
+  - rejections and invitations from Gmail, applied with one tap;
+  - interview slots from your calendar, follow-ups with the email ready, the best jobs from alert emails;
+  - a voice note after a call that becomes a status, a next step and a calendar event.
+- **Check a job:** paste a link or the ad text. It gets the same score as in the extension, a CV tailored to the ad and a cover letter, and *For later* sends it to the PC session.
+- **Statistics:** conversion to screening with a likely range, the funnel, sources, agency against direct, tailored against standard CV, fast rejections, salaries, and *Ask the tracker*.
+- **Week:** a summary and the cost of one screening by channel.
+- **Employers nearby:** schools, colleges, hospitals and IT companies from OpenStreetMap on a map, with cold emails and reminders.
+- **Also:** CV and skills, an offer and salary page, email templates.
+
+![The web app on a laptop](docs/screenshots/web-today.jpg)
+
+![Statistics on a laptop](docs/screenshots/web-stats.jpg)
+
+### Google Sheet, Gmail and Telegram
+
+The Apps Script in [`google-sheets/Code.gs`](google-sheets/Code.gs) turns your sheet into the sync hub. It also does background work, without changing anything in your mailbox:
+- reads job emails: rejections, invitations, tests and offers are matched to applications, and newsletters and digests are ignored;
+- adds applications you forgot to save, from *thank you for applying* emails;
+- picks the best jobs out of LinkedIn, Indeed and Reed alert emails;
+- watches the vacancy pages of employers you wrote to;
+- sends a weekly email on Sundays.
+
+The **Telegram bot** sends:
+- invitations, offers and replies from people as they arrive;
+- a morning summary at 8:30 and tomorrow's interviews at 18:00.
+
+It is quiet at night. You can also write to it: `/today`, `/stats`, *chart by weeks / sources / funnel / salaries* (sent as a picture), or any question in your own words. Questions need an AI key, added from the sheet's menu.
 
 ## How it works
 
 ```mermaid
 flowchart LR
   subgraph tab [Job site tab]
-    CS[content.js<br/>catches Apply, reads the job,<br/>shows the fit panel]
+    CS[content.js<br/>catches Apply, reads the job,<br/>shows the panel]
     LS[listscan.js<br/>scores result cards]
+    AF[autofill.js<br/>fills application forms]
   end
   subgraph ext [Extension]
-    AN[lib/quality.js + lib/analyzer.js<br/>clean text, skills, gates, verdict]
+    AN[lib/analyzer.js + lib/fit.js<br/>skills, requirements, gates, verdict]
     ST[(chrome.storage.local)]
-    SW[background.js<br/>service worker]
-    DB[dashboard.html / popup.html]
+    SW[background.js<br/>AI calls, packs, sync]
+    DB[dashboard, session, popup]
   end
-  GS[Apps Script web app<br/>google-sheets/Code.gs] --- SH[(Your Google Sheet)]
+  APP[Web app<br/>app/ on the phone and laptop]
+  GS[Apps Script<br/>google-sheets/Code.gs] --- SH[(Your Google Sheet)]
+  GS --- GM[Gmail, Calendar, Telegram]
 
   CS --> AN --> ST
   LS --> AN
+  AF --> SW
   DB <--> ST
   ST -- change --> SW
-  SW -- "lib/sync.js: push / pull" --> GS
+  SW -- "lib/sync.js" --> GS
+  APP <--> GS
 ```
 
-Everything runs locally. The analyser is plain JavaScript with no network calls and no model: a dictionary of around 100 tools and skills with regular expressions, a parser that splits an ad into requirements, nice-to-haves, responsibilities and benefits, and a points-based score.
+The rule throughout: **AI extracts and drafts, code computes.**
 
-### The fit score
+**Scoring and the verdict.** The skills score works from a dictionary of about 100 tools. It weights each tool by where the ad mentions it (requirements, desirable) and by your level for it, and adjusts for seniority, years asked for and constraints. Gates then rule a job out (a required licence, years far above yours, a senior title) or flag questions. The verdict is *Apply*, *Tailor the CV and apply*, *Check first* or *Better not to apply*. Records without a real ad are recognised and shown as *?* instead of a number (`lib/quality.js`).
 
-| Part | Points | How |
-| --- | --- | --- |
-| Skills | up to 50 | Each tool found in the ad is weighted 1.5× if it sits under *Requirements* or next to words like *essential*, 0.5× if it is *desirable*, and half again if it is a basic that almost every ad mentions. Your level per tool (confident, basic, none) gives full, 60% or zero credit, with partial credit for a similar tool you know (FastAPI for Django, VMware for Proxmox). |
-| Level | up to 20 | Intern, graduate, placement and junior titles score highest; senior, lead and principal score zero; role types you are not aiming for score low. |
-| Experience | up to 15 | Years of experience asked for, read from phrases like *2+ years of commercial experience*. |
-| Constraints | negative | Driving licence, security clearance, a required degree, a location outside your areas, local candidates only. |
-| Bonuses | positive | Part-time or flexible hours when you work fewer than five days; a language you speak that the ad asks for. |
+**Requirements and Fit** (`lib/fit.js`):
+- requirements come from AI or from the ad's sections;
+- any line AI returns that is not in the ad is dropped;
+- Fit = 75% essential + 25% desirable, weighted by your evidence for each skill.
 
-It is a guide for deciding where to spend time, not a prediction.
+**Chance of an invitation** (`lib/chance.js`) is naive Bayes in odds form over your own closed applications, smoothed towards your base rate. That way, one success in three never reads as 33%.
 
-### Verdicts (3.0)
+**AI** (`lib/llm.js`) works with a free Groq, Gemini or OpenRouter key:
+- contact details are stripped from every prompt;
+- JSON answers are checked by code;
+- answers are cached, so a job is read once;
+- nothing is sent anywhere by itself: you send every letter and press every *Submit*.
 
-A number alone said little: in a real backup of 100 applications, 96 scored 50% or more, including empty records and application forms that scored 73%. Since 3.0 every job gets a verdict, and the number is shown only when the data under it is real.
+**Sync.** Every change bumps a revision; the service worker pushes changed applications a few seconds later and pulls every 10 minutes. A row edited in the sheet more recently wins for the fields people edit there. Every request carries a random token kept in the script's properties.
 
-1. **Data quality** (`lib/quality.js`). The description is cleaned of LinkedIn and Indeed page chrome (search results, *Show match details*, *About the company*, footers). Search headings (*37,252 IT Engineer Jobs*), application forms and lists of jobs are recognised; the title is recovered from the text where possible (*Join Northwood as IT Support Engineer*). A record without a real ad gets **?** and the verdict *Incomplete*.
-2. **Gates** (`checkGates` in `lib/analyzer.js`). Blocks rule a job out as you are today: a required driving licence (including a bare *Full, clean driving licence* bullet), years far above yours (*3+ years in a support role*), a 3rd-line or senior title, a contractor day rate, a language you do not speak, *local candidates only* with a place outside your areas (the place is read from the sentence, not the saved location). Asks are worth checking first: one more year than you have, 2nd line, security clearance, a degree, the commute, placement dates not stated.
-3. **Verdict and confidence.** *Skip* if anything blocks; *Check first* if something needs asking or the ad names few skills; otherwise *Apply* (70+) or *Tailor CV* (45–69). Confidence (confident · fairly sure · rough guess) depends on the length of the ad and how many skills it names; a rough guess shows as ≈62%. A blocked job is capped at 25% so it sorts to the bottom.
-4. **Re-check and calibration.** *Data → Re-check all* downloads a backup, then runs the current rules over everything saved: repairs titles, cleans descriptions, re-scores, marks duplicates (same link; same title and company within two weeks; the same ad text) with an optional merge that keeps notes, contacts and the furthest status, and renumbers clashing tickets. *Overview → Does the verdict work?* shows reply and interview rates per verdict, so you can see whether Apply jobs really answer more often than Skip jobs.
+**Languages.** The extension is written in English and translated to Russian by `lib/i18n.js`. The web app is written in Russian and translated to English by `lib/en.js`.
 
-**Fewer, better applications (3.3).** Changes made after reading a real backup of 100 applications with no interviews:
+## Privacy
 
-- *Paid experience is its own number.* Settings has two figures: years you can show (freelance included) and years in a paid IT job with an employer. When the second is set, the experience gate uses it, because a CV screen for *1 year in an IT support role* usually looks for an employer. With none, *2 years required* rules a job out, *1 year* or *previous experience in an IT support role* becomes a question.
-- *A ruled-out job shows ✕, not a percentage.* A 62% next to *Skip* still read as a chance.
-- *Before you apply* the side panel says what to do with the verdict (tailor first, check the open questions, better not to apply) and counts what you sent today against a daily target (Settings, default 5). Nothing is blocked.
-- *After you apply* the panel warns when the job was marked Skip (press Undo if you only opened the form) and asks whether you changed your CV for it. *Why no interviews?* then compares replies by verdict and by tailored versus standard CV.
-- *Follow-ups are due after 4 working days*, not 7 calendar days.
-- *Copy prompt for an AI chat.* In an application's *CV for this job* panel: a prompt with the ad, your CV (or optional extra facts from Settings) and rules that forbid inventing anything, to paste into Claude or ChatGPT. A cover letter needs a sentence in your own words on why this employer. Nothing is sent from the extension.
-- *Internships are hidden* unless switched on in Settings; the records stay.
-- Salaries written as *£26-28,000* or *£26-28k* are read as £26,000–£28,000.
-
-**Weekly email from the sheet (Code.gs 15).** *Job Tracker → Weekly email: turn on* asks for an address (kept in Script Properties, never in the code) and an optional link to a summary page, then sends a summary every Sunday around 14:00: applications of the week by market, status changes since last week (last week's statuses are kept in a hidden `_weekly` sheet, so re-synced rows do not count as replies), follow-ups due, next steps, job emails from the inbox and interviews in the calendar, and one piece of advice. *Send now* and *Turn off* are in the same menu. The first run asks Google for permission to read Gmail and Calendar and to send email as you.
-
-**A web app worth opening, and a new design (3.8, Code.gs 17).** The phone app became a full web app for the phone and the laptop (a rail on wide screens). *Today* shows the week as a strip of days (applications by market, cold emails, study days hatched) against weekly targets for market B, market A and cold emails, then what to do: job emails from Gmail sorted into rejection / invitation / assessment / offer and matched to an application, confirmed with one tap (`action=inbox` reads the last 10 days, read-only, nothing changes until you confirm); next steps due; the follow-up queue from `lib/followup.js` with a ready email that opens in the Gmail app or Gmail on the web, *Sent* (stored in the *Follow-up* column; the extension's pull turns it into follow-up events), *In 3 days* and *Nowhere to write*; a month without a reply closed in one tap; and jobs saved *for later* to apply from the PC. *Check a job* adds a cover letter written by Groq (free key, kept encrypted on the device; the ad and a facts list go there, never a name, email or phone; tools the letter names that are not in your facts are flagged) or a prompt for Claude built by `lib/prompt.js`. *Applications* filters by status and market and opens a sheet with statuses, follow-up, notes, skills and the ad. *Statistics* shows conversion to screening with a Wilson interval against the 24.11.2026 baseline, the funnel, weekly applications, results by source, agency vs direct and market, rejections within 3 days, the skills missed most and the salary median. *Employers nearby* is a starting list of 28 schools, colleges, councils, NHS trusts and other employers within reach of Bishop's Stortford for market B, with a job search link, the speculative-email template and a status for each. *Templates* fills the extension's templates. The design is shared with the extension's dashboard and popup: sage background, white paper, forest green for action and market B, amber for market A, Golos Text.
-
-**Progress and the assistant (3.13, Code.gs 25).** The extension opens on *Progress*: the week against the A and B targets, what to do now (follow-ups, next steps), the last 30 days against the 30 before, what works (answers by channel, tailored CV), the plan for the week with ticks, the latest applications and the full statistics folded below. The *Assistant* on the same page answers "what should I do today?", "how did the week go?", "make a plan for the week" (the plan lands in the week's tasks) and questions about your applications; the tracker counts the numbers, AI only talks about them. *What you lack most often* (tools missing in your jobs, with a home lab task and *Done*) moved into CV & skills, on the phone too. In Telegram, write to the bot: /today, /stats, "chart by weeks / sources / funnel / salaries" (sent as a picture) or any question; questions in your own words need *Job Tracker → Telegram: AI key for questions* in the sheet. Newsletters such as "your weekly recommendations" are no longer taken for job emails.
-
-**One panel with tabs (3.12).** At the top four questions are answered: *Do I fit?* (the skills score and the requirements read by AI, side by side), *Will they answer?* (from your history), *Suits me?* (market A/B, office days, pay, blocks) and *Risks* (agency, ad age, applicants). The tabs: **Analysis** (each requirement and why the score), **Skills** (tools you have, basic or missing, CV against the ad), **Job** (pay, posting, benefits, details, the full description, what the employer does and links to Google, Glassdoor, Companies House and LinkedIn), **Application** (status, salary, notes, history with undo, "I applied" and "I did not apply"), **Documents** (Tailor CV, the cover letter with the reason for the employer suggested from the ad, form answers, the session pack). The letter comes out complete, with no gaps to fill.
-
-**The AI where you look at jobs (3.11).** The panel on a job site has the new design and the AI at work: when it opens, AI reads the ad's requirements (lines not in the ad are dropped), and the precise Fit and the interview chance are computed from them; *Cover letter (AI)* and *Form answers* are written from your facts in the panel; *For tonight* puts the job into the application session with its pack prepared. The application drawer in the dashboard has the same letter and answers. The dashboard is reordered: Application session sits next to Applications; *CV & skills* holds the CV, the facts about you and the skill levels; *Settings* starts with the settings file, then AI, markets A and B, availability, form details, follow-ups, the sheet and the phone. Removed as duplicates: the CV-bullet cover letter on the Tailor CV page, the daily application limit and the full-time penalty.
-
-**Application session and autofill (3.10, Code.gs 24).** Jobs saved *for later* on the phone reach the extension's *Application session* page (`session.html`) through the sheet. A pack is prepared for each before you sit down (`lib/packs.js`): your CV reordered for the ad as a Word file, a cover letter (AI from your CV, or your template), answers to the ad's own questions and the usual form questions, the salary to give and the precise Fit; everything stays editable. *Start session* opens the jobs one by one. On application systems (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Teamtailor, Workable, NHS Jobs and Trac, TES, eTeach and others), or on any page from the popup's *Fill in this application form*, a *Fill in the form* button fills it (`lib/autofill.js`): your details, Yes/No questions and the country by rules, diversity questions as *Prefer not to say*, the letter and prepared answers, the CV attached; green outline = sure, amber = check, red = left for you (consent boxes always). It never presses Submit. Free-text questions without a prepared answer can be answered by AI from your CV. When the page confirms the application, it is recorded with the CV and letter used and the minutes spent, and the job leaves the phone's list; *Next job* opens the following one. LinkedIn Easy Apply is never filled. Your form details and the AI key stay in `chrome.storage.local`: never synced, exported or sent to the sheet.
-
-**AI, outreach and time savers in the web app (3.9, Code.gs 23).** One AI client (`lib/llm.js`) for a free Groq, Gemini or OpenRouter key kept in the PIN vault: contact details are stripped from every prompt, JSON answers are checked by code and cached. AI extracts and drafts; numbers come from code. *Precise Fit* (`lib/fit.js`): requirements from AI (lines not found in the ad are dropped) or from the ad's sections, evidence per requirement (work 1.0, home lab 0.6, similar tool 0.4), 0.75 × essential + 0.25 × desirable minus a level penalty. *Interview chance* (`lib/chance.js`): naive Bayes in odds form smoothed to your base rate (k = 10), capped at 0.2–30%, with reasons and calibration. *CV A/B* tailored to each job on the phone (`lib/tailor.js`, Word/PDF), with tailored vs standard in Statistics. *Learning plan* (`lib/learn.js`): the tools missing most often become home lab tasks; a finished task counts the skill as home lab and the extension picks it up. *Voice notes* (Whisper on Groq) turn into a status, next step, note and Google Calendar event after you check them. *Employers nearby* (`lib/outreach.js`): a Leaflet map with OpenStreetMap employers within 15–50 km, today's five cold emails, a second email after 7 days, replies matched by domain, watched vacancy pages. *Alert emails* from LinkedIn, Indeed, Reed and others are parsed in Code.gs and ranked (`lib/assist.js`); "thank you for applying" emails add forgotten applications; interview invitations get free slots from your calendar and a reply. *Telegram* from the sheet menu: urgent hints, a morning digest, tomorrow's interviews, quiet hours. *Week* (`lib/review.js`): this week against last, hours per screening by channel, AI conclusions that can go into the Sunday email; *Ask the tracker* turns a question into a query that code runs; *company brief* before an interview; *offers* compared with the commute counted and a negotiation script.
-
-**Phone app and a history you can undo (3.7).** `app/` is a web app for the phone (install it from Chrome's menu, or share a job to it from LinkedIn, Indeed or Reed). Paste a job link or the ad text: your Apps Script reads the page from Google's servers (`fetchJob`, so no job board sees your browser fetching), the ad is scored with the same code and skills as the extension, and the card shows the verdict, office days, market (B, alongside study, or A, full-time worth a study break: `lib/market.js`), the skills you have and lack, and ready answers for the usual form questions. *I applied* adds it to the sheet; the extension picks it up with the ad text. Statuses change in one tap with *Undo* for 10 seconds, and *Today* lists next steps and follow-ups due. Changes made offline are sent when the phone is back online. `node scripts/build-app.js` builds `dist-app/`; the *Phone app* workflow publishes it to GitHub Pages (custom domain: a CNAME record `jobs` → `ezzeto.github.io`, then the domain in *Settings → Pages*). *Settings → Phone app* copies a link that connects the phone to your sheet (the token sits after `#`, so it never reaches a server). Code.gs version 13 adds the link reader, a hidden copy of your settings for the phone, quick status changes and a hidden *Job ad* column.
-
-Every status change, follow-up and next step is now an event in the application's history with who made it (you, an automatic rule, the sheet) and what it replaced; undo marks the event and puts the old values back, and an automatic *No response* that was undone is never set again. Saved data moves to schema 2 on update, after a copy is kept in `backups`: the same link saved twice is merged (the Sheets pull used to create copies without the ad), pre-2000 dates and misread salaries are repaired, and every record is re-checked, so records without an ad show **?**. `node scripts/migrate-check.js backup.json` runs the migration on a real backup and checks nothing is lost.
-
-**Totaljobs no longer blocks the browser (3.6.1).** Totaljobs and CWJobs run bot protection that treats a script fetching job pages as a bot and then answers *Access Denied* to every page. The extension used to fetch the ad behind a search-results drawer or an application form; it now never sends a request to these two sites. It reads only the page you have open, and an application form (*Let's complete your application*) is saved as the ad you opened on the same site in the last 45 minutes (`recentJobs`), which also fixes form titles being saved as job titles on every board.
-
-**Templates and a settings file (3.6).** *Templates* keeps a cover letter, an email to a local IT company or school, a LinkedIn note and answers for application forms (`lib/templates.js`). Type the job title, company and contact once and *Copy* fills them in with your signature from Settings; what is still in [brackets] is listed above each template. Templates can be edited and are saved as you type; *Reset to default* brings the original back. *Settings → Import a settings file* reads a JSON file (`{"jobTrackerSettings": 1, "profile": {…}, "templates": {…}, "skills": {…}, "autofill": {…}}`) and fills in the known settings (markets A and B and skill evidence included), templates, skill levels and form details, checking each value's type; applications are never touched.
-
-**Weekly plan and Russian (3.5).** *Weekly plan* shows last week's numbers next to this week's (applications against the target, tailored CVs, letters, follow-ups, replies, interviews, rejections and how many came within 3 days, tools asked for that you marked None) and a plan worked out from them: the applications to send on the days you can work (Settings now has the days), follow-ups due, tailoring and letters when they were skipped, not applying to Skip jobs, the tool to learn next, stale records, a backup (`lib/plan.js`). *Copy prompt for an AI chat* puts the same numbers into a prompt for Claude or ChatGPT that asks for a checklist; paste the answer back and tick it off. Ticks are kept per week. The interface can be switched to Russian at the bottom of the sidebar (`lib/i18n.js` translates what the extension shows, including the panels on job sites; messages to employers, the CV and cover letters stay in English). Settings checkboxes now save: they used to snap back because the form was redrawn halfway through saving.
-
-**Follow-ups page (3.5).** Follow-ups were only reachable from inside an application, and the contacts found in ads were hard to spot. *Follow-ups* in the sidebar now lists every application waiting for a reply: *Send today* (first message 4 working days after applying, a second one 5 working days later), *Coming up* and *Both follow-ups sent*. Each card shows who to write to (email, LinkedIn profile, phone) or, when the ad named nobody, buttons that search LinkedIn for the company's recruiters or IT manager and Google for a careers email. Each card has *Email* (opens Gmail, Outlook or the mail app with the message and the address, if one is known), *Mark as sent*, and a box to paste an email address when the ad gave none; *Edit message* opens the ready message in the application, where the bar at the top shows how many follow-ups went out and records one with a click (or on an earlier date in the follow-up panel). With two or more Gmail addresses in Settings, *Email* asks which one to send from (last used first) and opens Gmail under that account (`/mail/u/<address>/`). Email is the default channel, since LinkedIn limits notes without Premium; the applications table shows ✉ and the count next to the status; applications over two weeks old without a follow-up go to the end of the list. A banner asks for the signature and pitch until they are filled in. Contacts are tidied: LinkedIn badges (*• 3rd+*, *SHRM-CP*) are stripped from names, phrases like *Hybrid Working* are no longer taken for a name, and adjustment or privacy mailboxes are skipped. Settings has a new box for a right to work with an end date (Ukraine scheme, Graduate visa): ads that rule out time-limited permission get a block, ads that ask for an *unrestricted* right to work get a question.
-
-**Tailor CV (3.4).** *Tailor CV* in the job panel (before you apply, nothing has to be saved) or in an application opens your CV from the CV & ATS page reordered for that ad: the ad's tools first in each skills line, the most relevant bullets first in each job, the job title as the headline (optional), and tools the ad asks for that you marked as known in Settings added on one *Also:* line (optional, highlighted). Wording is never changed and nothing is invented; tools you do not have are listed as gaps instead. Every line is editable, × removes a bullet, and the result downloads as Word (`lib/docx.js`, plain paragraphs that applicant tracking systems read well) or PDF with real text (`lib/cvpdf.js`, jsPDF). When you then press Apply on that job, the application is marked *CV tailored* with the file name.
-
-Cover letters are written by AI from your facts (in the job panel, the application drawer and the application pack), or come from your template on the Templates page; the Tailor CV page is for the CV only (3.11).
-
-**Why no interviews (3.2).** Every new application records *how* you applied, taken from the button you pressed (*Easy Apply*, company website, job-board form; agency, email and referral by hand), the cover letter (default in Settings) and the CV file loaded in the CV tab, how old the ad was and how many people had applied (*Reposted 2 weeks ago · Over 100 people clicked apply*, *Posted 21 October*, JSON-LD `datePosted`), and which hard demands the ad makes (previous IT experience, years, full-time, degree, driving licence, certificates, clearance). When an application is rejected the drawer asks when and why, and guesses *CV screen* for a 'no' within 3 days. *Overview → Why no interviews?* shows reply and interview rates for each of these, the share of rejections that came within 3 days, and plain-language findings. *Applied* with no reply or follow-up for 30 days (Settings; 0 = never) becomes *No response* on its own. The new fields go to Google Sheets as eight extra columns (update `Code.gs` to version 12).
-
-**The same job on another site (3.1).** Agencies post one vacancy on CV-Library, Reed, Totaljobs and LinkedIn. Before you apply, the job panel and badge say *Already applied via CV-Library* when a saved application matches by the agency's reference (*BH37630*, *Ref: AJ47736*), by the ad text, or by title and company within 60 days; pressing Apply does not save a second record. On search results the badge tooltip says the same once the full ad is loaded.
-
-**Journey check (3.0.8).** A place can be inside your areas and still be far from home: Orpington is London, but about 55 km from Bishop's Stortford. Set *Home town* and *Longest journey* in Settings (default: the first town in your areas, 50 km). An office-based job further away asks about the journey and scores lower; a hybrid one only gets a note.
-
-**Wrong verdicts.** Every job panel has a *Wrong verdict?* link: pick what it should be and add a reason. *Data → Wrong verdicts* downloads them with the ad text, and `node scripts/check-feedback.js wrong-verdicts.json [backup.json]` shows which ones the current rules already get right. Each one is meant to become a unit test.
-
-To check a rule change against your own data before shipping it, export a backup and run `node scripts/audit-export.js backup.json`: it prints the old score next to the new verdict for every application. Keep the backup outside the repository: it holds personal data.
-
-### Google Sheets sync
-
-The service worker pushes changes a few seconds after they happen and does a full pull and push every 10 minutes and when the dashboard opens.
-
-- **What to push.** Every write bumps a revision number on the application; the sync sends applications whose revision differs from the one it last sent. An earlier version compared timestamps, and a unit test caught that two writes in the same millisecond made the second one look already synced.
-- **Conflicts.** The sheet records when a row was edited (`onEdit`). On pull, a sheet row newer than the local copy wins for the fields people edit in the sheet: status, notes, next step, salary, title, company and location. Otherwise the local copy wins and is pushed.
-- **Deletes.** Deleting in the extension queues the ID and removes the row on the next push. A row deleted only in the sheet is restored, so the extension stays the source of truth.
-- **Access.** The Apps Script runs as a web app. `setup()` generates a random token and keeps it in Script Properties; every request must carry it. Nothing secret is in the repository, and *Create a new sync token* in the sheet menu revokes the old one.
-
-Known limitations: conflict resolution compares the sheet's clock with the browser's; the GET request carries the token in the query string because Apps Script web apps cannot read headers.
-
-## Responsible use
-
-- Your applications stay in your browser (`chrome.storage.local`) unless you connect your own sheet. There is no server and no analytics.
-- The extension reads the job you have open. It never fetches LinkedIn pages in the background. Loading full descriptions for Indeed search results is an opt-in setting, rate-limited, and pauses when the site asks it to.
-- It asks only for the permissions it uses: storage, the active tab and scripting (for *Add this page*), alarms (for the 10-minute sync), the supported job sites for the content scripts, and the two Google Apps Script hosts used by the sync.
+- **Where data lives.** Applications stay in your browser unless you connect your own sheet. There is no server and no analytics.
+- **AI keys** stay on the device: in `chrome.storage.local` in the extension, encrypted with your PIN in the web app. The Telegram bot's optional key is kept in your script's properties. Keys are never in exports, the sheet or the repository.
+- **Job sites.** The extension reads the job you have open and never fetches LinkedIn pages in the background. Sites with bot protection (Totaljobs, CWJobs) are never fetched at all.
+- **Gmail** is read-only: nothing is sent, labelled or archived.
 
 ## Install
 
+**The extension**
 1. Download or clone this repository.
 2. Open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked** and select the folder.
-3. The dashboard opens on **Skills & settings**: mark your level for the tools you know, tick the role types you are aiming for, and add the towns you can work in.
-4. Pin the extension and open a job on any supported site.
+3. In **Settings**, import a settings file or fill in markets A and B, the days you can work and the details for application forms.
+4. In **Settings → AI**, add a free key from [Groq](https://console.groq.com/keys).
+5. In **CV & skills**, upload your CV.
 
-### Connect a Google Sheet (optional, 5 minutes)
-
+**The Google Sheet (optional, about 5 minutes)**
 1. Create a sheet at [sheets.new](https://sheets.new) and open **Extensions → Apps Script**.
-2. Replace the editor contents with [`google-sheets/Code.gs`](google-sheets/Code.gs), save, select `setup` and press **Run**. Approve the access request; it is your own script and only touches this sheet.
-3. In the sheet, open **Job Tracker → Show sync token** and copy the token.
-4. **Deploy → New deployment → Web app**, execute as *Me*, access *Anyone*, then copy the URL that ends in `/exec`.
-5. In the extension: **Skills & settings → Google Sheet**, paste the URL and token, press **Test connection**, then **Sync now**.
+2. Replace the code with [`google-sheets/Code.gs`](google-sheets/Code.gs), save, select `setup` and press **Run**. Approve access: it is your own script.
+3. **Deploy → New deployment → Web app**, execute as *Me*, access *Anyone*, and copy the `/exec` URL.
+4. In the sheet, **Job Tracker → Show sync token**.
+5. In the extension, **Settings → Google Sheet**: paste the URL and token, then press **Sync now**.
 
-### Internships and placement rules
+**The web app.** `node scripts/build-app.js` builds `dist-app/` for any static host (GitHub Pages deploys it from `main`). In the extension, **Settings → Phone app** gives a link that connects the phone in one tap. The language switch is under **More**.
 
-Open **Internships** in the dashboard, paste the placement briefing into *Placement rules* and press *Read the rules*, or fill the fields by hand. Mark which role types are a priority, a target or not a target. An application can be switched between *Job* and *Internship / placement* in its drawer or in the panel on the job page; the search-results panel can show internships only and hide those that break your rules.
-
-| Rule check | Score for internships |
-| --- | --- |
-| ✓ fits · ? not stated in the ad · ✕ breaks a rule · i something to agree with the employer | skills up to 50, role up to 25, level up to 20; a broken rule on dates, location or relevance costs 25, others 8 |
-
-### Upgrading from 2.x to 3.0
-
-Reload the extension, then open *Data → Re-check all* once: it downloads a backup first, then gives every saved application a verdict, cleans old descriptions and fixes clashing ticket numbers. Review the duplicates it lists before pressing *Merge duplicates*. For the sheet, paste the new `Code.gs` (adds the *Verdict* column and ignores broken *Next step* dates), run `setup`, then *Manage deployments → New version*. Fit % is left empty in the sheet for incomplete records.
-
-### Upgrading from 2.0
-
-Replace the files and reload the extension; nothing is lost. For the sheet, paste the new `Code.gs` (adds the *Type* and *Placement rules* columns), run `setup`, then *Manage deployments → New version*. If the sheet still has the old Russian tabs next to the English ones, `setup` copies any rows that exist only in the old tab and removes the old tabs.
-
-### Upgrading from 1.x
-
-Version 2.0 switched the interface from Russian to English. Saved applications, settings and backups are migrated automatically when the extension updates (`lib/legacy.js`). For the sheet, paste the new `Code.gs`, run `setup` once (it renames the old sheet and translates its statuses), create a new deployment version and copy the token from the menu.
+**Telegram (optional)**
+1. In Telegram, send `/newbot` to [@BotFather](https://t.me/BotFather), then send `/start` to your new bot.
+2. In the sheet, choose **Job Tracker → Telegram: connect** and paste the token.
+3. For questions in your own words, choose **Job Tracker → Telegram: AI key for questions**.
+4. Write `/help` to the bot.
 
 ## Development
 
-No build step and no runtime dependencies: the extension loads the files in this folder as they are.
+No build step and no runtime dependencies for the extension: Chrome loads the files as they are.
 
 ```bash
-npm test          # 95 unit tests with node:test (Node 20+)
+npm test          # 203 unit tests with node:test (Node 20+)
+```
+
+```bash
 npm run check     # manifest references, script syntax, no committed token
 ```
 
-The unit tests load the real `lib/` files with a fake `chrome.storage` (`tests/helpers/env.js`) and test the sync against an in-memory stand-in for the Apps Script web app (`tests/helpers/fake-sheet.js`). GitHub Actions runs both commands on every push.
+The unit tests load the real `lib/` files with a fake `chrome.storage`, and test the sync against an in-memory stand-in for the Apps Script. They also cover the Apps Script's own helpers (email parsing, Telegram stats and charts) in a sandbox. GitHub Actions runs both commands on every push.
 
-`tests/e2e/smoke.py` loads the unpacked extension in Chromium with Playwright, seeds demo data, opens every dashboard view, captures an application from a mocked job page and fails on any console error. The screenshots above come from `tests/e2e/panel.js`, `tests/e2e/phone.js` and `tests/e2e/autofill.js` run with a screenshot folder:
+The browser tests use Playwright with Chromium:
+- `tests/e2e/panel.js`: the job panel and every tab;
+- `tests/e2e/autofill.js`: the session and a form;
+- `tests/e2e/phone.js`: the web app.
+
+The screenshots in this file come from one script:
 
 ```bash
-pip install playwright && playwright install chromium
-python3 tests/e2e/smoke.py .
-node tests/e2e/panel.js shots/ && node tests/e2e/phone.js shots/ && node tests/e2e/autofill.js shots/
-python3 tests/e2e/intern.py . path/to/cv.pdf   # placement rules, CV import, internship capture
+node tests/e2e/screens.js            # writes raw shots to docs/screenshots/.raw
 ```
+
+It mocks the job pages, the sheet and the AI, and reports any Russian text left on a page.
 
 ### Project structure
 
 ```
-manifest.json         Manifest V3
-background.js         service worker: badge, auto-sync, migrations
-content.js            job pages: Apply detection, extraction, fit panel
-listscan.js           search results: score badges and filter panel
-popup.html/js         toolbar popup
-dashboard.html/js/css overview, applications, offers, settings, data
-lib/analyzer.js       skills dictionary, salary parser, sections, fit score, gates, verdicts
-lib/quality.js        cleans descriptions, recognises forms, lists and junk titles
-lib/recheck.js        re-check, duplicates, merge, ticket repair
-scripts/audit-export.js  old score vs new verdict for a backup file (run locally)
-scripts/check-feedback.js  re-checks the verdicts you marked as wrong
-lib/extract.js        per-site selectors, JSON-LD, contacts
-lib/store.js          storage, tickets, URL normalisation, revisions
-lib/sync.js           Google Sheets push / pull
-lib/followup.js       follow-up templates
-lib/prompt.js         prompt for an AI chat: ad + CV + no-invention rules
-lib/tailor.js         Tailor CV: parses the CV, reorders it for one ad
-lib/docx.js, cvpdf.js Word and PDF output for the tailored CV
-tailor.html/js/css    the Tailor CV page
-lib/cv.js             CV sections, skills from the CV, ATS check, keyword match
-lib/cvread.mjs        reads PDF (pdf.js) and Word (mammoth) files in the browser
-lib/vendor/           pdf.js 4.10, mammoth and jsPDF 2.5, with their licences
-lib/legacy.js         migration from the Russian-language 1.x versions
-google-sheets/Code.gs Apps Script web app and sheet formatting
-tests/                unit tests, helpers and the browser smoke test
+manifest.json            Manifest V3
+background.js            service worker: AI on job pages, the assistant, packs, autofill data, sync
+content.js               job pages: Apply detection, extraction, the panel with tabs
+listscan.js              search results: score badges and a filter panel
+autofill.js              application forms: fills them in from your details and the pack
+popup.html/js            toolbar popup
+dashboard.html/js/css    Progress, applications, follow-ups, CV & skills, templates, offers, settings
+session.html/js          the application session
+tailor.html/js/css       Tailor CV (Word and PDF)
+lib/analyzer.js          skills dictionary, salary parser, sections, skills score, gates, verdicts
+lib/quality.js           cleans descriptions, recognises forms, lists and junk titles
+lib/fit.js               requirements and the precise Fit
+lib/chance.js            chance of an invitation from your history
+lib/market.js            markets A and B, office days, intermediaries, form answers
+lib/llm.js               AI client: requirements, letters, answers, employer summary
+lib/assistant.js         the assistant's numbers and rules
+lib/review.js            weekly review, cost of a screening, ask-the-tracker queries
+lib/learn.js             what you lack most often, with home lab tasks
+lib/packs.js             application packs for the session
+lib/autofill.js          form field matching
+lib/cv.js, cvread.mjs    CV sections, ATS check; reads PDF and Word in the browser
+lib/tailor.js, docx.js, cvpdf.js   tailored CV and its files
+lib/store.js, sync.js    storage, history with undo, Google Sheets sync
+lib/i18n.js, en.js       Russian for the extension, English for the web app
+app/                     the web app (phone and laptop), PIN vault, service worker
+google-sheets/Code.gs    Apps Script: sync, Gmail, alerts, weekly email, Telegram bot
+scripts/                 app build, checks, backup audit
+tests/                   unit tests and Playwright browser tests
 ```
 
 ## Roadmap
 
+- One design system shared by the extension and the web app.
+- Telegram buttons that change a status from the message (*follow-up sent*, *rejected*).
+- An optional self-hosted Telegram bot (Docker) with instant replies.
 - Move the analyser to TypeScript and split `dashboard.js` into modules.
-- Optional local AI (Ollama, off by default) for the CV prompt, so nothing leaves the computer.
-- Replace keyword matching with semantic matching: a small Python (FastAPI) service that embeds the job ad and the CV, compared against the current scorer on a hand-labelled set of real ads.
-- Publish to the Chrome Web Store.
 
 ## Licence
 
