@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Job Tracker",
-  "version": "3.13.0",
+  "version": "3.14.0",
   "description": "Records the jobs you apply for on UK job boards, scores how well each one fits your skills and tracks every application to an offer.",
   "permissions": [
     "storage",
@@ -51,6 +51,7 @@
         "lib/fit.js",
         "lib/market.js",
         "lib/i18n.js",
+        "lib/en.js",
         "content.js",
         "listscan.js"
       ],
@@ -88,6 +89,7 @@
         "lib/fit.js",
         "lib/market.js",
         "lib/i18n.js",
+        "lib/en.js",
         "content.js",
         "listscan.js"
       ],
@@ -120,6 +122,7 @@
       ],
       "js": [
         "lib/autofill.js",
+        "lib/en.js",
         "autofill.js"
       ],
       "run_at": "document_idle",

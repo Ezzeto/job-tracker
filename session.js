@@ -1,6 +1,7 @@
 /* Job Tracker — application session: the queue of jobs to apply for from the PC, a pack prepared for each,
  * and one button that opens them one by one with the autofill ready. Also your details for forms and the AI key.
  * The details and the key stay in chrome.storage.local: they are never synced, exported or sent to the sheet. */
+try { chrome.storage.local.get('profile', r => { if (((r && r.profile) || {}).lang !== 'ru' && globalThis.JT_EN) JT_EN.start(document); }); } catch (e) { /* tests */ }
 (async function () {
   'use strict';
   const S = window.JT_Store, E = window.JT_Extract, PK = window.JT_Packs, LLM = window.JT_LLM;
