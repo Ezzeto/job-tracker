@@ -8,7 +8,11 @@ A job search assistant for entry-level IT roles in the UK, in three parts that s
 
 I built it for my own job search: a Computing student looking for part-time IT support work alongside study, and full-time only where a role is worth a study break.
 
-![The panel on a job page: the key facts, four questions answered, and tabs for the analysis, skills, the job, the application and documents](docs/screenshots/job-panel.jpg)
+![The panel on a job page: the key facts, four questions answered, and tabs for the analysis, skills, the job, the application and documents](docs/images/job-panel.jpg)
+
+| The website on a laptop | The website on a phone | The extension's dashboard |
+| --- | --- | --- |
+| ![The web app on a laptop: Today](docs/images/web-today.jpg) | ![The web app on a phone: Today](docs/images/phone-today.jpg) | ![The extension's Progress page](docs/images/progress.jpg) |
 
 *All screenshots use invented companies and demo data. AI answers in them are fixed sample text.*
 
@@ -42,7 +46,7 @@ Open a job on LinkedIn, Indeed, Reed, Totaljobs, CV-Library, CWJobs, Glassdoor, 
 
 **Five tabs** do the rest without opening the dashboard:
 
-![The five tabs of the job panel: Analysis, Skills, Job, Application, Documents](docs/screenshots/job-panel-tabs.jpg)
+![The five tabs of the job panel: Analysis, Skills, Job, Application, Documents](docs/images/job-panel-tabs.jpg)
 
 - **Analysis.** Each requirement marked ✓ ~ ✕ ?, the chance of an invitation, why the skills score is what it is, and *Wrong verdict?* to collect cases for tests.
 - **Skills.** Tools in the ad: the ones you know well, know basically, or lack. Also requirements you do not meet, what to prepare for the interview, and your CV against the ad (which of your skills the CV does not mention).
@@ -52,13 +56,13 @@ Open a job on LinkedIn, Indeed, Reed, Totaljobs, CV-Library, CWJobs, Glassdoor, 
 
 Pressing *Apply* on the site saves the application by itself, with the description, benefits, contacts, the CV you used and how you applied.
 
-![A cover letter written in the panel](docs/screenshots/job-panel-letter.jpg)
+![A cover letter written in the panel](docs/images/job-panel-letter.jpg)
 
 The letter is written only from your facts. The reason for wanting this employer is suggested from the ad, and you can edit it before writing. The letter comes out complete: no placeholders. Any tool it names that is not in your facts is flagged.
 
 The toolbar popup checks the page you are on, adds it by hand, fills in a form or opens the session and the dashboard.
 
-<img src="docs/screenshots/popup.jpg" alt="The toolbar popup" width="300">
+<img src="docs/images/popup.jpg" alt="The toolbar popup" width="300">
 
 ### The dashboard
 
@@ -73,13 +77,13 @@ Detailed statistics are folded underneath.
 
 The **assistant** on the same page answers *What should I do today?*, *How did this week go?*, *Make a plan for the week* (the plan lands in the week's tasks) and questions about your applications. The tracker counts the numbers; AI only talks about them. A question such as *how many did I send to schools this month?* first runs a query on your data.
 
-![The Progress page with the assistant](docs/screenshots/progress.jpg)
+![The Progress page with the assistant](docs/images/progress.jpg)
 
 **Applications** is a table with search and filters by status, source and role type. Each row opens a card with the follow-up message, the job details, the CV and letter for that job, and the history.
 
-![Applications](docs/screenshots/applications.jpg)
+![Applications](docs/images/applications.jpg)
 
-![An application card with a follow-up ready](docs/screenshots/application-card.jpg)
+![An application card with a follow-up ready](docs/images/application-card.jpg)
 
 **CV & skills.** Drop in a PDF or Word CV. It is read in the browser and never uploaded:
 - skill levels are set from it;
@@ -87,9 +91,9 @@ The **assistant** on the same page answers *What should I do today?*, *How did t
 
 *Facts about you* is the only source the AI writes from. *What you lack most often* lists the tools your jobs ask for that you do not have, each with a home lab task of about an hour. *Done* marks the skill as home lab, so Fit for those jobs goes up and you can put it in your CV honestly.
 
-![CV & skills](docs/screenshots/cv-skills.jpg)
+![CV & skills](docs/images/cv-skills.jpg)
 
-![What you lack most often](docs/screenshots/what-you-lack.jpg)
+![What you lack most often](docs/images/what-you-lack.jpg)
 
 The other pages:
 - **Follow-ups:** who to write to and when, with the message ready.
@@ -101,13 +105,13 @@ The other pages:
   - markets A and B (weekly targets, salary threshold, companies worth a study break);
   - days you can work, details for application forms, follow-up signature, the Google Sheet and the phone link.
 
-![Settings](docs/screenshots/settings.jpg)
+![Settings](docs/images/settings.jpg)
 
 ### Application session and autofill
 
 For evenings at the PC. During the day you put jobs *for tonight* from the job panel or *for later* on the phone. For each job a pack is prepared in advance: your CV reordered for the ad as a Word file, a cover letter, and answers to the ad's own questions and the usual form questions.
 
-![The application session](docs/screenshots/session.jpg)
+![The application session](docs/images/session.jpg)
 
 *Start the session* opens the jobs one by one. On the application form, *Fill in this application form* fills in what it can:
 - your name, contacts, right to work, sponsorship, notice and salary;
@@ -116,7 +120,7 @@ For evenings at the PC. During the day you put jobs *for tonight* from the job p
 
 Anything it is unsure of is outlined in orange, what is left for you in red. You check and press *Submit* yourself. The application is recorded with the time it took, and the next job opens.
 
-![A form after autofill](docs/screenshots/autofill.jpg)
+![A form after autofill](docs/images/autofill.jpg)
 
 ### The web app on the phone and the laptop
 
@@ -124,7 +128,7 @@ The same data, through your Google Sheet. It installs from Chrome's menu, you ca
 
 | Today | Check a job | Statistics | More |
 | --- | --- | --- | --- |
-| ![Today on the phone](docs/screenshots/phone-today.jpg) | ![Checking a job](docs/screenshots/phone-check.jpg) | ![Statistics](docs/screenshots/phone-stats.jpg) | ![More](docs/screenshots/phone-more.jpg) |
+| ![Today on the phone](docs/images/phone-today.jpg) | ![Checking a job](docs/images/phone-check.jpg) | ![Statistics](docs/images/phone-stats.jpg) | ![More](docs/images/phone-more.jpg) |
 
 What each page does:
 - **Today:** the week against the targets with study days hatched, then the to-do list:
@@ -137,9 +141,9 @@ What each page does:
 - **Employers nearby:** schools, colleges, hospitals and IT companies from OpenStreetMap on a map, with cold emails and reminders.
 - **Also:** CV and skills, an offer and salary page, email templates.
 
-![The web app on a laptop](docs/screenshots/web-today.jpg)
+![The web app on a laptop](docs/images/web-today.jpg)
 
-![Statistics on a laptop](docs/screenshots/web-stats.jpg)
+![Statistics on a laptop](docs/images/web-stats.jpg)
 
 ### Google Sheet, Gmail and Telegram
 
@@ -255,10 +259,11 @@ The browser tests use Playwright with Chromium:
 - `tests/e2e/autofill.js`: the session and a form;
 - `tests/e2e/phone.js`: the web app.
 
-The screenshots in this file come from one script:
+The screenshots in this file come from two commands:
 
 ```bash
-node tests/e2e/screens.js            # writes raw shots to docs/screenshots/.raw
+node tests/e2e/screens.js          # takes the screenshots (raw files in docs/images/.raw)
+python3 scripts/readme-images.py   # turns them into the images in docs/images
 ```
 
 It mocks the job pages, the sheet and the AI, and reports any Russian text left on a page.

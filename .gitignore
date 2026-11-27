@@ -22,4 +22,4 @@ dist-app/
 
 # Personal settings files for import (names, email): never commit
 settings-files/
-docs/screenshots/.raw/
+docs/images/.raw/
