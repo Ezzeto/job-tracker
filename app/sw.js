@@ -12,7 +12,7 @@ self.addEventListener('activate', e => {
 });
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
-  if (e.request.method !== 'GET' || /script\.google(usercontent)?\.com$|(^|\.)groq\.com$|generativelanguage\.googleapis\.com$|openrouter\.ai$|overpass-api\.de$|tile\.openstreetmap\.org$/.test(u.hostname)) return;
+  if (e.request.method !== 'GET' || /script\.google(usercontent)?\.com$|(^|\.)groq\.com$|generativelanguage\.googleapis\.com$|openrouter\.ai$|overpass-api\.de$|overpass\.private\.coffee$|overpass\.kumi\.systems$|maps\.mail\.ru$|tile\.openstreetmap\.org$/.test(u.hostname)) return;
   // The page itself: network first, so a new version shows up on the next open
   if (e.request.mode === 'navigate') {
     e.respondWith(fetch(e.request).then(r => { const c = r.clone(); caches.open(CACHE).then(x => x.put('index.html', c)); return r; }).catch(() => caches.match('index.html')));

@@ -54,3 +54,15 @@ test('merge keeps the later change; only touched employers go to the sheet; doma
   assert.equal(O.domainOf('someone@gmail.com'), '');
   assert.match(O.overpassQuery(51.87, 0.16, 30), /around:30000,51.87,0.16/);
 });
+
+test('fetchOsm: a busy server (502) moves on to the next mirror; all busy gives a clear message', async () => {
+  const O = require('../lib/outreach.js');
+  const hits = [];
+  const fetch = async url => { hits.push(url); return url.includes('private.coffee') ? new Response(JSON.stringify({ elements: [{ id: 1 }] }), { status: 200 }) : new Response('busy', { status: 502 }); };
+  const d = await O.fetchOsm('[out:json];', { fetch });
+  assert.equal(d.elements.length, 1);
+  assert.equal(hits.length, 2);
+  await assert.rejects(O.fetchOsm('[out:json];', { fetch: async () => new Response('busy', { status: 504 }) }), /перегружен.*504/);
+  const bad = []; await assert.rejects(O.fetchOsm('x', { fetch: async u => { bad.push(u); return new Response('bad', { status: 400 }); } }));
+  assert.equal(bad.length, 1);
+});
