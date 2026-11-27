@@ -46,3 +46,19 @@ test('readSettings refuses a backup and random JSON', () => {
   assert.throws(() => Tpl.readSettings({ apps: [] }), /backup of applications/);
   assert.throws(() => Tpl.readSettings({ foo: 1 }), /not a Job Tracker settings file/);
 });
+
+test('readSettings takes markets A/B, skills with evidence and form details, and checks each one', () => {
+  require('../lib/analyzer.js');
+  const r = Tpl.readSettings({
+    jobTrackerSettings: 1,
+    profile: { targets: { B: 7, A: 8, C: 3 }, studyDays: [3, 4], salaryThresholdA: 30000, salaryB: 'pro rata', bigTechList: ['cloudflare'], evidence: { Intune: 'lab', Nope: 'work' } },
+    skills: { 'Microsoft 365': 'strong', Intune: 'basic', 'Made-up tool': 'strong', Linux: 'expert' },
+    autofill: { firstName: 'Test', email: 'test@example.com', password: 'x' },
+  });
+  assert.deepEqual(r.profile.targets, { B: 7, A: 8, C: 3 });
+  assert.equal(r.profile.salaryThresholdA, 30000);
+  assert.deepEqual(r.profile.evidence, { Intune: 'lab' });
+  assert.deepEqual(r.skills, { 'Microsoft 365': 'strong', Intune: 'basic' });
+  assert.deepEqual(r.autofill, { firstName: 'Test', email: 'test@example.com' });
+  assert.ok(['skills.Made-up tool', 'skills.Linux', 'autofill.password', 'evidence.Nope'].every(k => r.skipped.includes(k)));
+});

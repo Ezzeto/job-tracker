@@ -1,5 +1,5 @@
 /* Job Tracker — background service worker */
-importScripts('lib/quality.js', 'lib/analyzer.js', 'lib/store.js', 'lib/legacy.js', 'lib/insights.js', 'lib/sync.js', 'lib/recheck.js', 'lib/migrate.js', 'lib/market.js', 'lib/fit.js', 'lib/llm.js', 'lib/templates.js');
+importScripts('lib/quality.js', 'lib/analyzer.js', 'lib/store.js', 'lib/legacy.js', 'lib/insights.js', 'lib/sync.js', 'lib/recheck.js', 'lib/migrate.js', 'lib/market.js', 'lib/fit.js', 'lib/llm.js', 'lib/templates.js', 'lib/chance.js', 'lib/tailor.js', 'lib/docx.js', 'lib/packs.js');
 
 // Schema migration: a full copy of the data is kept in 'backups' (last 3) before anything changes,
 // and Data → Backups downloads it. Runs once per schema version, on install, update or start.
@@ -101,6 +101,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg && msg.type === 'markStale') { markStale().then(n => reply({ ok: true, n })); return true; }
   if (msg && msg.type === 'syncTest') { JT_Sync.test(msg.cfg).then(reply); return true; }
   // ---------- Application session and autofill (3.10) ----------
+  // ---------- AI on the job page (3.11) ----------
+  if (msg && msg.type === 'aiJob') { aiJob(msg.job).then(reply, e => reply({ error: String(e.message || e) })); return true; }
+  if (msg && msg.type === 'aiLetter') { aiLetter(msg.job).then(reply, e => reply({ error: String(e.message || e) })); return true; }
+  if (msg && msg.type === 'aiAnswers') { aiAnswers(msg.job, msg.questions).then(reply, e => reply({ error: String(e.message || e) })); return true; }
+  if (msg && msg.type === 'saveForSession') { saveForSession(msg.job).then(reply, e => reply({ error: String(e.message || e) })); return true; }
   if (msg && msg.type === 'autofillData') { autofillData(msg, _sender).then(reply); return true; }
   if (msg && msg.type === 'llmAnswer') { llmAnswer(msg).then(reply, e => reply({ error: String(e.message || e) })); return true; }
   if (msg && msg.type === 'recordApplied') { recordApplied(msg, _sender).then(reply); return true; }
@@ -182,4 +187,72 @@ async function sessionNext(sender, skip) {
   await chrome.storage.local.set({ session: { ...session, index: i, current: key, at: Date.now(), itemAt: Date.now(), tabId: sender.tab ? sender.tab.id : session.tabId } });
   if (sender.tab && url) chrome.tabs.update(sender.tab.id, { url }); else if (url) chrome.tabs.create({ url });
   return { ok: true, skipped: !!skip };
+}
+
+
+// ---------- AI on the job page (3.11) ----------
+// The panel on a job site asks for these. AI reads the requirements (checked against the ad); the Fit and
+// the chance are computed here by code. Answers are cached by the ad's text, so a job is read once.
+async function llmCfg() {
+  const { llmCfg: c = null, llmCache = {} } = await chrome.storage.local.get(['llmCfg', 'llmCache']);
+  if (!c || !c.key) return null;
+  return { ...c, cache: { get: k => llmCache[k], set: async (k, v) => { llmCache[k] = v; const ks = Object.keys(llmCache); if (ks.length > 300) ks.slice(0, ks.length - 300).forEach(x => delete llmCache[x]); await chrome.storage.local.set({ llmCache }); } } };
+}
+const AGENCY_RE = /recruit|resourcing|staffing|talent|personnel|associates|consult(ing|ants)|selection|hays|randstad|adecco|harvey nash|robert (half|walters)|michael page|spencer ogden|nigel frank|computer futures|zachary daniels/i;
+function appFacts(a) {
+  return { status: a.status, history: a.history, appliedAt: a.appliedAt, title: a.title, company: a.company, location: a.location,
+    agency: AGENCY_RE.test(a.company || '') || /\bour client\b/i.test(a.description || ''), method: (a.apply || {}).method, adAge: (a.posting || {}).daysAgo, applicants: (a.posting || {}).applicants,
+    fit: a.fitPrecise && a.fitPrecise.score != null ? a.fitPrecise.score : (a.chance || {}).score, market: JT_Market.marketOf(a),
+    tailored: (a.apply || {}).cvTailored == null ? null : !!a.apply.cvTailored, cover: (a.apply || {}).cover ? !/none|unknown/.test(a.apply.cover) : null };
+}
+async function factsText() {
+  const p = await JT_Store.getProfile();
+  const { cvs = {} } = await chrome.storage.local.get('cvs');
+  return String(p.factBank && p.factBank.length > 80 ? p.factBank : (cvs.job && cvs.job.text) || '').slice(0, 4000);
+}
+async function aiJob(job) {
+  const p = await JT_Store.getProfile();
+  const cfg = await llmCfg();
+  let reqs = JT_Fit.fromAd(job.description, job.company), ai = null, error = '';
+  if (cfg) { try { ai = await JT_LLM.extract(cfg, job); if (ai.essential.length + ai.desirable.length >= 3) reqs = ai; } catch (e) { error = String(e.message || e); } }
+  const fit = JT_Fit.compute(reqs, p, job);
+  const facts = { ...appFacts({ ...job, apply: {} }), agency: ai && ai.agency != null ? ai.agency : AGENCY_RE.test(job.company || ''), fit: fit.score, market: JT_Market.marketOf(job), cover: null, tailored: null };
+  const pr = JT_Chance.predict(facts, JT_Chance.stats((await JT_Store.getApps()).map(appFacts)));
+  const strip = r => ({ text: r.text, level: r.level, note: r.note, check: r.check, w: r.w });
+  return { hasKey: !!cfg, error, source: ai && reqs === ai ? 'ai' : reqs.source,
+    fit: { score: fit.score, summary: fit.summary, essOk: fit.essOk, desOk: fit.desOk, essential: fit.essential.map(strip), desirable: fit.desirable.map(strip), lowData: fit.lowData, gaps: fit.gaps.slice(0, 6) },
+    chance: JT_Chance.describe(pr), employer: ai && ai.employer, agency: ai && ai.agency, officeDays: ai ? ai.officeDays : null, questions: ai ? ai.questions : [], dropped: ai ? ai.dropped : 0 };
+}
+async function aiLetter(job) {
+  const cfg = await llmCfg(); if (!cfg) return { error: 'no-key' };
+  const p = await JT_Store.getProfile(), facts = await factsText();
+  if (facts.length < 80) return { error: 'Upload your CV on the CV & skills page first (or fill in Facts about you).' };
+  const mk = JT_Market.marketOf(job);
+  const avail = mk === 'B' ? `${JT_Market.daysText(p.workDays) || (p.daysPerWeek || 4) + ' days a week'}${p.hoursPerWeek ? ', up to ' + p.hoursPerWeek + ' hours a week' : ''}, alongside my Computing degree; can start immediately` : 'full-time, can start immediately';
+  const sig = [p.signName, [p.signPhone, p.signLinkedIn].filter(Boolean).join(' · ')].filter(Boolean).join('\n');
+  return JT_LLM.coverLetter(cfg, { job, facts, profile: p, availability: avail, signature: sig });
+}
+async function aiAnswers(job, questions) {
+  const p = await JT_Store.getProfile();
+  const an = JT_Analyzer.analyze(job, p);
+  const out = JT_Market.answers({ ...job, salary: an.salary, workTypes: an.workTypes }, p, an).map(x => ({ q: x.q, a: x.a, src: 'profile' }));
+  const mk = JT_Market.marketOf({ ...job, workTypes: an.workTypes });
+  const own = mk === 'A' ? p.salaryA : p.salaryB;
+  const sal = out.find(x => /salary/i.test(x.q)); if (sal && own) sal.a = own;
+  const cfg = await llmCfg(), facts = await factsText();
+  if (cfg && facts.length > 80) {
+    const qs = (questions && questions.length ? questions : []).concat(['Why do you want to work for us?']).slice(0, 4);
+    for (const q of qs) { try { const a = await JT_LLM.answer(cfg, { question: q, job, facts, skills: Object.keys(p.skills || {}).filter(k => p.skills[k] === 'strong').join(', ') }); out.push({ q, a: a.trim(), src: 'ai' }); } catch (e) { break; } }
+  }
+  return { answers: out, hasKey: !!cfg };
+}
+// "For tonight": the job joins the application session and its pack is prepared now
+async function saveForSession(job) {
+  const { sessionItems = [], packs = {}, cvs = {}, templates = {}, autofillMe = {} } = await chrome.storage.local.get(['sessionItems', 'packs', 'cvs', 'templates', 'autofillMe']);
+  const key = JT_Packs.keyOf(job);
+  if (!sessionItems.some(x => x.key === key)) sessionItems.push({ key, title: job.title, company: job.company, url: job.url, location: job.location, platform: job.platform, description: String(job.description || '').slice(0, 15000), src: 'page', at: new Date().toISOString().slice(0, 10) });
+  await chrome.storage.local.set({ sessionItems });
+  const pack = await JT_Packs.build(job, { profile: await JT_Store.getProfile(), cvText: cvs.job && cvs.job.text, templates, me: autofillMe, llm: await llmCfg() });
+  packs[pack.key] = pack; await chrome.storage.local.set({ packs });
+  return { ok: true, key, count: sessionItems.length, cv: !!pack.cv, letterAi: !!pack.letterAi };
 }

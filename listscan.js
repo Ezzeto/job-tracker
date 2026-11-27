@@ -20,7 +20,7 @@
   const CACHE_DAYS = 7, MAX_CONCURRENT = 2, GAP_MS = 700;
 
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const color = n => n >= 70 ? '#23905a' : n >= 50 ? '#b47a12' : '#c0463b';
+  const color = n => n >= 70 ? '#1d6b4f' : n >= 50 ? '#a85f00' : '#c23b22';
 
   // ---------- Storage ----------
   async function loadState() {
@@ -224,8 +224,8 @@
     }
     const VL = { apply: 'Apply', tailor: 'Tailor', ask: 'Check', skip: 'Skip', incomplete: '?' };
     const txt = (res.verdict === 'incomplete' ? '?' : `${approx ? '≈' : ''}${res.score}%`) + (res.verdict && res.verdict !== 'incomplete' ? ' · ' + VL[res.verdict] : '') + (res.intern ? (res.rules === 'ok' ? ' · rules ✓' : res.rules === 'fail' ? ' · rules ✕' : res.rules === 'warn' ? ' · rules !' : res.rules ? ' · rules ?' : ' · intern') : '') + (applied ? ' ✓' : '');
-    const VC = { apply: '#23905a', tailor: '#2f7fb5', ask: '#b47a12', skip: '#c0463b', incomplete: '#7a8794' };
-    const bg = applied ? '#1d3b53' : res.verdict ? VC[res.verdict] : color(res.score);
+    const VC = { apply: '#1d6b4f', tailor: '#1d6b4f', ask: '#a85f00', skip: '#c23b22', incomplete: '#5c6a62' };
+    const bg = applied ? '#14201b' : res.verdict ? VC[res.verdict] : color(res.score);
     const title = (approx ? 'Estimate from the card text. Open the job for the full score.\n' : '') + (applied ? (elsewhere ? `Already applied for this job via ${elsewhere}\n` : 'Already in your tracker\n') : '') + (res.intern ? 'Internship\n' : '') + (res.blocks && res.blocks.length ? res.blocks.map(x => '✕ ' + x).join('\n') + '\n' : '') + (res.asks && res.asks.length ? res.asks.map(x => '! ' + x).join('\n') + '\n' : '') + res.why + (res.missing && res.missing.length ? `\nMissing: ${res.missing.join(', ')}` : '') + (res.rulesWhy ? `\n\nPlacement rules:\n${res.rulesWhy}` : '');
     if (b.dataset.t !== txt + bg) {
       b.dataset.t = txt + bg;
@@ -253,24 +253,24 @@
     shadow.innerHTML = `<style>
       :host{all:initial}
       [hidden]{display:none!important}
-      .p{position:fixed;left:16px;bottom:16px;z-index:2147483644;width:268px;background:#fbfcfd;color:#1c2733;border:1px solid #cfd8e1;border-radius:10px;
-        box-shadow:0 10px 28px rgba(20,40,60,.2);font:13px/1.4 "Segoe UI",system-ui,-apple-system,sans-serif}
-      .h{display:flex;align-items:center;gap:8px;padding:9px 11px;background:#1d3b53;color:#fff;border-radius:9px 9px 0 0;cursor:pointer;user-select:none}
+      .p{position:fixed;left:16px;bottom:16px;z-index:2147483644;width:268px;background:#fbfcfa;color:#14201b;border:1px solid #d3d9d0;border-radius:16px;
+        box-shadow:0 12px 30px rgba(10,24,18,.2);font:13px/1.4 "Golos Text","Segoe UI",system-ui,-apple-system,sans-serif}
+      .h{display:flex;align-items:center;gap:8px;padding:9px 11px;background:#14201b;color:#fff;border-radius:15px 15px 0 0;cursor:pointer;user-select:none}
       .h b{flex:1;font-size:13px}.h small{opacity:.8;font-variant-numeric:tabular-nums}
-      .c.collapsed .b{display:none}.c.collapsed .h{border-radius:9px}
+      .c.collapsed .b{display:none}.c.collapsed .h{border-radius:15px}
       .b{padding:10px 12px 12px}
       label{display:flex;align-items:center;gap:7px;margin:6px 0;font-size:12.5px;cursor:pointer}
       .row{display:flex;align-items:center;gap:8px}
-      input[type=range]{flex:1;accent-color:#1f6fa8}
+      input[type=range]{flex:1;accent-color:#1d6b4f}
       output{font-weight:700;min-width:36px;text-align:right;font-variant-numeric:tabular-nums}
       .seg{display:flex;border:1px solid #cfd8e1;border-radius:6px;overflow:hidden;margin:8px 0 4px}
       .seg button{flex:1;border:0;background:#fff;padding:5px;font:inherit;font-size:12px;cursor:pointer;color:#5a6b7d}
       .seg button+button{border-left:1px solid #cfd8e1}
-      .seg button[aria-pressed=true]{background:#1d3b53;color:#fff}
+      .seg button[aria-pressed=true]{background:#14201b;color:#fff}
       .note{font-size:11.5px;color:#5a6b7d;margin-top:6px}
       .lg{display:flex;gap:10px;font-size:11px;color:#5a6b7d;margin-top:8px}
       .lg i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:3px;vertical-align:-1px}
-      :focus-visible{outline:2px solid #2f7fb5;outline-offset:1px}
+      :focus-visible{outline:2px solid #1d6b4f;outline-offset:1px}
     </style>
     <div class="p"><div class="c">
       <div class="h" role="button" tabindex="0" aria-label="Filter by fit"><b>Filter by fit</b><small id="cnt"></small><span id="arr">▾</span></div>
@@ -285,7 +285,7 @@
         <label><input type="checkbox" id="hidePlacementFail"> Hide internships that break my placement rules</label>
         <label id="fetchRow"><input type="checkbox" id="fetch"> Full score (load each description, slower)</label>
         <label><input type="checkbox" id="enabled"> Show scores in results</label>
-        <div class="lg"><span><i style="background:#23905a"></i>70+</span><span><i style="background:#b47a12"></i>50–69</span><span><i style="background:#c0463b"></i>&lt;50</span><span>≈ estimate</span></div>
+        <div class="lg"><span><i style="background:#1d6b4f"></i>70+</span><span><i style="background:#a85f00"></i>50–69</span><span><i style="background:#c23b22"></i>&lt;50</span><span>≈ estimate</span></div>
         <div class="note" id="status"></div>
       </div></div></div>`;
     document.documentElement.appendChild(host);

@@ -13,15 +13,15 @@
     <div class="brand"><span class="logo" aria-hidden="true"></span><span>Job Tracker</span></div>
     <a href="#overview" data-view="overview">Overview</a>
     <a href="#apps" data-view="apps">Applications <span class="count" id="navCount"></span></a>
+    <a href="session.html">Application session</a>
     <a href="#followups" data-view="followups">Follow-ups <span class="count" id="navFu"></span></a>
     <a href="#plan" data-view="plan">Weekly plan</a>
+    <a href="#cv" data-view="cv">CV &amp; skills</a>
     <a href="#templates" data-view="templates">Templates</a>
     <a href="#offers" data-view="offers">Offers <span class="count" id="navOffers"></span></a>
     <a href="#intern" data-view="intern">Internships <span class="count" id="navIntern"></span></a>
-    <a href="#cv" data-view="cv">CV &amp; ATS</a>
-    <a href="#settings" data-view="settings">Skills &amp; settings</a>
+    <a href="#settings" data-view="settings">Settings</a>
     <a href="#data" data-view="data">Data</a>
-    <a href="session.html">Application session</a>
     <label class="side-lang"><span>Language</span><select id="langSel"><option value="en">English</option><option value="ru">Русский</option></select></label>
     <div class="side-foot">All data stays in this browser unless you connect a Google Sheet.</div>
   </nav>
@@ -154,9 +154,21 @@
     </section>
 
     <section id="view-cv" class="view" hidden>
-      <header class="top"><h1>CV &amp; ATS</h1></header>
+      <header class="top"><h1>CV &amp; skills</h1></header>
       <p class="hint" style="margin:-6px 0 16px">Drop in your CV and skill levels are set for you: your skills section and work experience count as confident; working knowledge, basic, in progress and projects count as basic. Fit is recalculated for every application of that type, and the CV is checked the way an applicant tracking system reads it. The file is read in your browser and never uploaded.</p>
       <div class="grid2" id="cvCards"></div>
+      <div class="panel">
+        <h2>Facts about you: the only source for AI</h2>
+        <p class="hint">Letters, form answers, interview prep and CV prompts use only these facts (empty: your uploaded CV). One true fact per line, with dates and numbers. Synced to the phone app, so both write from the same facts.</p>
+        <textarea id="pFacts" rows="12" style="width:100%" placeholder="Freelance IT support, Sep 2018 – present&#10;- Set up and repaired Windows laptops and home networks for local clients&#10;Home lab, 2025 – present&#10;- Built a Windows Server domain with Active Directory, Group Policy and Entra ID&#10;- Enrolled devices in Intune; logged and closed tickets in osTicket"></textarea>
+      </div>
+      <div class="panel">
+        <div class="track-seg" id="skTrack" role="group" aria-label="Skills profile" style="margin-bottom:10px"><button data-t="job">Jobs</button><button data-t="intern">Internships</button></div>
+        <div class="row-between"><h2>My skills</h2>
+          <div class="btns"><button class="btn" id="resetSkills">Clear all skills</button><button class="btn primary" id="recalcAll">Recalculate fit for all applications</button></div></div>
+        <p class="hint">The fit score compares the tools named in a job ad with this list, then adjusts for seniority, years of experience, driving licence, clearance and hours. It is a guide, not a prediction.</p>
+        <div id="skillsGrid"></div>
+      </div>
     </section>
 
     <section id="view-offers" class="view" hidden>
@@ -166,7 +178,36 @@
 
     <!-- SETTINGS -->
     <section id="view-settings" class="view" hidden>
-      <header class="top"><h1>Skills &amp; settings</h1></header>
+      <header class="top"><h1>Settings</h1></header>
+      <div class="panel" id="importPanel">
+        <h2>Settings file</h2>
+        <p class="hint">Fastest way to set everything up: import a <code>job-tracker-settings-*.json</code> file. It fills in the settings below, your skills, form details and templates; applications are never touched.</p>
+        <div class="settings-import"><label class="btn file">Import a settings file (JSON)<input type="file" id="importSettings" accept=".json,application/json" hidden></label></div>
+        <p class="msg" id="importMsg" role="status"></p>
+      </div>
+      <div class="panel" id="aiPanel">
+        <h2>AI</h2>
+        <p class="hint">One free key: Groq (console.groq.com/keys, best, also does speech), Gemini (aistudio.google.com/apikey) or OpenRouter (openrouter.ai/keys). Used for application packs, letters, form answers and the weekly plan. Kept only in this browser: never synced, exported or sent to the sheet. The phone app has its own key in its Settings → AI.</p>
+        <div class="form-grid">
+          <label>Key<input type="password" id="aiKey" placeholder="gsk_… / AIza… / sk-or-…" autocomplete="off"></label>
+          <label>Model (can stay empty)<input type="text" id="aiModel" placeholder="chosen from the key"></label>
+        </div>
+        <div class="btns" style="margin-top:10px"><button class="btn" id="aiTest">Check the key</button><span class="hint" id="aiMsg" style="margin:0"></span></div>
+      </div>
+      <div class="panel" id="marketsPanel">
+        <h2>Two job searches: markets A and B</h2>
+        <p class="hint">Market B — IT work alongside study (part-time, weekends, term-time), the main priority. Market A — full-time only when it is worth a study break: a known company, pay at or above the threshold and a clear path up. The phone app reads these settings from the sheet.</p>
+        <div class="form-grid">
+          <label>Applications a week, market B<input type="number" id="mTargetB" min="0" max="40"></label>
+          <label>Applications a week, market A<input type="number" id="mTargetA" min="0" max="40"></label>
+          <label>Cold emails a week (employers nearby)<input type="number" id="mTargetC" min="0" max="40"></label>
+          <label>Salary threshold for market A, £ a year<input type="number" id="mThreshold" min="15000" max="100000" step="500"></label>
+          <label>Salary to give, market B<input type="text" id="mSalaryB" placeholder="£12.50 an hour, pro rata"></label>
+          <label>Salary to give, market A<input type="text" id="mSalaryA" placeholder="£30,000–£35,000"></label>
+          <label class="full">Days with classes (hatched on the phone's week strip; never offered for interviews)<span class="chips" id="mStudy"></span></label>
+          <label class="full">Companies worth a study break, comma-separated (big tech, known tech brands, fintech)<textarea id="mBig" rows="3"></textarea></label>
+        </div>
+      </div>
       <div class="panel">
         <h2>How you can work</h2>
         <div class="form-grid">
@@ -190,29 +231,6 @@
           <label>Longest journey, km in a straight line<input type="number" id="pCommute" min="5" max="300" placeholder="50"></label>
         </div>
       </div>
-      <div class="panel" id="marketsPanel">
-        <h2>Two job searches: markets A and B</h2>
-        <p class="hint">Market B — IT work alongside study (part-time, weekends, term-time), the main priority. Market A — full-time only when it is worth a study break: a known company, pay at or above the threshold and a clear path up. The phone app reads these settings from the sheet.</p>
-        <div class="form-grid">
-          <label>Applications a week, market B<input type="number" id="mTargetB" min="0" max="40"></label>
-          <label>Applications a week, market A<input type="number" id="mTargetA" min="0" max="40"></label>
-          <label>Cold emails a week (employers nearby)<input type="number" id="mTargetC" min="0" max="40"></label>
-          <label>Salary threshold for market A, £ a year<input type="number" id="mThreshold" min="15000" max="100000" step="500"></label>
-          <label>Salary to give, market B<input type="text" id="mSalaryB" placeholder="£12.50 an hour, pro rata"></label>
-          <label>Salary to give, market A<input type="text" id="mSalaryA" placeholder="£30,000–£35,000"></label>
-          <label class="full">Days with classes (hatched on the phone's week strip; never offered for interviews)<span class="chips" id="mStudy"></span></label>
-          <label class="full">Companies worth a study break, comma-separated (big tech, known tech brands, fintech)<textarea id="mBig" rows="3"></textarea></label>
-        </div>
-      </div>
-      <div class="panel" id="aiPanel">
-        <h2>AI</h2>
-        <p class="hint">One free key: Groq (console.groq.com/keys, best, also does speech), Gemini (aistudio.google.com/apikey) or OpenRouter (openrouter.ai/keys). Used for application packs, letters, form answers and the weekly plan. Kept only in this browser: never synced, exported or sent to the sheet. The phone app has its own key in its Settings → AI.</p>
-        <div class="form-grid">
-          <label>Key<input type="password" id="aiKey" placeholder="gsk_… / AIza… / sk-or-…" autocomplete="off"></label>
-          <label>Model (can stay empty)<input type="text" id="aiModel" placeholder="chosen from the key"></label>
-        </div>
-        <div class="btns" style="margin-top:10px"><button class="btn" id="aiTest">Check the key</button><span class="hint" id="aiMsg" style="margin:0"></span></div>
-      </div>
       <div class="panel" id="formPanel">
         <h2>Details for application forms</h2>
         <p class="hint">Filled into application forms by <b>Fill in the form</b>. Kept only in this browser. Right to work: Yes; sponsorship: No; driving licence from the box above; diversity questions: Prefer not to say; consent boxes are always left to you.</p>
@@ -227,8 +245,7 @@
       </div>
       <div class="panel">
         <h2>Follow-ups: signature and email</h2>
-        <div class="settings-import"><label class="btn file">Import a settings file (JSON)<input type="file" id="importSettings" accept=".json,application/json" hidden></label><span class="hint" style="margin:0">Fills in these settings and the templates. Applications and skills are not touched.</span></div>
-        <p class="msg" id="importMsg" role="status"></p>
+        
         <div class="form-grid">
           <label>Name in signature<input type="text" id="pSignName"></label>
           <label>Phone<input type="text" id="pSignPhone"></label>
@@ -239,11 +256,6 @@
           <label class="full">Short pitch for LinkedIn notes<input type="text" id="pPitch" placeholder="Second-year Computing with AI student building Python and FastAPI projects"></label>
           <label class="full">One or two sentences about you for emails and calls<textarea id="pHighlights" rows="2" placeholder="I build Python back ends with FastAPI and PostgreSQL, and bring seven years of hands-on IT support."></textarea></label>
         </div>
-      </div>
-      <div class="panel">
-        <h2>Facts about you: the only source for AI</h2>
-        <p class="hint">Letters, form answers, interview prep and CV prompts use only these facts (empty: your uploaded CV). One true fact per line, with dates and numbers. Synced to the phone app, so both write from the same facts.</p>
-        <textarea id="pFacts" rows="12" style="width:100%" placeholder="Freelance IT support, Sep 2018 – present&#10;- Set up and repaired Windows laptops and home networks for local clients&#10;Home lab, 2025 – present&#10;- Built a Windows Server domain with Active Directory, Group Policy and Entra ID&#10;- Enrolled devices in Intune; logged and closed tickets in osTicket"></textarea>
       </div>
       <div class="panel" id="sheetPanel">
         <div class="row-between"><h2>Google Sheet</h2><span class="sync-state" id="syncState"></span></div>
@@ -276,13 +288,6 @@
         <div class="btns" style="margin-top:12px"><button class="btn primary" id="phoneCopy">Copy connection link</button></div>
         <p class="msg" id="phoneMsg" role="status"></p>
         <p class="hint" style="margin:0">Open the copied link on your phone (send it to yourself in a chat or email): the app connects to your sheet by itself. The link holds your sync token, so send it only to yourself.</p>
-      </div>
-      <div class="panel">
-        <div class="track-seg" id="skTrack" role="group" aria-label="Skills profile" style="margin-bottom:10px"><button data-t="job">Jobs</button><button data-t="intern">Internships</button></div>
-        <div class="row-between"><h2>My skills</h2>
-          <div class="btns"><button class="btn" id="resetSkills">Clear all skills</button><button class="btn primary" id="recalcAll">Recalculate fit for all applications</button></div></div>
-        <p class="hint">The fit score compares the tools named in a job ad with this list, then adjusts for seniority, years of experience, driving licence, clearance and hours. It is a guide, not a prediction.</p>
-        <div id="skillsGrid"></div>
       </div>
     </section>
 

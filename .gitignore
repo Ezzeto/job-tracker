@@ -19,3 +19,6 @@ job-tracker-*.csv
 # Python
 __pycache__/
 dist-app/
+
+# Personal settings files for import (names, email): never commit
+settings-files/
