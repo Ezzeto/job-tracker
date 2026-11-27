@@ -40,7 +40,7 @@
   async function run() {
     render('<div class="p"><h3>Заполняю…</h3></div>');
     ctx = await send({ type: 'autofillData', url: location.href, title: document.title, text: (document.body.innerText || '').slice(0, 3000) });
-    if (!ctx || !ctx.me) { render('<div class="p"><h3>Нет данных для анкеты</h3><p class="m">Заполни имя, email и телефон в Job Tracker → «Сессия откликов» → Данные для анкет.</p><div class="row"><button class="s" id="set">Открыть</button><button class="s" id="cl">Закрыть</button></div></div>'); shadow.getElementById('set').onclick = () => send({ type: 'openSession', hash: '#me' }); shadow.getElementById('cl').onclick = button; return; }
+    if (!ctx || !ctx.me) { render('<div class="p"><h3>Нет данных для анкеты</h3><p class="m">Заполни имя, email и телефон: Job Tracker → Skills &amp; settings → Details for application forms.</p><div class="row"><button class="s" id="set">Открыть</button><button class="s" id="cl">Закрыть</button></div></div>'); shadow.getElementById('set').onclick = () => send({ type: 'openDashboard', hash: '#settings' }); shadow.getElementById('cl').onclick = button; return; }
     const files = {};
     if (ctx.cv && ctx.cv.b64) files.cv = { name: ctx.cv.name, type: ctx.cv.type, bytes: Uint8Array.from(atob(ctx.cv.b64), c => c.charCodeAt(0)) };
     lastRep = AF.fill(document, ctx, files);

@@ -16,11 +16,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  # Build and deploy are separate jobs (GitHub's own Pages template): in one job the deploy step could
+  # look for the artifact a moment before GitHub had registered it and fail with "No artifacts found"
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,5 +31,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist-app
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - id: deploy
         uses: actions/deploy-pages@v4

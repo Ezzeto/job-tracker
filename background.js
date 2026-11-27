@@ -128,7 +128,7 @@ async function autofillData(msg, sender) {
   const platform = pack && pack.job.platform && pack.job.platform !== 'Company website' ? pack.job.platform : '';
   return {
     me, packKey: pack ? pack.key : '', job: pack ? { title: pack.job.title, company: pack.job.company, url: pack.job.url } : null,
-    answers: pack ? pack.answers : generic, letter: pack ? pack.letter : '', salary: pack ? pack.salary : autofillMe.salaryB || '',
+    answers: pack ? pack.answers : generic, letter: pack ? pack.letter : '', salary: pack ? pack.salary : p.salaryB || autofillMe.salaryB || '',
     notice: autofillMe.notice || 'Immediately', source: platform || (autofillMe.source || ''), cv: pack && pack.cv ? pack.cv : null,
     ai: !!(llmCfg && llmCfg.key), next: !!(session && session.queue && session.index < session.queue.length - 1),
   };

@@ -82,6 +82,11 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   const mkRu = m => (m === 'A' ? 'А' : 'Б');
   const verdictId = label => Object.keys(A.VERDICTS).find(k => A.VERDICTS[k].label === label) || '';
 
+  // Targets, class days and facts are set once in the extension (Skills & settings) and reach the phone with the
+  // profile; the phone's own values are only used until the extension has sent them.
+  const targets = () => { const t = (st.profile || {}).targets; return t && typeof t.B === 'number' ? t : st.local.targets; };
+  const studyDays = () => { const d = (st.profile || {}).studyDays; return Array.isArray(d) ? d : st.local.studyDays || [3, 4]; };
+  const factsText = () => { const own = st.local.facts; if (own && own !== DEFAULT_FACTS) return own; const fb = (st.profile || {}).factBank; return fb && fb.length >= 80 ? fb : DEFAULT_FACTS; };
   function profile() {
     const d = JSON.parse(JSON.stringify(A.DEFAULT_PROFILE));
     const p = st.profile || {};
@@ -382,7 +387,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     const user = [
       `JOB TITLE: ${job.title || 'not stated'}`, `EMPLOYER: ${job.company || 'not stated'}`,
       'JOB AD:', '"""', String(job.description || '').slice(0, 6000), '"""',
-      'FACTS:', '"""', String(st.local.facts || DEFAULT_FACTS).slice(0, 3000), '"""',
+      'FACTS:', '"""', String(factsText()).slice(0, 3000), '"""',
       `SKILLS (confident): ${sk.strong.join(', ') || 'see facts'}`, `SKILLS (basic, say "familiar with"): ${sk.basic.join(', ') || 'none'}`,
       `AVAILABILITY: ${avail}`, why ? `WHY THIS EMPLOYER: ${why}` : '',
     ].filter(Boolean).join('\n');
@@ -390,14 +395,14 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     text = text.replace(/\n+(kind regards|best regards|yours (sincerely|faithfully)|regards)[\s\S]*$/i, '').trim();
     const sig = [p.signName, [p.signPhone, p.signLinkedIn].filter(Boolean).join(' · ')].filter(Boolean).join('\n');
     // Tools the letter names that are neither in the facts nor in the skills profile
-    const known = new Set([...sk.strong, ...sk.basic, ...A.extractTools(st.local.facts || '')]);
+    const known = new Set([...sk.strong, ...sk.basic, ...A.extractTools(factsText())]);
     const warn = A.extractTools(text).filter(t => !known.has(t));
     return { text: text + '\n\nKind regards,\n' + (sig || '[My name]'), warn };
   }
   function claudePrompt(app) {
     const p = profile();
     const why = String(st.local.why || '').trim();
-    return P.build(app, { ...p, factBank: st.local.facts || DEFAULT_FACTS }, { letter: why.length >= 20, why });
+    return P.build(app, { ...p, factBank: factsText() }, { letter: why.length >= 20, why });
   }
   async function copy(text, btn) {
     try { await navigator.clipboard.writeText(text); if (btn) { const t = btn.textContent; btn.textContent = 'Скопировано'; setTimeout(() => { btn.textContent = t; }, 1500); } else toast('Скопировано'); }
@@ -450,7 +455,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     sh.hidden = false; $('#scrim').hidden = false;
     let busy = [];
     try { const d = await api('GET', { action: 'slots', days: '10' }); busy = d.busy || []; } catch (e) { toast(String(e.message || e)); }
-    const study = st.local.studyDays || [3, 4];
+    const study = studyDays();
     const slots = AS.freeSlots(busy, { studyDays: study });
     const r = it.rowId && rowById(it.rowId), p = profile();
     const name = /\s/.test(it.from || '') && !/@/.test(it.from) ? it.from : '';
@@ -482,8 +487,8 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   }
 
   function viewToday() {
-    const w = weekData(), t = st.local.targets, L = todayLists(), p = profile();
-    const study = st.local.studyDays || [];
+    const w = weekData(), t = targets(), L = todayLists(), p = profile();
+    const study = studyDays();
     const DN = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
     const strip = w.days.map((x, i) => `<div class="day${study.includes(i) ? ' study' : ''}${i === w.dow ? ' today' : ''}"><div class="col" aria-label="${DN[i]}: ${x.apps.length} откликов">${x.apps.slice(0, 7).map(a => `<i class="${a.market}"></i>`).join('')}${Array.from({ length: Math.min(x.cold, 3) }, () => '<i class="C"></i>').join('')}</div><div class="lbl">${DN[i]}<small>${x.d.getDate()}</small></div></div>`).join('');
     const goal = (cls, n, of, label, hint) => `<div class="goal ${cls}"><b>${n}<span> / ${of}</span></b><div class="bar"><i style="width:${Math.min(100, of ? n / of * 100 : 0)}%"></i></div><small>${label}${hint ? '<br>' + hint : ''}</small></div>`;
@@ -534,7 +539,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       ${alertsHtml()}
       ${due ? `<div class="sec-h"><h2>Следующий шаг <span class="n">${L.due.length}</span></h2></div><div class="group">${due}</div>` : ''}
       ${follow ? `<div class="sec-h"><h2>Follow-up <span class="n">${L.follow.length}</span></h2>${L.follow.length > 8 ? `<span class="small muted">первые 8 из ${L.follow.length}</span>` : ''}</div><div class="group">${follow}</div>` : ''}
-      ${(() => { const em = st.local.employers || []; const due = OR.followUpsDue(em).length; const left = Math.max(0, st.local.targets.C - weekData().C); return em.length && (due || left) ? `<a class="paper tight" href="#employers" style="text-decoration:none;color:var(--ink);flex-direction:row;align-items:center;gap:12px"><span class="grow"><b>Холодные письма</b><br><span class="small muted">${left ? `ещё ${left} до цели недели` : 'цель недели выполнена'}${due ? ` · второе письмо: ${due}` : ''}</span></span><span class="btn go sm">Открыть</span></a>` : ''; })()}
+      ${(() => { const em = st.local.employers || []; const due = OR.followUpsDue(em).length; const left = Math.max(0, targets().C - weekData().C); return em.length && (due || left) ? `<a class="paper tight" href="#employers" style="text-decoration:none;color:var(--ink);flex-direction:row;align-items:center;gap:12px"><span class="grow"><b>Холодные письма</b><br><span class="small muted">${left ? `ещё ${left} до цели недели` : 'цель недели выполнена'}${due ? ` · второе письмо: ${due}` : ''}</span></span><span class="btn go sm">Открыть</span></a>` : ''; })()}
       ${L.stale.length ? `<div class="sec-h"><h2>Месяц без ответа <span class="n">${L.stale.length}</span></h2></div><div class="paper tight"><p class="small muted">Отклики старше 30 дней без ответа и без follow-up. Закрой их, чтобы статистика была честной.</p><button class="btn line block" id="staleAll">Отметить все как «Нет ответа»</button></div>` : ''}
       ${later ? `<div class="sec-h"><h2>Откликнуться с ПК <span class="n">${st.local.later.length}</span></h2></div><div class="group">${later}</div>` : ''}
       ${nothing && st.cfg ? `<div class="empty"><b>Срочных дел нет</b>Разбери новую вакансию или напиши местному работодателю.<div class="row" style="justify-content:center;margin-top:12px"><a class="btn go sm" href="#check">Разобрать вакансию</a><a class="btn line sm" href="#employers">Работодатели рядом</a></div></div>` : ''}
@@ -572,7 +577,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       <section id="result" class="paper">
         ${r.dup ? `<div class="note">Уже в таблице: <b>${esc(r.dup.ticket || '')}</b>, ${esc(RU[idOf(r.dup.status)] || r.dup.status)}. <a href="#" data-open="${esc(r.dup.id)}">Открыть</a></div>` : ''}
         <div><h2>${esc(r.job.title)}</h2><p class="small muted">${esc(r.job.company || 'компания не указана')}</p></div>
-        <div class="verdict" style="--c:${v[1]}"><div class="score">${esc(d.text)}</div><div><div class="v">${v[0]}</div><p class="small muted">${esc(tr(d.hint || ''))}</p></div></div>
+        <div class="verdict" style="--c:${v[1]}"><div class="score" title="Точный Fit по требованиям вакансии">${esc(r.fit && r.fit.score != null && c.verdict !== 'skip' ? r.fit.score + '%' : d.text)}</div><div><div class="v">${v[0]}</div><p class="small muted">${esc(tr(d.hint || ''))}</p></div></div>
         <div class="tags">${tags}</div>
         ${officeBad ? `<div class="note bad">Для работы с учёбой не подходит: офис ${r.office} ${plural(r.office, 'день', 'дня', 'дней')} в неделю.</div>` : ''}
         ${worthWhy ? `<div class="note small">Full-time без признаков «стоит академа»: ${esc(worthWhy)}.</div>` : ''}
@@ -607,7 +612,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     const f = r.fit, d = r.chanceD; if (!f) return '';
     const src = r.ai ? `требования прочитал AI (${providerName()})${r.ai.dropped ? `, ${r.ai.dropped} выдуманных строк отброшено` : ''}` : r.aiBusy ? 'AI читает требования…' : f.source === 'ad' ? 'требования из разделов вакансии' : 'требования по названным инструментам — приблизительно';
     return `<div class="paper tight" style="background:var(--paper-2);border:0">
-      <div class="split"><div><p class="tiny muted">Точный Fit</p><p style="font-size:26px;font-weight:750;letter-spacing:-.03em">${f.score == null ? '—' : f.score + '%'}</p></div>
+      <div class="split"><div><p class="tiny muted">Требования</p><p style="font-size:26px;font-weight:750;letter-spacing:-.03em">${f.essOk}/${f.essential.length}</p><p class="tiny muted">обязательных</p></div>
         <div><p class="tiny muted">Шанс приглашения</p><p style="font-size:${d.main.length > 8 ? 16 : 26}px;font-weight:750;letter-spacing:-.02em;line-height:1.25">${esc(d.main)}</p><p class="tiny muted">${esc(d.sub)}</p></div></div>
       <p class="small">${esc(f.summary)}</p>
       ${d.why ? `<p class="small muted">Шанс: ${esc(d.why)}${d.note ? '. ' + esc(d.note) : ''}</p>` : d.note ? `<p class="small muted">${esc(d.note)}</p>` : ''}
@@ -726,7 +731,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       <p class="tiny muted">Время отклика замеряется с телефона (от разбора до «Я откликнулся»); где замера нет — оценка: Easy Apply 5 мин, форма на сайте 15, сайт компании 30, письмо 10, +10 за подгонку CV, +15 за письмо.</p>`;
   }
   function viewReview() {
-    const apps = st.rows.map(plainApp), w = RV.week(apps), t = st.local.targets, k = weekKey();
+    const apps = st.rows.map(plainApp), w = RV.week(apps), t = targets(), k = weekKey();
     const note = (st.local.reviews || {})[k];
     const cell = (label, a, b) => `<div class="kpi"><b>${a}</b><span>${label}${b != null ? ` · было ${b}` : ''}</span></div>`;
     return `<div><h1>Неделя</h1><p class="lead">Что сделано, что сработало и что делать дальше. Цифры считает трекер, выводы пишет AI.</p></div>
@@ -745,7 +750,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     try {
       const text = await LLM.chat(aiCfg(), [
         { role: 'system', content: 'You are a job search coach for a UK IT support student. Write in Russian. Be specific and honest about small samples (say when numbers are too small to conclude). No invented numbers: use only the ones given.' },
-        { role: 'user', content: `Numbers:\n${RV.summaryForAi(w, st.local.targets, extra)}\n\nWrite: "Что сработало" (up to 3 bullets), "Что не сработало" (up to 3 bullets), "План на неделю" (4–5 concrete actions with numbers, market B first: part-time IT alongside study, then market A only for roles worth a study break). Plain text, short bullets.` },
+        { role: 'user', content: `Numbers:\n${RV.summaryForAi(w, targets(), extra)}\n\nWrite: "Что сработало" (up to 3 bullets), "Что не сработало" (up to 3 bullets), "План на неделю" (4–5 concrete actions with numbers, market B first: part-time IT alongside study, then market A only for roles worth a study break). Plain text, short bullets.` },
       ], { temperature: 0.4, cacheKey: false });
       st.local.reviews = { ...(st.local.reviews || {}), [weekKey()]: text.trim() }; save();
     } catch (e) { toast(String(e.message || e)); }
@@ -785,7 +790,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     try {
       const text = await LLM.chat(aiCfg(), [
         { role: 'system', content: `You prepare an entry-level IT support candidate for an interview. Write in Russian, but keep example answers in English. ${LLM.NO_INVENT} Mark anything about the company that is not in the ad as "проверь" — you have no internet access.` },
-        { role: 'user', content: `Company: ${r.company}\nRole: ${r.title}\nLocation: ${r.location || ''}\nAD:\n<<<\n${String(r.description || '').slice(0, 6000)}\n>>>\nCANDIDATE FACTS:\n<<<\n${st.local.facts || DEFAULT_FACTS}\n>>>\nWrite these sections:\n1. Чем занимается компания (2–3 строки, что известно; остальное — «проверь»).\n2. Что на самом деле за роль (по тексту вакансии): главные задачи и инструменты.\n3. 6 вероятных вопросов на интервью; к каждому — какую историю из фактов кандидата рассказать (по STAR, коротко) и одну фразу-начало ответа на английском.\n4. Пробелы: что просят, а у кандидата нет, и как честно ответить.\n5. 3 умных вопроса работодателю (на английском).\n6. Чек-лист на день интервью (5 пунктов).` },
+        { role: 'user', content: `Company: ${r.company}\nRole: ${r.title}\nLocation: ${r.location || ''}\nAD:\n<<<\n${String(r.description || '').slice(0, 6000)}\n>>>\nCANDIDATE FACTS:\n<<<\n${factsText()}\n>>>\nWrite these sections:\n1. Чем занимается компания (2–3 строки, что известно; остальное — «проверь»).\n2. Что на самом деле за роль (по тексту вакансии): главные задачи и инструменты.\n3. 6 вероятных вопросов на интервью; к каждому — какую историю из фактов кандидата рассказать (по STAR, коротко) и одну фразу-начало ответа на английском.\n4. Пробелы: что просят, а у кандидата нет, и как честно ответить.\n5. 3 умных вопроса работодателю (на английском).\n6. Чек-лист на день интервью (5 пунктов).` },
       ], { temperature: 0.4, maxTokens: 2200, cacheKey: false });
       st.local.briefs = { ...(st.local.briefs || {}), [r.id]: text.trim() }; save();
     } catch (e) { toast(String(e.message || e)); }
@@ -820,7 +825,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     try {
       const text = await LLM.chat(aiCfg(), [
         { role: 'system', content: `You coach a UK entry-level IT support candidate on salary negotiation. Russian explanations, English scripts. ${LLM.NO_INVENT} Polite, short, no ultimatums.` },
-        { role: 'user', content: `Offer: ${o.company || 'the employer'}, £${m.year} a year (£${m.hourly}/h), ${o.hours || 37.5} h/week, ${o.days || 5} days. Commute: ${o.commuteMin || 0} min each way, £${o.commuteCost || 0}/day; effective £${m.effective}/h. Median salary in the candidate's saved job ads: £${median || 'unknown'}. Suggested ask (computed): £${ask}.\nFACTS:\n<<<\n${st.local.facts || DEFAULT_FACTS}\n>>>\nWrite: 1) стоит ли торговаться и почему (2 строки); 2) email на английском с просьбой о £${ask} или о компенсации дороги/гибком графике; 3) фразы для звонка (3–4); 4) что ответить, если откажут.` },
+        { role: 'user', content: `Offer: ${o.company || 'the employer'}, £${m.year} a year (£${m.hourly}/h), ${o.hours || 37.5} h/week, ${o.days || 5} days. Commute: ${o.commuteMin || 0} min each way, £${o.commuteCost || 0}/day; effective £${m.effective}/h. Median salary in the candidate's saved job ads: £${median || 'unknown'}. Suggested ask (computed): £${ask}.\nFACTS:\n<<<\n${factsText()}\n>>>\nWrite: 1) стоит ли торговаться и почему (2 строки); 2) email на английском с просьбой о £${ask} или о компенсации дороги/гибком графике; 3) фразы для звонка (3–4); 4) что ответить, если откажут.` },
       ], { temperature: 0.4, maxTokens: 1500, cacheKey: false });
       o.script = text.trim(); save(); render();
     } catch (e) { out.innerHTML = `<p class="small" style="color:var(--red)">${esc(e.message)}</p>`; }
@@ -838,7 +843,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       return !q || [r.title, r.company, r.ticket, r.location].join(' ').toLowerCase().includes(q);
     }).sort((x, y) => String(y.appliedAt).localeCompare(String(x.appliedAt)) || (y.updated || 0) - (x.updated || 0));
   }
-  const rowHtml = r => { const id = idOf(r.status), a = toApp(r); const fu = parseFollow(r.followup).length; return `<button class="app-row" data-open="${esc(r.id)}">${dot(id)}<span class="t">${esc(r.title || 'Без названия')}</span><span class="r"><b>${esc(RU[id] || id)}</b>${esc(ago(r.appliedAt))}</span><span class="m">${esc([r.company, a.market === 'A' ? 'рынок А' : 'рынок Б', r.chance !== '' && r.chance != null ? `fit ${r.chance}%` : '', fu ? `✉ ${fu}` : ''].filter(Boolean).join(', '))}</span></button>`; };
+  const rowHtml = r => { const id = idOf(r.status), a = toApp(r); const fu = parseFollow(r.followup).length; return `<button class="app-row" data-open="${esc(r.id)}">${dot(id)}<span class="t">${esc(r.title || 'Без названия')}</span><span class="r"><b>${esc(RU[id] || id)}</b>${esc(ago(r.appliedAt))}</span><span class="m">${esc([r.company, a.market === 'A' ? 'рынок А' : 'рынок Б', r.fit2 !== '' && r.fit2 != null ? `fit ${r.fit2}%` : r.chance !== '' && r.chance != null ? `≈fit ${r.chance}%` : '', fu ? `✉ ${fu}` : ''].filter(Boolean).join(', '))}</span></button>`; };
   function viewApps() {
     const list = filtered();
     const F_ = [['active', 'В работе'], ['replied', 'Ответили'], ['closed', 'Закрытые'], ['all', 'Все']];
@@ -1132,7 +1137,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     st.osmBusy = false; render();
   }
   function viewEmployers() {
-    const list = employers(), f = st.empFilter, w = weekData(), t = st.local.targets, o = st.local.outreach;
+    const list = employers(), f = st.empFilter, w = weekData(), t = targets(), o = st.local.outreach;
     const q5 = OR.queue(list, 5), due = OR.followUpsDue(list);
     const qset = new Set(q5.map(e => e.id));
     const term = (st.empQ || '').toLowerCase();
@@ -1185,9 +1190,9 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     if (ai) ai.onclick = async () => {
       const out = $('#eAiOut'); out.innerHTML = '<p class="small muted">Пишу…</p>';
       try {
-        const text = await LLM.draft(aiCfg(), { task: `Write a short speculative email (under 130 words) to ${e.name} (${typeLabel(e.type)} in ${e.town || 'the area'}, near Bishop's Stortford) asking about part-time or weekend 1st line IT support work alongside a Computing degree, available 3–4 days a week including weekends. Make the second sentence specific to this kind of employer. End with a polite ask for a short chat. No sign-off.`, facts: st.local.facts || DEFAULT_FACTS, words: 120 });
+        const text = await LLM.draft(aiCfg(), { task: `Write a short speculative email (under 130 words) to ${e.name} (${typeLabel(e.type)} in ${e.town || 'the area'}, near Bishop's Stortford) asking about part-time or weekend 1st line IT support work alongside a Computing degree, available 3–4 days a week including weekends. Make the second sentence specific to this kind of employer. End with a polite ask for a short chat. No sign-off.`, facts: factsText(), words: 120 });
         const p = profile(); const full = text.trim() + `\n\n${st.local.cvLink ? 'My CV: ' + st.local.cvLink + '\n\n' : ''}Kind regards,\n${p.signName || '[My name]'}${p.signPhone ? '\n' + p.signPhone : ''}`;
-        const warn = LLM.unknownTools(full, st.local.facts || DEFAULT_FACTS, profile());
+        const warn = LLM.unknownTools(full, factsText(), profile());
         out.innerHTML = `<textarea class="out" id="eAiText">${esc(full)}</textarea>${warn.length ? `<p class="small" style="color:var(--red)">Проверь: ${esc(warn.join(', '))} нет в твоих фактах.</p>` : ''}<a class="btn go block" id="eAiSend" target="_blank" rel="noopener">Открыть в почте</a>`;
         const send = $('#eAiSend'); const upd = () => { send.href = mailHref($('#eEmail').value.trim(), m.subject, $('#eAiText').value); };
         upd(); $('#eAiText').oninput = upd; send.addEventListener('click', () => mailSent(e.id, false));
@@ -1259,11 +1264,14 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
         <button class="btn go" id="cfgSave">Сохранить и проверить</button><div id="cfgMsg" class="small"></div>
         ${st.scriptVersion ? `<p class="small ${st.scriptVersion < 17 ? '' : 'muted'}" ${st.scriptVersion < 17 ? 'style="color:var(--amber)"' : ''}>Code.gs версии ${st.scriptVersion}${st.scriptVersion < 17 ? ' — обнови до 17: письма из Gmail и отметки follow-up с телефона' : ''}.</p>` : ''}
       </section>
-      <section class="paper"><h2>Цели на неделю</h2><div class="goals">
+      <section class="paper"><h2>Цели на неделю и рынки А/Б</h2>
+        ${(st.profile || {}).targets ? `<p>Рынок Б: <b>${targets().B}</b> · рынок А: <b>${targets().A}</b> · холодных писем: <b>${targets().C}</b> в неделю. Дни с парами: ${studyDays().map(i => ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'][i]).join(', ') || 'нет'}.</p>
+          <p class="small muted">Меняются в одном месте — в расширении: Skills &amp; settings → «Two job searches: markets A and B» (там же порог зарплаты, список компаний для рынка А и зарплатные ожидания). Сюда приходят через таблицу.</p>`
+        : `<div class="goals">
         <label class="f">Рынок Б<input class="input" type="number" min="0" max="40" data-target="B" value="${l.targets.B}"></label>
         <label class="f">Рынок А<input class="input" type="number" min="0" max="40" data-target="A" value="${l.targets.A}"></label>
         <label class="f">Холодные письма<input class="input" type="number" min="0" max="40" data-target="C" value="${l.targets.C}"></label></div>
-        <p class="small muted">По плану: Б 6–8 откликов и 2–3 письма, А 8–10 точечных, только если «стоит академа». Дни с парами на полоске недели: ${['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((d, i) => `<label class="check" style="display:inline-flex;margin-right:8px"><input type="checkbox" data-study="${i}" ${l.studyDays.includes(i) ? 'checked' : ''}>${d}</label>`).join('')}</p></section>
+        <p class="small muted">Пока расширение не прислало свои настройки, цели хранятся здесь. Основное место — расширение: Skills &amp; settings → markets A and B.</p>`}</section>
       <section class="paper"><h2>Почта</h2>
         <label class="f">Как открывать письма<select class="input" id="mailMode"><option value="auto" ${l.mail === 'auto' ? 'selected' : ''}>Само: на телефоне — приложение, на компьютере — Gmail</option><option value="mailto" ${l.mail === 'mailto' ? 'selected' : ''}>Приложение почты</option><option value="gmail" ${l.mail === 'gmail' ? 'selected' : ''}>Gmail в браузере</option></select></label>
         <label class="f">Отправлять из Gmail-аккаунта<input class="input" id="mailFrom" list="accts" value="${esc(l.from)}" placeholder="oleh.poratui@gmail.com"><datalist id="accts">${accounts.map(x => `<option value="${esc(x)}">`).join('')}</datalist></label>
@@ -1278,7 +1286,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
         <label class="f">Ключ (gsk_…, AIza… или sk-or-…)<input class="input" id="aiKey" type="password" value="${esc(l.ai.key)}" placeholder="вставь ключ" autocomplete="off"></label>
         <label class="f">Модель — можно не трогать<input class="input" id="aiModel" value="${esc(l.ai.model)}" placeholder="${esc(l.ai.key ? LLM.modelFor(l.ai.key, '') : 'выберется сама')}"></label>
         <div class="row"><button class="btn go" id="aiSave">Сохранить</button><button class="btn line" id="aiTest">Проверить ключ</button></div><div id="aiMsg" class="small"></div>
-        <label class="f">Факты о тебе — единственный источник для AI и промпта Claude<textarea class="input" id="facts" style="min-height:200px">${esc(l.facts)}</textarea></label>
+        <label class="f">Факты о тебе — единственный источник для AI${(st.profile || {}).factBank && (st.profile || {}).factBank.length >= 80 && l.facts === DEFAULT_FACTS ? ' (сейчас берутся из расширения: Skills &amp; settings → Facts about you)' : ''}<textarea class="input" id="facts" style="min-height:200px">${esc(factsText())}</textarea></label>
         <div class="row"><button class="btn line" id="factsSave">Сохранить факты</button><button class="btn quiet" id="factsReset">Вернуть исходные</button></div></section>
       <section class="paper"><h2>Telegram</h2>
         <p class="small muted">Важное приходит в Telegram, даже когда приложение закрыто и компьютер выключен: ответы живых людей, приглашения, офферы, ответы работодателей, новые вакансии на страницах, за которыми следишь. Утром в 8:30 — сводка с лучшими вакансиями из рассылок, в 18:00 — интервью на завтра. Ночью тихо, в чт/пт днём — только приглашения.</p>
@@ -1502,7 +1510,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     $$('[data-lai]', v).forEach(b => b.onclick = async () => {
       const n = b.dataset.lai; b.disabled = true; b.textContent = 'Придумываю…';
       try {
-        const text = await LLM.draft(aiCfg(), { task: `Suggest one practical home lab task (Russian language, 2–3 sentences, about 90 minutes) that proves the skill "${n}" for an entry-level IT support job. Use only free tools or free tiers. The candidate already has a Proxmox home lab with Windows Server, Active Directory, Entra ID, Intune and osTicket. End with what to write in a knowledge base note.`, facts: st.local.facts || DEFAULT_FACTS, words: 70 });
+        const text = await LLM.draft(aiCfg(), { task: `Suggest one practical home lab task (Russian language, 2–3 sentences, about 90 minutes) that proves the skill "${n}" for an entry-level IT support job. Use only free tools or free tiers. The candidate already has a Proxmox home lab with Windows Server, Active Directory, Entra ID, Intune and osTicket. End with what to write in a knowledge base note.`, facts: factsText(), words: 70 });
         st.local.learnTasks = { ...(st.local.learnTasks || {}), [n]: text.trim() }; save(); render();
       } catch (e) { toast(String(e.message || e)); b.disabled = false; b.textContent = 'Другое задание (AI)'; }
     });

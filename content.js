@@ -260,6 +260,7 @@
       description: an.description || job.description, category: an.category, workTypes: an.workTypes,
       salaryText: (an.salary && an.salary.text) || job.salaryText || '', salary: an.salary,
       tools: an.chance.tools, details: an.details, chance: an.chance,
+      fitPrecise: (() => { try { const F = globalThis.JT_Fit; if (!F) return null; const f = F.compute(F.fromAd(an.description || job.description, job.company), profile, job); return { score: f.score, summary: f.summary, source: 'ad' }; } catch (e) { return null; } })(),
       posting: postingFor(originEl, job),
       reqs: I ? I.requirements(an.description || job.description) : null,
       apply: {
@@ -352,8 +353,10 @@
   // Colour by verdict, not by the number: a 70% job you are ruled out of is red
   const VCOL = { apply: '#23905a', tailor: '#2f7fb5', ask: '#b47a12', skip: '#c0463b', incomplete: '#7a8794' };
   const vColor = c => (c && c.verdict ? VCOL[c.verdict] : scoreColor((c && c.score) || 0));
-  function verdictHtml(c, sub) {
-    const d = A.display ? A.display(c) : { text: c.score + '%', label: c.label, hint: '' };
+  function verdictHtml(c, sub, fp) {
+    const d0 = A.display ? A.display(c) : { text: c.score + '%', label: c.label, hint: '' };
+    // The precise Fit (requirements met, lib/fit.js) is the number now; the old skill score stays for a blocked job
+    const d = fp && fp.score != null && c && c.verdict !== 'skip' ? { ...d0, text: fp.score + '%', hint: fp.summary } : d0;
     const g = (c && c.gates) || { blocks: [], asks: [] };
     const q = c && c.quality && !c.quality.ok ? c.quality.issues.filter(i => i.hard) : [];
     const conf = c && c.verdict !== 'incomplete' && c.confidence ? { high: 'confident', medium: 'fairly sure', low: 'rough guess' }[c.confidence] : '';
@@ -376,7 +379,7 @@
     box.innerHTML = `
       <div class="hd"><span class="tk">${esc(app.ticket)}</span><b>${isNew ? 'Application saved' : 'Already in your tracker'}${app.track === 'intern' ? '<span class="trk">Internship</span>' : ''}</b><button class="x" title="Close" aria-label="Close">×</button></div>
       <div class="bd">
-        ${verdictHtml(c)}
+        ${verdictHtml(c, '', app.fitPrecise)}
         ${isNew && c.verdict === 'skip' ? `<div class="ap" style="border-color:#8f2f26;background:#fdf1f0"><div class="v" style="color:#8f2f26">This job was marked Skip</div><div style="font-size:12px">If you only opened the form, press <b>Undo</b>. If you sent it, write in Notes why it was worth it: it helps check whether the verdicts are right.</div></div>` : ''}
         <div class="tools">${c.matched.map(t => `<span class="t s">${esc(t)}</span>`).join('')}${c.basic.map(t => `<span class="t b">${esc(t)}</span>`).join('')}${c.missing.map(t => `<span class="t m">${esc(t)}</span>`).join('')}</div>
         ${placementHtml(app.placement, true)}
@@ -467,7 +470,9 @@
   // What to do with this job before pressing Apply, and how many you have sent today.
   // Ten careful applications beat forty identical ones: the counter is a nudge, nothing is blocked.
   function adviceHtml(c, day, profile) {
-    const limit = (profile && profile.dailyLimit) || 5;
+    // The weekly targets for markets A and B spread over your work days (the old daily limit if not set)
+    const tg = profile && profile.targets, wd = (profile && profile.workDays && profile.workDays.length) || (profile && profile.daysPerWeek) || 5;
+    const limit = tg ? Math.max(1, Math.ceil(((Number(tg.A) || 0) + (Number(tg.B) || 0)) / wd)) : (profile && profile.dailyLimit) || 5;
     const v = c && c.verdict;
     const box = (col, bg, head, body) => `<div class="ap" style="border-color:${col};background:${bg}"><div class="v" style="color:${col}">${head}</div><div style="font-size:12px">${body}</div></div>`;
     let out = '';
@@ -499,7 +504,7 @@
       <div class="bd">
         ${elsewhere ? `<div class="ap" style="border-color:#b47a12;background:#fff8ec"><div class="v" style="color:#7a5510">You already applied for this job</div><div style="font-size:12px">${esc(existing.ticket)} · via ${esc(existing.platform || 'another site')}${existing.appliedAt ? ' on ' + esc(fmtDay(existing.appliedAt)) : ''} · ${esc(A.statusLabel(existing.status))}<br><span class="note" style="margin:0">Matched by ${esc(WHY[elsewhere.why])}. Applying again through another site usually reaches the same recruiter twice.</span></div></div>` : ''}
         <div style="font-weight:600;margin-bottom:6px">${esc(rec.title)}${rec.company ? ' — ' + esc(rec.company) : ''}${rec.track === 'intern' ? '<span class="trk">Internship</span>' : ''}</div>
-        ${verdictHtml(c, [rec.location, rec.salaryText].filter(Boolean).join(' · '))}
+        ${verdictHtml(c, [rec.location, rec.salaryText].filter(Boolean).join(' · '), rec.fitPrecise)}
         ${dayHtml}
         ${reasonsHtml(c)}
         ${placementHtml(rec.placement)}

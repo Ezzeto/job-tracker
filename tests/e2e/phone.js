@@ -88,7 +88,7 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   console.log('token stored in plain text:', stored.includes('secret'), '| vault:', stored.includes('jt.vault'));
   await wait(1200);
   console.log('alerts on today:', (await page.$$eval('[data-alert-check]', l => l.map(b => b.closest('.item').querySelector('.t').textContent))).join(' | '));
-  await page.click('[data-slots="t2"]'); await wait(700);
+  await page.click('[data-slots="t2"]'); await wait(700); await shot('1b-slots');
   console.log('slots reply:', (await page.inputValue('#slotText')).split('\n').filter(l => l.startsWith('•')).join(' / '), '| to:', decodeURIComponent(await page.getAttribute('#slotMail', 'href')).slice(0, 40));
   await page.keyboard.press('Escape'); await wait(200);
   await page.click('[data-inbox-add="t3"]'); await wait(300); await page.fill('#qaTi', 'IT Technician'); await page.click('#qaGo'); await wait(700);
@@ -115,7 +115,9 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   console.log('fit block:', (await page.textContent('#result .paper.tight').catch(() => 'NO FIT')).replace(/\s+/g, ' ').slice(0, 220));
   await shot('2-result');
   await page.click('#promptCopy').catch(() => {}); await wait(300);
+  await page.evaluate(() => document.querySelector('#result .paper.tight').scrollIntoView({ block: 'start' })); await wait(200); await shot('2b-fit');
   await page.click('#tailorGo'); await wait(500);
+  await page.evaluate(() => document.querySelector('#tailorGo') || [...document.querySelectorAll('details.paper')].find(d => /CV под вакансию/.test(d.textContent)).scrollIntoView({ block: 'start' })); await wait(200); await shot('2c-cv');
   console.log('tailored:', (await page.textContent('details.paper.fold[open] p').catch(() => 'NO')).replace(/\s+/g, ' '));
   const dl = page.waitForEvent('download', { timeout: 5000 }).catch(() => null); await page.click('#cvDocx'); const d = await dl; console.log('docx download:', d ? d.suggestedFilename() : 'NONE');
   await page.click('#applied'); await wait(800);
@@ -140,6 +142,7 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   console.log('voice applied:', JSON.stringify(vp.patches[0]).slice(0, 160), '| events:', JSON.stringify(posts.filter(p => p.events).map(p => p.events[0].title)));
   await page.goto('https://jt.example/index.html#stats'); await wait(600); if (await page.$('.lock')) await typePin('2580');
   await page.fill('#askQ', 'Сколько я подал в школы?'); await page.click('#askGo'); await wait(800);
+  await shot('5-ask');
   console.log('ask:', (await page.textContent('#askOut b')).trim(), '|', await page.$$eval('#askOut .app-row .m', l => l.map(x => x.textContent).join(', ')));
   console.log('cost rows:', await page.$$eval('.tbl', t => t.find(x => /Часов на скрининг/.test(x.textContent)).querySelectorAll('tbody tr').length));
   await page.goto('https://jt.example/index.html#review'); await wait(500); if (await page.$('.lock')) await typePin('2580');
@@ -149,15 +152,18 @@ const JOB_HTML = `<!doctype html><html><head><script type="application/ld+json">
   await shot('8-review');
   await page.evaluate(() => { window.JT_App.st.briefId = 'a2'; location.hash = '#brief'; }); await wait(400);
   await page.click('#briefAi'); await wait(800);
+  await shot('8-brief');
   console.log('brief:', (await page.textContent('.ad')).slice(0, 60));
   await page.goto('https://jt.example/index.html#offer'); await wait(500); if (await page.$('.lock')) await typePin('2580');
   await page.click('#offAdd'); await wait(300);
   const offId = await page.$eval('[data-off$=":salary"]', i => i.dataset.off.split(':')[0]);
   await page.fill(`[data-off="${offId}:salary"]`, '26000'); await page.press(`[data-off="${offId}:salary"]`, 'Tab'); await wait(300);
   await page.fill(`[data-off="${offId}:commuteMin"]`, '45'); await page.press(`[data-off="${offId}:commuteMin"]`, 'Tab'); await wait(300);
+  await shot('8-offer');
   console.log('offer:', (await page.$$eval('.kpi b', l => l.map(x => x.textContent))).slice(-3).join(' | '));
   await page.goto('https://jt.example/index.html#employers'); await wait(800); if (await page.$('.lock')) await typePin('2580');
-  await page.click('#osmLoad'); await wait(900);
+  await page.click('#osmLoad'); await wait(1500);
+  await page.evaluate(() => window.scrollTo(0, 0)); await wait(300); await shot('7-map');
   console.log('employers:', await page.$$eval('#empList .app-row', l => l.length), '| queue:', (await page.$$eval('[data-emp-mail]', l => l.map(a => a.closest('.item').querySelector('.t').textContent))).slice(0, 5).join(', '));
   console.log('map:', await page.$eval('#empMap', el => el.querySelector('.leaflet-container, .leaflet-pane') ? 'leaflet ok' : el.textContent.trim().slice(0, 60) || 'empty'));
   const firstMail = await page.$('[data-emp-mail]'); const href = await firstMail.getAttribute('href');
