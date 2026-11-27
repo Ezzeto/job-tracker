@@ -138,3 +138,11 @@ test('a job you are ruled out of shows no percentage', () => {
   assert.equal(d.text, '✕');
   assert.equal(A.display({ verdict: 'skip', score: 30, confidence: 'high', gates: { blocks: [], asks: [] } }).text, '30%');
 });
+
+test('parseSalary reads LinkedIn pay chips and ranges with a unit on each figure', () => {
+  const { A } = require('./helpers/env');
+  assert.equal(A.parseSalary('35K GBP/yr + Bonus').annualMax, 35000);
+  const r = A.parseSalary('£30K/yr - £35K/yr');
+  assert.deepEqual([r.annualMin, r.annualMax], [30000, 35000]);
+  assert.equal(A.parseSalary('GBP 28,000 - 32,000 per annum').annualMax, 32000);
+});

@@ -219,6 +219,22 @@
     return { daysAgo, reposted: m.reposted, applicants: m.applicants, applicantsText: m.applicantsText, seenAt: new Date().toISOString() };
   }
 
+  // The block around the job title: company, place, pay and work type chips. Short lines only (not the ad).
+  const HEAD_SEL = '.job-details-fit-level-preferences, .job-details-preferences-and-skills, .jobs-unified-top-card__job-insight, [class*="job-insight" i], [class*="jobsearch-JobInfoHeader" i], [data-testid*="jobDetails" i] [data-testid*="salary" i], [data-testid*="attribute" i], [id*="salaryInfoAndJobType" i]';
+  function headerText(job) {
+    const lines = [];
+    try {
+      // chip by chip: buttons sit side by side with no space between them in the text
+      document.querySelectorAll(HEAD_SEL).forEach(el => { if (lines.length < 30) { const leaves = [...el.querySelectorAll('*')].filter(x => !x.children.length && txt(x)); (leaves.length ? leaves.map(txt) : [txt(el)]).forEach(t => lines.push(...t.split(/\n|·/))); } });
+      const t = String(job.title || '').trim().toLowerCase().slice(0, 40);
+      const h = [...document.querySelectorAll('h1, h2')].find(x => t && txt(x).toLowerCase().includes(t)) || document.querySelector('h1');
+      let el = h;
+      for (let i = 0; el && i < 6; i++) { el = el.parentElement; const n = el ? (el.innerText || '').length : 0; if (n > 200) break; }
+      if (el) lines.push(...(el.innerText || '').slice(0, 2500).split(/\n|·/));
+    } catch (e) { /* the description still has most of it */ }
+    return lines.map(l => l.replace(/\s+/g, ' ').trim()).filter(l => l && l.length < 70).slice(0, 60).join('\n');
+  }
+
   async function buildRecord(originEl, how) {
     let job = await extractJob(originEl);
     if (!job) return null;
@@ -233,6 +249,18 @@
       const raw = job.description || '';
       const h = (Q.looksLikeApplicationForm(raw) && Q.headerFromForm(raw)) || Q.recoverHeader(Q.cleanDescription(raw).text) || Q.recoverHeader(raw);
       if (h && h.title) { job.title = h.title; if (h.company && !job.company) job.company = h.company; }
+    }
+    // The facts shown above the ad (LinkedIn chips '35K GBP/yr + Bonus', 'Hybrid', 'Full-time'; pay in the title)
+    // are often not in the description: read them so pay and work type are not missed
+    const head = headerText(job);
+    if (head) {
+      job.employmentType = [job.employmentType, head].filter(Boolean).join(' ');
+      const hw = A.detectWorkTypes(head);
+      if (hw.length && job.workTypes && job.workTypes.length) job.workTypes = [...new Set(job.workTypes.concat(hw))];
+    }
+    if (!job.salaryText) {
+      const pay = A.parseSalary(job.title || '') || head.split('\n').map(l => l.trim()).filter(l => l.length < 70 && /£|gbp/i.test(l)).map(l => A.parseSalary(l)).find(x => x && x.annualMax >= 8000 && x.annualMax <= 250000);
+      if (pay) job.salaryText = pay.text;
     }
     const profile = await S.getProfile();
     const an = A.analyze(job, profile);
@@ -342,6 +370,8 @@
   ul.hist li.undone span{text-decoration:line-through;opacity:.6}
   label.inl{display:flex;gap:6px;align-items:center;color:#14201b;font-size:12.5px}label.inl input{width:auto;margin:0}
   button.a.red{color:#c23b22;border-color:#f7ddd6}
+  .tag.pay{background:#14201b;color:#fff}
+  .jt{overflow-x:hidden}.bd,.pane,.box{min-width:0}.note,.sub,.box span,label.inl{overflow-wrap:anywhere}label.inl{flex-wrap:wrap}
   .note{font-size:11.5px;color:#5c6a62}
   a.lk{color:#1d6b4f;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
   details>summary{cursor:pointer;font-size:12.5px;font-weight:650;color:#5c6a62;list-style:none}
@@ -415,13 +445,34 @@
   const WHY = { ref: 'same job reference', text: 'same ad text', title: 'same title and company' };
 
   // ----- the four questions -----
+  // 'Over 100 applicants' is stored as 101 so it sorts above 100; it reads as the site wrote it
+  const apText = p => { const over = /over|more than|\+/i.test(p.applicantsText || ''); const n = over ? (String(p.applicantsText).match(/\d[\d,]*/) || [p.applicants])[0] : p.applicants; return L(p.applicantsText || n + ' applicants', (over ? 'больше ' : '') + n + ' откликов'); };
+  function officeOf(rec, r) {
+    const M = globalThis.JT_Market, wt = rec.workTypes || [];
+    let od = r && r.officeDays != null ? r.officeDays : M ? M.officeDays(rec.description) : null;
+    if (od === 0 && wt.includes('Hybrid')) od = null;
+    return od;
+  }
+  // The facts that matter first, as on the job site: pay, hours, where you work, how fresh, how crowded
+  function factsHtml(rec, r) {
+    const wt = rec.workTypes || [], p = rec.posting || {}, od = officeOf(rec, r);
+    const WT = { 'Full-time': 'Full-time', 'Part-time': 'Part-time', Permanent: L('Permanent', 'Постоянная'), Contract: L('Contract', 'Контракт'), Temporary: L('Temporary', 'Временная'), Remote: L('Remote', 'Удалённо'), Hybrid: L('Hybrid', 'Гибрид'), 'On-site': L('On-site', 'В офисе'), Apprenticeship: L('Apprenticeship', 'Апрентис'), 'Graduate / Placement': L('Graduate / placement', 'Выпускник / стажировка') };
+    const chips = [];
+    chips.push(rec.salaryText ? `<span class="tag pay">${esc(rec.salaryText)}</span>` : `<span class="tag warn">${L('Pay not stated', 'Зарплата не указана')}</span>`);
+    wt.filter(w => WT[w]).forEach(w => chips.push(`<span class="tag ${/Full-time/.test(w) ? 'A' : /Part-time/.test(w) ? 'B' : ''}">${esc(WT[w])}${w === 'Hybrid' && od ? ` · ${L(`office ${od} d/wk`, `офис ${od} дн/нед`)}` : ''}</span>`));
+    if (od != null && !wt.includes('Hybrid')) chips.push(`<span class="tag">${od === 0 ? L('Remote', 'Удалённо') : L(`office ${od} d/wk`, `офис ${od} дн/нед`)}</span>`);
+    if (p.daysAgo != null) chips.push(`<span class="tag ${p.daysAgo > 21 ? 'warn' : ''}">${p.reposted ? L('reposted ', 'переопубл. ') : ''}${p.daysAgo === 0 ? L('today', 'сегодня') : p.daysAgo + L(' d ago', ' дн. назад')}</span>`);
+    if (p.applicants != null) chips.push(`<span class="tag ${p.applicants > 100 ? 'warn' : ''}">${esc(apText(p))}</span>`);
+    return `<div class="tags">${chips.join('')}</div>`;
+  }
   function scoreRow(icon, cls, head, body) { return `<li><i class="${cls}">${icon}</i><span><b>${head}</b> ${body}</span></li>`; }
   function scorecardHtml(rec, r, app, elsewhere) {
     const c = rec.chance || {}, M = globalThis.JT_Market, out = [];
     // 1. Do I fit? The skills algorithm and the requirements (AI or the ad's sections), side by side
     const alg = c.score != null ? `${L('skills', 'по навыкам')} <b>${c.score}%</b>` : '';
-    const req = r && r.fit && r.fit.score != null ? `${r.source === 'ai' ? L('requirements (AI)', 'по требованиям (AI)') : L('requirements', 'по требованиям')} <b>${r.fit.score}%</b> · ${r.fit.essOk}/${r.fit.essential.length} ${L('essential', 'обяз.')}` : r ? '' : `<span class="spin"></span>`;
-    const fitN = r && r.fit && r.fit.score != null ? r.fit.score : c.score || 0;
+    const noReq = r && r.fit && !(r.fit.essential.length + r.fit.desirable.length);
+    const req = noReq ? L('the ad has no list of requirements', 'в вакансии нет списка требований') : r && r.fit && r.fit.score != null ? `${r.source === 'ai' ? L('requirements (AI)', 'по требованиям (AI)') : L('requirements', 'по требованиям')} <b>${r.fit.score}%</b> · ${r.fit.essOk}/${r.fit.essential.length} ${L('essential', 'обяз.')}` : r ? '' : `<span class="spin"></span>`;
+    const fitN = r && r.fit && r.fit.score != null && !noReq ? r.fit.score : c.score || 0;
     out.push(scoreRow(fitN >= 70 ? '✓' : fitN >= 50 ? '~' : '✕', fitN >= 70 ? 'k1' : fitN >= 50 ? 'k2' : 'k3', L('Do I fit?', 'Подхожу?'), [alg, req].filter(Boolean).join(' · ')));
     // 2. Will they answer? From your own history of applications
     if (r && r.chance) { const up = /выше/.test(r.chance.main + (r.chance.pct ? r.chance.sub : '')), down = /ниже/.test(r.chance.main + (r.chance.pct ? r.chance.sub : '')); out.push(scoreRow(up ? '↑' : down ? '↓' : '=', up ? 'k1' : down ? 'k3' : 'k4', L('Will they answer?', 'Ответят?'), `${esc(r.chance.main)}${r.chance.sub ? ` <span class="note">· ${esc(r.chance.sub)}</span>` : ''}`)); }
@@ -430,14 +481,13 @@
     const suit = [], mk = M ? M.marketOf(rec) : 'B';
     let sc = 'k1';
     suit.push(mk === 'A' ? L('market A (full-time)', 'рынок А (full-time)') : L('market B (with study)', 'рынок Б (с учёбой)'));
-    const od = r && r.officeDays != null ? r.officeDays : M ? M.officeDays(rec.description) : null;
-    if (od != null) { suit.push(od === 0 ? L('remote', 'удалённо') : L(`office ${od} d/wk`, `офис ${od} дн/нед`)); if (mk === 'B' && od >= 4) sc = 'k3'; }
+    const od = officeOf(rec, r);
+    if (mk === 'B' && od != null && od >= 4) { sc = 'k3'; suit.push(L(`office ${od} days a week`, `офис ${od} дн/нед`)); }
     if (mk === 'A' && M) {
       const w = M.worthLeave({ ...rec, salary: rec.salary }, profileCache || {});
       suit.push(w.ok ? L('worth a study break', 'стоит академа') : L('not worth a study break', 'не стоит академа') + ` (${[!w.known && L('not a known company', 'не известная компания'), !w.pay && L(`pay under £${Math.round(w.min / 1000)}k`, `зарплата < £${Math.round(w.min / 1000)}k`), !w.growth && L('no growth path', 'нет роста')].filter(Boolean).join(', ')})`);
       if (!w.ok) sc = 'k3';
     }
-    suit.push(rec.salaryText ? esc(rec.salaryText) : L('pay not stated', 'зарплата не указана'));
     const g = c.gates || { blocks: [], asks: [] };
     if (g.blocks.length) { sc = 'k3'; suit.push(g.blocks.map(b => esc(b.text)).join('; ')); }
     else if (g.asks.length && sc === 'k1') sc = 'k2';
@@ -450,7 +500,7 @@
     if (br === 'board') risk.push(L(`intermediary (${esc(rec.company)}): the employer is hidden`, `посредник (${esc(rec.company)}): работодатель неизвестен`) + (r && r.employer ? ` → ${esc(r.employer)}` : ''));
     else if (br === 'agency' || (r && r.agency)) risk.push(L('agency', 'агентство') + (r && r.employer ? ` → ${esc(r.employer)}` : ''));
     if (p.daysAgo != null && p.daysAgo > 21) risk.push(L(`ad ${p.daysAgo} days old`, `объявлению ${p.daysAgo} дн.`));
-    if (p.applicants != null && p.applicants > 100) risk.push(L(`${p.applicants} applicants`, `${p.applicants} откликов`));
+    if (p.applicants != null && p.applicants > 100) risk.push(esc(apText(p)));
     const q = c.quality && !c.quality.ok ? c.quality.issues.filter(i => i.hard) : [];
     q.forEach(i => risk.push(esc(i.text)));
     out.push(scoreRow(risk.length ? '!' : '✓', risk.length ? 'k2' : 'k1', L('Risks', 'Риски'), risk.length ? risk.join(' · ') : L('none found', 'не найдено') + (p.daysAgo != null ? ` · ${L('ad', 'объявление')} ${p.daysAgo === 0 ? L('today', 'сегодня') : p.daysAgo + L(' d old', ' дн.')}` : '')));
@@ -462,6 +512,7 @@
   function reqListHtml(r) {
     if (!r) return `<div class="box"><span class="sub"><span class="spin"></span> ${L('Reading the requirements…', 'Читаю требования…')}</span></div>`;
     if (r.error && !r.fit) return `<div class="box bad"><span class="sub">${esc(r.error)}</span></div>`;
+    if (r.fit && !(r.fit.essential.length + r.fit.desirable.length)) return `<div class="box"><h5>${L('The ad has no list of requirements', 'В вакансии нет списка требований')}</h5><span class="note">${L('The score is the skills match: see the Skills tab and “Why” below.', 'Оценка — по совпадению навыков: смотри вкладку «Навыки» и «Почему» ниже.')}</span></div>`;
     const f = r.fit, line = q => { const k = EVK[q.check && q.level !== 'work' && q.level !== 'none' ? 'check' : q.level] || EVK.check; const note = [q.level === 'lab' ? L('home lab', 'лаборатория') : q.level === 'similar' ? L('similar tool', 'похожий инструмент') : '', q.note].filter(Boolean).join(' · '); return `<li><i class="${k[1]}">${k[0]}</i><span>${esc(q.text)}${note ? ` <span class="note">· ${esc(note)}</span>` : ''}</span></li>`; };
     return `<div class="box">
       <h5>${r.source === 'ai' ? L('Requirements read by AI', 'Требования (прочитал AI)') : L('Requirements from the ad', 'Требования из текста')}: ${f.essOk}/${f.essential.length} ${L('essential', 'обязательных')}${f.desirable.length ? `, ${f.desOk}/${f.desirable.length} ${L('desirable', 'желательных')}` : ''}</h5>
@@ -587,7 +638,7 @@
   // ----- the panel -----
   const TABS = () => [['an', L('Analysis', 'Оценка')], ['sk', L('Skills', 'Навыки')], ['job', L('Job', 'Вакансия')], ['app', L('Application', 'Отклик')], ['doc', L('Documents', 'Документы')]];
   // One number everywhere: requirements met (AI or the ad's sections); the skills score when there is none or the job is ruled out
-  const mainNum = (rec, r) => { const c = rec.chance || {}; const f = r && r.fit && r.fit.score != null ? r.fit.score : rec.fitPrecise && rec.fitPrecise.score != null ? rec.fitPrecise.score : null; return f != null && c.verdict !== 'skip' ? f + '%' : (A.display ? A.display(c).text : (c.score || 0) + '%'); };
+  const mainNum = (rec, r) => { const c = rec.chance || {}; const f = r && r.fit && r.fit.score != null && (r.fit.essential.length + r.fit.desirable.length) ? r.fit.score : r && r.fit ? null : rec.fitPrecise && rec.fitPrecise.score != null ? rec.fitPrecise.score : null; return f != null && c.verdict !== 'skip' ? f + '%' : (A.display ? A.display(c).text : (c.score || 0) + '%'); };
   async function showJob(rec, app, { isNew = false, elsewhere = null, tab } = {}) {
     ensureHost();
     const root = shadow.getElementById('root');
@@ -606,8 +657,9 @@
     box.innerHTML = `
       <div class="hd"><span class="lg" aria-hidden="true"></span>${head}<button class="x" aria-label="Close">×</button></div>
       <div class="bd">
-        <div class="top"><div><div class="job">${esc(rec.title || '')}${rec.track === 'intern' ? ' · internship' : ''}</div><div class="sub">${esc([rec.company, rec.location].filter(Boolean).join(' · '))}</div></div>
+        <div class="top"><div><div class="job">${esc(rec.title || '')}${rec.track === 'intern' ? ' · internship' : ''}</div><div class="sub">${esc([rec.company, rec.location, rec.platform].filter(Boolean).join(' · '))}</div></div>
           <div class="vbox" style="color:${vColor(c)}"><div class="num">${esc(mainNum(rec, r))}</div><div class="vl">${esc(VLABEL[c.verdict] ? L(...VLABEL[c.verdict]) : d0.label || '')}</div></div></div>
+        <div data-facts>${factsHtml(rec, r)}</div>
         <div data-score>${scorecardHtml(rec, r, app, elsewhere)}</div>
         <div class="tabs" role="tablist">${TABS().map(([id, t]) => `<button role="tab" data-tab="${id}" aria-selected="${id === cur}">${t}</button>`).join('')}</div>
         <div class="pane" data-pane></div>
@@ -709,6 +761,7 @@
       aiCache[rec.url] = r;
       if (!box.isConnected) return;
       box.querySelector('[data-score]').innerHTML = scorecardHtml(rec, r, app, elsewhere);
+      box.querySelector('[data-facts]').innerHTML = factsHtml(rec, r);
       if (r.fit && r.fit.score != null) rec.fitPrecise = { score: r.fit.score, summary: r.fit.summary, source: r.source };
       box.querySelector('.vbox .num').textContent = mainNum(rec, r);
       const bp = shadow.querySelector('.badge .pc'); if (bp && previewRec && previewRec.url === rec.url) bp.textContent = mainNum(rec, r);

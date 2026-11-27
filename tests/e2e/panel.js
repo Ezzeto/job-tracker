@@ -90,6 +90,18 @@ const PAGE = `<!doctype html><html><head><title>IT Support Technician - Harlow C
   page.once('dialog', d => d.accept());
   await page.click(H + '#undo'); await wait(800);
   console.log('after "I did not apply": apps', await sw.evaluate(async () => ((await chrome.storage.local.get('apps')).apps || []).length));
+  // LinkedIn-style header: pay and work type only in the chips above the ad
+  const LI = `<!doctype html><html><head><meta charset="utf-8"><title>Service Desk Analyst | Saragossa | LinkedIn</title></head><body><main>
+<div class="job-details-jobs-unified-top-card__container--two-pane"><div><a>Saragossa</a></div><h1>Service Desk Analyst - Wealth Management - £35,000</h1>
+<div class="job-details-jobs-unified-top-card__tertiary-description-container"><span>London Area, United Kingdom · Reposted 1 week ago · Over 100 applicants</span></div>
+<div class="job-details-fit-level-preferences"><button>35K GBP/yr + Bonus</button><button>Hybrid</button><button>Full-time</button></div></div>
+<div class="jobs-description__content"><div id="job-details"><h2>About the job</h2>${'A wealth management firm is looking for a Service Desk Analyst to support users across the business. You will resolve Microsoft 365, Active Directory and Windows issues, log tickets and help with onboarding. Experience in first line support is essential. '.repeat(3)}</div></div></main></body></html>`;
+  await ctx.route('https://www.linkedin.com/**', r => r.fulfill({ status: 200, contentType: 'text/html', body: LI }));
+  const li = await ctx.newPage(); li.on('pageerror', e => errors.push('linkedin: ' + e));
+  await li.goto('https://www.linkedin.com/jobs/view/4123456789/'); await wait(3500);
+  await li.click(H + '.badge').catch(() => {}); await wait(2000);
+  console.log('linkedin facts:', (await li.textContent(H + '[data-facts]').catch(() => 'NO PANEL')).replace(/\s+/g, ' ').trim());
+  if (OUT) await li.screenshot({ path: path.join(OUT, 'panel-linkedin.png') });
   console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
   await ctx.close();
   process.exit(errors.length ? 1 : 0);
