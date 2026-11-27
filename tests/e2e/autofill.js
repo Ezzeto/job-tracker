@@ -45,7 +45,7 @@ const FORM = `<!doctype html><html><head><title>Apply: IT Support Technician at 
   const packs = await sw.evaluate(async () => (await chrome.storage.local.get('packs')).packs || {});
   const pk = Object.values(packs)[0];
   console.log('pack:', pk && pk.status, '| cv:', pk && pk.cv && pk.cv.name, '| letter chars:', pk && (pk.letter || '').length, '| answers:', pk && pk.answers.length, '| fit:', pk && pk.fit);
-  if (OUT) await sp.screenshot({ path: path.join(OUT, 'session.png') });
+  if (OUT) { await sp.click('[data-open]'); await wait(300); await sp.screenshot({ path: path.join(OUT, 'session.png'), fullPage: true }); }
   const [form] = await Promise.all([ctx.waitForEvent('page'), sp.click('#start')]);
   form.on('pageerror', e => errors.push('form: ' + e.message));
   await form.waitForLoadState(); await wait(1500);
