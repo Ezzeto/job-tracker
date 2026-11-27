@@ -2,7 +2,7 @@
 // GET returns rows, POST upserts rows and deletes IDs, both checked against a token.
 'use strict';
 
-function createFakeSheet({ token = 'secret', version = 8 } = {}) {
+function createFakeSheet({ token = 'secret', version = 8, learned = {} } = {}) {
   const rows = new Map();
   const calls = [];
   const reply = (obj, status = 200) => ({ status, text: async () => JSON.stringify(obj) });
@@ -19,6 +19,7 @@ function createFakeSheet({ token = 'secret', version = 8 } = {}) {
     }
     calls.push({ method: 'GET', params: Object.fromEntries(u.searchParams) });
     if (u.searchParams.get('token') !== token) return reply({ ok: false, error: 'Wrong token' });
+    if (u.searchParams.get('action') === 'profile') return reply({ ok: true, profile: null, learned });
     if (u.searchParams.get('action') === 'ping') return reply({ ok: true, version, name: 'Test sheet', rows: rows.size });
     return reply({ ok: true, rows: [...rows.values()] });
   }
