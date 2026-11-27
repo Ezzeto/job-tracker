@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Job Tracker — tailor CV</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="dashboard.css">
   <link rel="stylesheet" href="tailor.css">
 </head>
@@ -11,20 +12,11 @@
   <main>
     <header class="top">
       <div><h1>Tailor CV</h1><p class="sub" id="jobLine"></p></div>
-      <div class="btns"><div class="track-seg" id="tabs" role="tablist" aria-label="Document"><button data-tab="cv" role="tab">CV</button><button data-tab="letter" role="tab">Cover letter</button></div>
-        <button class="btn" id="copyTxt" hidden>Copy text</button><button class="btn" id="dlDocx" disabled>Download Word</button><button class="btn primary" id="dlPdf" disabled>Download PDF</button></div>
+      <div class="btns"><button class="btn" id="dlDocx" disabled>Download Word</button><button class="btn primary" id="dlPdf" disabled>Download PDF</button></div>
     </header>
     <div id="empty" class="panel" hidden></div>
     <div class="tl-grid" id="work" hidden>
       <aside>
-        <div class="panel" id="letterSide" hidden>
-          <h2>Cover letter</h2>
-          <p class="hint">Built from your CV: the lines that best answer this ad, in the first person. Nothing else is added. Click any paragraph to edit it.</p>
-          <label class="lbl">Why this employer, in your own words (recommended)<textarea id="why" rows="3" placeholder="e.g. You support schools and charities, and on-site support is the part of IT I enjoy most."></textarea></label>
-          <label class="lbl">Availability (optional)<input id="avail" placeholder="e.g. I can start immediately and work all three shifts."></label>
-          <p class="hint" id="lWords" style="margin:8px 0 0"></p>
-          <p class="msg" id="lmsg" role="status"></p>
-        </div>
         <div class="panel" id="cvSide">
           <h2>What changed</h2>
           <div class="cover"><div><b id="cBefore">—</b><span>ad keywords in your CV before</span></div><div><b id="cAfter">—</b><span>after</span></div></div>
@@ -42,7 +34,6 @@
         </div>
       </aside>
       <section class="page" id="page" aria-label="CV preview"></section>
-      <section class="page letter" id="lpage" aria-label="Cover letter preview" hidden></section>
     </div>
   </main>
   <script src="lib/i18n.js"></script>

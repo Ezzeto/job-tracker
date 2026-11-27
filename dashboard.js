@@ -100,7 +100,7 @@
     $('#navOffers').textContent = apps.filter(a => S.everReached(a, A.OFFER)).length || '';
     $('#navIntern').textContent = apps.filter(a => trackOf(a) === 'intern').length || '';
     $('#navFu').textContent = JT_Follow.queue(ovApps()).due.filter(x => !x.late).length || '';
-    ({ intern: renderIntern, cv: renderCV, overview: renderOverview, apps: renderApps, followups: renderFollowups, plan: renderPlan, templates: renderTemplates, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
+    ({ intern: renderIntern, cv: () => { renderCV(); renderSettings(); }, overview: renderOverview, apps: renderApps, followups: renderFollowups, plan: renderPlan, templates: renderTemplates, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
   }
 
   // ---------- OVERVIEW ----------
@@ -403,31 +403,52 @@
       <div class="checklist">${CHECK_ITEMS.map(([k, l]) => `<label class="check"><input type="checkbox" data-k="${k}" ${ck[k] ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>`;
   }
 
-  // ---------- CV + COVER LETTER PROMPT ----------
-  // Builds a prompt for Claude or ChatGPT from this ad and your fact bank. Nothing is sent: it goes to the clipboard.
-  function renderCvPrompt(a) {
-    const box = $('#cvPanel'); if (!box || !window.JT_Prompt) return;
+  // ---------- CV AND LETTER FOR THIS JOB ----------
+  // The CV reordered for the ad (Tailor CV page), a cover letter and form answers written by AI from your facts.
+  // Without an AI key: the template letter, and a prompt to paste into Claude.
+  async function renderCvPrompt(a) {
+    const box = $('#cvPanel'); if (!box) return;
     const P = window.JT_Prompt;
     const v = a.chance && a.chance.verdict;
-    const asks = P.wantsLetter(a.description);
+    const asks = P ? P.wantsLetter(a.description) : false;
+    const { llmCfg } = await S.get('llmCfg');
+    const ai = !!(llmCfg && llmCfg.key);
+    const job = { title: a.title, company: a.company, location: a.location, url: a.url, platform: a.platform, description: a.description, salaryText: a.salaryText };
     box.innerHTML = `
-      <div class="row-between"><h2>CV for this job</h2><span class="hint" style="margin:0">${v === 'skip' ? 'Marked Skip: probably not worth tailoring' : asks ? 'The ad asks for a cover letter' : 'No cover letter asked for'}</span></div>
-      <p class="hint">Your CV from the CV &amp; ATS page, reordered so this ad's tools come first, and a cover letter built from the same lines. Edit them, then download Word or PDF. Nothing is invented.</p>
-      <div class="btns"><a class="btn primary" href="tailor.html?app=${encodeURIComponent(a.id)}" target="_blank">Tailor CV</a><a class="btn" href="tailor.html?app=${encodeURIComponent(a.id)}&tab=letter" target="_blank">Cover letter</a></div>
-      <details class="howto" style="margin-top:12px"><summary>Or rewrite it with an AI chat (prompt to copy)</summary>
+      <div class="row-between"><h2>CV and letter for this job</h2><span class="hint" style="margin:0">${v === 'skip' ? 'Marked Skip: probably not worth tailoring' : asks ? 'The ad asks for a cover letter' : 'No cover letter asked for'}</span></div>
+      <div class="btns"><a class="btn primary" href="tailor.html?app=${encodeURIComponent(a.id)}" target="_blank">Tailor CV</a>${ai ? '<button class="btn" id="aiLetterBtn">Write cover letter (AI)</button><button class="btn" id="aiAnsBtn">Form answers (AI)</button>' : '<a class="btn" href="#templates">Cover letter template</a>'}</div>
+      ${ai ? '' : '<p class="hint" style="margin-top:8px">Add a free AI key in <a href="#settings">Settings → AI</a> and the letter and answers are written here from your facts.</p>'}
+      <div id="aiOut" style="margin-top:10px"></div>
+      ${!ai && P ? `<details class="howto" style="margin-top:12px"><summary>Or use an AI chat (prompt to copy)</summary>
         <div class="form-grid" style="margin-top:8px">
-          <label class="full">Why this employer, in your own words (needed for a letter)<textarea id="cvWhy" rows="2" placeholder="e.g. You support three NHS trusts, and I want my first IT job to be one where the fix matters to someone's day.">${esc(a.whyThem || '')}</textarea></label>
+          <label class="full">Why this employer, in your own words (needed for a letter)<textarea id="cvWhy" rows="2">${esc(a.whyThem || '')}</textarea></label>
           <label class="check"><input type="checkbox" id="cvLetter" ${asks ? 'checked' : ''}> Also write a cover letter</label>
         </div>
         <div class="btns" style="margin-top:10px"><button class="btn" id="cvCopy">Copy prompt</button></div>
-      </details>
+      </details>` : ''}
       <p class="msg" id="cvMsg" role="status"></p>`;
-    $('#cvWhy').onchange = async () => { a.whyThem = $('#cvWhy').value.trim(); await S.updateApp(a.id, { whyThem: a.whyThem }); };
-    $('#cvCopy').onclick = async () => {
+    const out = $('#aiOut');
+    const copyRow = ta => { const b = document.createElement('button'); b.className = 'btn small'; b.textContent = 'Copy'; b.onclick = async () => { try { await navigator.clipboard.writeText(ta.value); b.textContent = 'Copied'; } catch (e) { ta.select(); } }; out.appendChild(b); };
+    if ($('#aiLetterBtn')) $('#aiLetterBtn').onclick = async () => {
+      out.innerHTML = '<p class="hint">Writing the letter…</p>';
+      const r = await new Promise(res => chrome.runtime.sendMessage({ type: 'aiLetter', job }, x => res(x || {})));
+      if (r.error) { out.innerHTML = `<p class="msg">${esc(r.error)}</p>`; return; }
+      out.innerHTML = `${r.warn && r.warn.length ? `<p class="msg">Check: the letter names ${esc(r.warn.join(', '))}, which is not in your facts or skills.</p>` : ''}<textarea rows="12" style="width:100%">${esc(r.text)}</textarea>`;
+      copyRow(out.querySelector('textarea'));
+      await S.updateApp(a.id, { apply: { ...(a.apply || {}), cover: 'tailored' } });
+    };
+    if ($('#aiAnsBtn')) $('#aiAnsBtn').onclick = async () => {
+      out.innerHTML = '<p class="hint">Preparing answers…</p>';
+      const r = await new Promise(res => chrome.runtime.sendMessage({ type: 'aiAnswers', job }, x => res(x || {})));
+      if (r.error) { out.innerHTML = `<p class="msg">${esc(r.error)}</p>`; return; }
+      out.innerHTML = r.answers.map(x => `<label class="full" style="display:block;margin-top:8px"><span class="hint" style="margin:0">${esc(x.q)}${x.src === 'ai' ? ' · AI' : ''}</span><textarea rows="${x.a.length > 120 ? 4 : 2}" style="width:100%">${esc(x.a)}</textarea></label>`).join('');
+    };
+    if ($('#cvWhy')) $('#cvWhy').onchange = async () => { a.whyThem = $('#cvWhy').value.trim(); await S.updateApp(a.id, { whyThem: a.whyThem }); };
+    if ($('#cvCopy')) $('#cvCopy').onclick = async () => {
       const cvText = ((await getCvs())[trackOf(a) === 'intern' ? 'intern' : 'job'] || {}).text || '';
       const r = P.build(a, profile, { why: $('#cvWhy').value, letter: $('#cvLetter').checked, cvText });
       if (!r.ok) { $('#cvMsg').textContent = r.error; return; }
-      try { await navigator.clipboard.writeText(r.text); $('#cvMsg').textContent = 'Copied. Paste it into Claude or ChatGPT. When you send the tailored CV, set "CV tailored to this ad" to Yes below.'; }
+      try { await navigator.clipboard.writeText(r.text); $('#cvMsg').textContent = 'Copied. Paste it into Claude or ChatGPT.'; }
       catch (e) { $('#cvMsg').textContent = 'Could not copy: the browser blocked the clipboard. Try again after clicking on the page.'; }
     };
   }
