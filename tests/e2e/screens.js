@@ -2,13 +2,13 @@
 // Extension: the panel on a job page (three tabs), the popup, the Progress page with the assistant,
 // applications, CV & skills, settings, the application session and a form after autofill.
 // Web app: phone (Today, checking a job, statistics, CV & skills) and the same app on a laptop.
-// Usage: node tests/e2e/screens.js [out-dir, default docs/screenshots]   (Playwright with Chromium)
+// Usage: node tests/e2e/screens.js [out-dir, default docs/images]   (Playwright with Chromium)
 'use strict';
 const { chromium, devices } = require('playwright');
 const fs = require('fs'), path = require('path');
 const { execFileSync } = require('child_process');
 const ROOT = path.join(__dirname, '..', '..');
-const OUT = process.argv[2] || path.join(ROOT, 'docs', 'screenshots');
+const OUT = process.argv[2] || path.join(ROOT, 'docs', 'images');
 const TMP = path.join(OUT, '.raw');
 fs.mkdirSync(TMP, { recursive: true });
 const wait = ms => new Promise(r => setTimeout(r, ms));
