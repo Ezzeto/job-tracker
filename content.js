@@ -294,9 +294,6 @@
   .bd{padding:0 14px 12px;display:flex;flex-direction:column;gap:10px}
   .job{font-weight:700;font-size:15px;line-height:1.3}
   .sub{color:#5c6a62;font-size:12.5px}
-  .verdict{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center}
-  .num{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;font:800 20px/1 "Golos Text",system-ui,sans-serif;background:#f2f4ef;box-shadow:inset 0 0 0 3px currentColor;font-variant-numeric:tabular-nums}
-  .vl{font-weight:750;font-size:16px;line-height:1.2}
   .tags{display:flex;flex-wrap:wrap;gap:5px}
   .tag{font-size:11.5px;font-weight:650;padding:2px 8px;border-radius:7px;background:#f2f4ef;color:#14201b}
   .tag.B{background:#dcebe3;color:#1d6b4f}.tag.A{background:#f6e7cf;color:#a85f00}.tag.bad{background:#f7ddd6;color:#c23b22}.tag.ok{background:#dcebe3;color:#1d6b4f}.tag.warn{background:#f6e7cf;color:#a85f00}
@@ -331,6 +328,20 @@
   button.s{background:#fff;color:#14201b;border:1.5px solid #d3d9d0;border-radius:11px;padding:9px 12px;font:600 12.5px/1 "Golos Text",system-ui,sans-serif;cursor:pointer}
   button.s.red{color:#c23b22;border-color:#f7ddd6}
   button:focus-visible{outline:2.5px solid #1d6b4f;outline-offset:2px}
+  .top{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:start}
+  .vbox{text-align:right}.vbox .num{font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;white-space:nowrap}.vbox .vl{font-size:11.5px;font-weight:700;max-width:120px}
+  ul.sc{background:#f2f4ef;border-radius:14px;padding:10px 12px;gap:5px}
+  ul.sc b{font-weight:700}
+  .tabs{display:flex;gap:2px;border-bottom:1.5px solid #e4e8e1;margin:0 -2px;overflow-x:auto}
+  .tabs button{flex:1;border:0;background:none;padding:7px 4px 8px;font:600 12px/1 "Golos Text",system-ui,sans-serif;color:#5c6a62;cursor:pointer;border-bottom:2.5px solid transparent;margin-bottom:-1.5px;white-space:nowrap}
+  .tabs button[aria-selected=true]{color:#1d6b4f;border-bottom-color:#1d6b4f}
+  .pane{display:flex;flex-direction:column;gap:8px}
+  .jd{white-space:pre-wrap;font-size:12px;max-height:260px;overflow:auto;background:#fff;border:1px solid #e4e8e1;border-radius:10px;padding:8px;margin-top:6px}
+  ul.hist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px;font-size:12px}
+  ul.hist li{display:grid;grid-template-columns:52px 1fr auto;gap:6px;align-items:baseline}
+  ul.hist li.undone span{text-decoration:line-through;opacity:.6}
+  label.inl{display:flex;gap:6px;align-items:center;color:#14201b;font-size:12.5px}label.inl input{width:auto;margin:0}
+  button.a.red{color:#c23b22;border-color:#f7ddd6}
   .note{font-size:11.5px;color:#5c6a62}
   a.lk{color:#1d6b4f;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
   details>summary{cursor:pointer;font-size:12.5px;font-weight:650;color:#5c6a62;list-style:none}
@@ -380,21 +391,6 @@
   const VCOL = { apply: '#1d6b4f', tailor: '#1d6b4f', ask: '#a85f00', skip: '#c23b22', incomplete: '#5c6a62' };
   const vColor = c => (c && c.verdict ? VCOL[c.verdict] : '#5c6a62');
   const VLABEL = { apply: ['Apply', 'Подавай'], tailor: ['Tailor the CV and apply', 'Подгони CV и подавай'], ask: ['Check first', 'Сначала уточни'], skip: ['Better not to apply', 'Лучше не подавать'], incomplete: ['Not enough data', 'Мало данных'] };
-  function verdictHtml(c, fp) {
-    const d0 = A.display ? A.display(c) : { text: c.score + '%', label: c.label, hint: '' };
-    const num = fp && fp.score != null && c && c.verdict !== 'skip' ? fp.score + '%' : d0.text;
-    const lab = VLABEL[c && c.verdict] ? L(...VLABEL[c.verdict]) : d0.label;
-    const g = (c && c.gates) || { blocks: [], asks: [] };
-    const q = c && c.quality && !c.quality.ok ? c.quality.issues.filter(i => i.hard) : [];
-    return `<div class="verdict"><div class="num" style="color:${vColor(c)}">${esc(num)}</div><div><div class="vl" style="color:${vColor(c)}">${esc(lab)}</div><div class="sub">${esc(fp && fp.summary ? fp.summary : d0.hint || '')}</div></div></div>
-      ${q.length || g.blocks.length || g.asks.length ? `<ul class="ck">${q.map(i => `<li><i class="k4">?</i><span>${esc(i.text)}</span></li>`).join('')}${g.blocks.map(b => `<li><i class="k3">✕</i><span>${esc(b.text)}</span></li>`).join('')}${g.asks.map(b => `<li><i class="k2">!</i><span>${esc(b.text)}</span></li>`).join('')}</ul>` : ''}`;
-  }
-  function marketTags(rec) {
-    const M = globalThis.JT_Market;
-    if (!M) return '';
-    const mk = M.marketOf(rec), od = M.officeDays(rec.description);
-    return `<div class="tags"><span class="tag ${mk}">${mk === 'A' ? L('Market A · full-time', 'Рынок А · full-time') : L('Market B · alongside study', 'Рынок Б · с учёбой')}</span>${od != null ? `<span class="tag ${mk === 'B' && od >= 4 ? 'bad' : ''}">${od === 0 ? L('remote', 'удалённо') : L(`office ${od} d/wk`, `офис ${od} дн/нед`)}</span>` : ''}${rec.salaryText ? `<span class="tag">${esc(rec.salaryText)}</span>` : ''}${rec.location ? `<span class="tag">${esc(rec.location)}</span>` : ''}</div>`;
-  }
   const toolsHtml = c => `<div class="tools">${(c.matched || []).map(t => `<span class="t s">${esc(t)}</span>`).join('')}${(c.basic || []).map(t => `<span class="t b">${esc(t)}</span>`).join('')}${(c.missing || []).map(t => `<span class="t m">${esc(t)}</span>`).join('')}</div>`;
   const reasonsHtml = c => `<ul class="reasons">${(c.reasons || []).map(r => `<li><span>${esc(r.text)}</span><b style="color:${r.delta == null ? '#5c6a62' : r.delta > 0 ? '#1d6b4f' : r.delta < 0 ? '#c23b22' : '#5c6a62'}">${r.delta == null ? 'base' : r.delta > 0 ? '+' + r.delta : r.delta === 0 ? 'tip' : r.delta}</b></li>`).join('')}</ul>`;
   const PL_ICON = { ok: ['✓', 'k1'], warn: ['!', 'k2'], fail: ['✕', 'k3'], unknown: ['?', 'k4'], info: ['i', 'k4'] };
@@ -404,236 +400,329 @@
     const items = compact ? pl.items.filter(i => i.state !== 'ok') : pl.items;
     return `<div class="box ${pl.verdict === 'fail' ? 'bad' : pl.verdict === 'ok' ? '' : 'warn'}"><h5>${PL_HEAD[pl.verdict]}</h5><ul class="ck">${items.map(i => `<li><i class="${PL_ICON[i.state][1]}">${PL_ICON[i.state][0]}</i><span><b>${esc(i.label.replace(/\s*\(.*\)/, ''))}:</b> ${esc(i.text)}</span></li>`).join('')}</ul></div>`;
   };
-  const atsHtml = m => m ? `<div class="note"><b>${L('Your CV matches the ad', 'CV совпадает с вакансией')}: ${m.score}%</b>${m.addable.length ? `. ${L('You have these but the CV does not say so', 'Есть у тебя, но нет в CV')}: ${m.addable.map(esc).join(', ')}` : ''}</div>` : '';
   const plMark = pl => pl ? ({ ok: ' · rules ✓', warn: ' · rules !', unknown: ' · rules ?', fail: ' · rules ✕' })[pl.verdict] : '';
 
-  // ---------- AI block: requirements, chance, letter, answers, session ----------
+  // ---------- One panel for a job, with tabs (3.12) ----------
+  // Score: four questions answered at the top (do I fit, will they answer, does it suit me, what are the risks).
+  // The old skills algorithm and the requirements read by AI are shown side by side; numbers come from code.
+  // Tabs: Analysis · Skills · Job · Application · Documents. Everything is done here, without the dashboard.
   const EVK = { work: ['✓', 'k1'], lab: ['✓', 'k1'], similar: ['~', 'k2'], none: ['✕', 'k3'], check: ['?', 'k2'] };
-  const aiCache = {};
+  const aiCache = {}, coCache = {};
+  const ST_RU = { applied: 'Отправлен', screening: 'Скрининг', test: 'Тестовое', interview1: 'Интервью 1', interview2: 'Интервью 2', interview3: 'Интервью 3', offer: 'Оффер', accepted: 'Оффер принят', declined: 'Оффер отклонён', rejected: 'Отказ', noresponse: 'Нет ответа', withdrawn: 'Отозван' };
+  const stLabel = id => (L('x', 'ru') === 'ru' && ST_RU[id]) || A.statusLabel(id);
   function jobOf(rec) { return { title: rec.title, company: rec.company, location: rec.location, url: rec.url || location.href, platform: rec.platform, description: rec.description, salaryText: rec.salaryText }; }
-  function aiBlockHtml(r) {
-    if (!r) return `<div class="box"><span class="sub"><span class="spin"></span> ${L('AI is reading the requirements…', 'AI читает требования…')}</span></div>`;
+  const fmtDay = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
+  const WHY = { ref: 'same job reference', text: 'same ad text', title: 'same title and company' };
+
+  // ----- the four questions -----
+  function scoreRow(icon, cls, head, body) { return `<li><i class="${cls}">${icon}</i><span><b>${head}</b> ${body}</span></li>`; }
+  function scorecardHtml(rec, r, app, elsewhere) {
+    const c = rec.chance || {}, M = globalThis.JT_Market, out = [];
+    // 1. Do I fit? The skills algorithm and the requirements (AI or the ad's sections), side by side
+    const alg = c.score != null ? `${L('skills', 'по навыкам')} <b>${c.score}%</b>` : '';
+    const req = r && r.fit && r.fit.score != null ? `${r.source === 'ai' ? L('requirements (AI)', 'по требованиям (AI)') : L('requirements', 'по требованиям')} <b>${r.fit.score}%</b> · ${r.fit.essOk}/${r.fit.essential.length} ${L('essential', 'обяз.')}` : r ? '' : `<span class="spin"></span>`;
+    const fitN = r && r.fit && r.fit.score != null ? r.fit.score : c.score || 0;
+    out.push(scoreRow(fitN >= 70 ? '✓' : fitN >= 50 ? '~' : '✕', fitN >= 70 ? 'k1' : fitN >= 50 ? 'k2' : 'k3', L('Do I fit?', 'Подхожу?'), [alg, req].filter(Boolean).join(' · ')));
+    // 2. Will they answer? From your own history of applications
+    if (r && r.chance) out.push(scoreRow('%', 'k4', L('Will they answer?', 'Ответят?'), `${esc(r.chance.main)} <span class="note">${esc(r.chance.sub)}</span>`));
+    else out.push(scoreRow('%', 'k4', L('Will they answer?', 'Ответят?'), '<span class="spin"></span>'));
+    // 3. Does it suit me? Market A/B, office days, pay, placement rules, hard blocks
+    const suit = [], mk = M ? M.marketOf(rec) : 'B';
+    let sc = 'k1';
+    suit.push(mk === 'A' ? L('market A (full-time)', 'рынок А (full-time)') : L('market B (with study)', 'рынок Б (с учёбой)'));
+    const od = r && r.officeDays != null ? r.officeDays : M ? M.officeDays(rec.description) : null;
+    if (od != null) { suit.push(od === 0 ? L('remote', 'удалённо') : L(`office ${od} d/wk`, `офис ${od} дн/нед`)); if (mk === 'B' && od >= 4) sc = 'k3'; }
+    if (mk === 'A' && M) {
+      const w = M.worthLeave({ ...rec, salary: rec.salary }, profileCache || {});
+      suit.push(w.ok ? L('worth a study break', 'стоит академа') : L('not worth a study break', 'не стоит академа') + ` (${[!w.known && L('not a known company', 'не известная компания'), !w.pay && L(`pay under £${Math.round(w.min / 1000)}k`, `зарплата < £${Math.round(w.min / 1000)}k`), !w.growth && L('no growth path', 'нет роста')].filter(Boolean).join(', ')})`);
+      if (!w.ok) sc = 'k3';
+    }
+    suit.push(rec.salaryText ? esc(rec.salaryText) : L('pay not stated', 'зарплата не указана'));
+    const g = c.gates || { blocks: [], asks: [] };
+    if (g.blocks.length) { sc = 'k3'; suit.push(g.blocks.map(b => esc(b.text)).join('; ')); }
+    else if (g.asks.length && sc === 'k1') sc = 'k2';
+    if (rec.placement && rec.placement.verdict === 'fail') sc = 'k3';
+    out.push(scoreRow(sc === 'k1' ? '✓' : sc === 'k2' ? '!' : '✕', sc, L('Suits me?', 'Мне подходит?'), suit.join(' · ')));
+    // 4. Risks: agency, ad age, applicants, data quality, applied before
+    const risk = [], p = rec.posting || {};
+    if (elsewhere) risk.push(L(`already applied via ${esc(app.platform || 'another site')}`, `уже откликался через ${esc(app.platform || 'другой сайт')}`));
+    if (r && r.agency) risk.push(L('agency', 'агентство') + (r.employer ? ` → ${esc(r.employer)}` : ''));
+    if (p.daysAgo != null && p.daysAgo > 21) risk.push(L(`ad ${p.daysAgo} days old`, `объявлению ${p.daysAgo} дн.`));
+    if (p.applicants != null && p.applicants > 100) risk.push(L(`${p.applicants} applicants`, `${p.applicants} откликов`));
+    const q = c.quality && !c.quality.ok ? c.quality.issues.filter(i => i.hard) : [];
+    q.forEach(i => risk.push(esc(i.text)));
+    out.push(scoreRow(risk.length ? '!' : '✓', risk.length ? 'k2' : 'k1', L('Risks', 'Риски'), risk.length ? risk.join(' · ') : L('none found', 'не найдено') + (p.daysAgo != null ? ` · ${L('ad', 'объявление')} ${p.daysAgo === 0 ? L('today', 'сегодня') : p.daysAgo + L(' d old', ' дн.')}` : '')));
+    return `<ul class="ck sc">${out.join('')}</ul>`;
+  }
+  let profileCache = null;
+
+  // ----- tab: analysis -----
+  function reqListHtml(r) {
+    if (!r) return `<div class="box"><span class="sub"><span class="spin"></span> ${L('Reading the requirements…', 'Читаю требования…')}</span></div>`;
     if (r.error && !r.fit) return `<div class="box bad"><span class="sub">${esc(r.error)}</span></div>`;
-    const f = r.fit, line = q => { const k = EVK[q.check && q.level !== 'work' && q.level !== 'none' ? 'check' : q.level] || EVK.check; const note = [q.level === 'lab' ? L('home lab', 'лаборатория') : '', q.note].filter(Boolean).join(' · '); return `<li><i class="${k[1]}">${k[0]}</i><span>${esc(q.text)}${note ? ` <span class="note">· ${esc(note)}</span>` : ''}</span></li>`; };
+    const f = r.fit, line = q => { const k = EVK[q.check && q.level !== 'work' && q.level !== 'none' ? 'check' : q.level] || EVK.check; const note = [q.level === 'lab' ? L('home lab', 'лаборатория') : q.level === 'similar' ? L('similar tool', 'похожий инструмент') : '', q.note].filter(Boolean).join(' · '); return `<li><i class="${k[1]}">${k[0]}</i><span>${esc(q.text)}${note ? ` <span class="note">· ${esc(note)}</span>` : ''}</span></li>`; };
     return `<div class="box">
-      <h5>${r.source === 'ai' ? L('Requirements read by AI', 'Требования прочитал AI') : L('Requirements from the ad', 'Требования из текста вакансии')}: ${f.essOk}/${f.essential.length} ${L('essential', 'обязательных')}${f.desirable.length ? `, ${f.desOk}/${f.desirable.length} ${L('desirable', 'желательных')}` : ''}</h5>
-      <ul class="ck">${f.essential.slice(0, 8).map(line).join('')}</ul>
-      ${f.desirable.length ? `<details><summary>${L('Desirable', 'Желательные')}</summary><ul class="ck" style="margin-top:4px">${f.desirable.map(line).join('')}</ul></details>` : ''}
-      <div class="sub">${L('Chance of an invitation', 'Шанс приглашения')}: <b>${esc(r.chance.main)}</b> ${esc(r.chance.sub)}${r.chance.why ? ` · ${esc(r.chance.why)}` : ''}</div>
-      ${r.chance.note ? `<div class="note">${esc(r.chance.note)}</div>` : ''}
-      ${r.employer && r.agency ? `<div class="box warn" style="margin-top:4px"><span>${L('The real employer looks like', 'Похоже, настоящий работодатель —')} <b>${esc(r.employer)}</b>. ${L('Agencies have given 0 screenings from 28: apply on the employer’s own site if you can.', 'От агентств пока 0 скринингов из 28: если можешь, откликнись у работодателя напрямую.')} <a class="lk" href="https://www.google.com/search?q=${encodeURIComponent(`"${r.employer}" ${'jobs'}`)}" target="_blank" rel="noopener">${L('Search', 'Искать')}</a></span></div>` : ''}
-      ${!r.hasKey ? `<div class="note">${L('Add a free AI key for precise requirements, a cover letter and answers:', 'Добавь бесплатный ключ AI — будут точные требования, письмо и ответы:')} <a class="lk" data-act="settings">${L('Settings → AI', 'Настройки → AI')}</a></div>` : r.error ? `<div class="note">AI: ${esc(r.error)}</div>` : ''}
-      ${r.dropped ? `<div class="note">${L('Lines AI made up and the code dropped', 'Выдуманных AI строк отброшено')}: ${r.dropped}</div>` : ''}
+      <h5>${r.source === 'ai' ? L('Requirements read by AI', 'Требования (прочитал AI)') : L('Requirements from the ad', 'Требования из текста')}: ${f.essOk}/${f.essential.length} ${L('essential', 'обязательных')}${f.desirable.length ? `, ${f.desOk}/${f.desirable.length} ${L('desirable', 'желательных')}` : ''}</h5>
+      <ul class="ck">${f.essential.slice(0, 10).map(line).join('')}</ul>
+      ${f.desirable.length ? `<ul class="ck" style="opacity:.85">${f.desirable.map(line).join('')}</ul>` : ''}
+      ${r.dropped ? `<div class="note">${L('Lines AI made up that are not in the ad, dropped', 'Строк, которых нет в вакансии, AI выдумал и код отбросил')}: ${r.dropped}</div>` : ''}
+      ${!r.hasKey ? `<div class="note">${L('With a free AI key the requirements are read precisely:', 'С бесплатным ключом AI требования читаются точнее:')} <a class="lk" data-act="settings">${L('Settings → AI', 'Настройки → AI')}</a></div>` : r.error ? `<div class="note">AI: ${esc(r.error)}</div>` : ''}
     </div>`;
   }
-  function actionsHtml(hasKey) {
-    return `<div class="acts">
-      <button class="a go" data-act="letter">${hasKey ? L('Cover letter (AI)', 'Письмо (AI)') : L('Cover letter', 'Письмо')}</button>
-      <button class="a" data-act="answers">${L('Form answers', 'Ответы для анкеты')}</button>
-      <button class="a" data-act="tailor">${L('CV for this job', 'CV под вакансию')}</button>
-      <button class="a" data-act="later">${L('For tonight (session)', 'В сессию на вечер')}</button>
-    </div><div class="out" data-out></div>`;
-  }
-  function bindActions(box, rec) {
-    const out = box.querySelector('[data-out]');
-    const job = jobOf(rec);
-    const copyBtn = (ta, label) => { const b = document.createElement('button'); b.className = 's'; b.textContent = label || L('Copy', 'Копировать'); b.onclick = async () => { try { await navigator.clipboard.writeText(ta.value); b.textContent = L('Copied', 'Скопировано'); } catch (e) { ta.select(); } }; return b; };
-    box.querySelectorAll('[data-act]').forEach(btn => btn.addEventListener('click', async e => {
-      e.preventDefault();
-      const act = btn.dataset.act;
-      if (act === 'settings') { chrome.runtime.sendMessage({ type: 'openDashboard', hash: '#settings' }); return; }
-      if (act === 'tailor') { chrome.runtime.sendMessage({ type: 'openTailor', job: { ...job, track: rec.track } }); return; }
-      if (act === 'later') {
-        btn.disabled = true; btn.innerHTML = `<span class="spin"></span> ${L('Preparing the pack…', 'Готовлю пакет…')}`;
-        const r = await send({ type: 'saveForSession', job });
-        btn.innerHTML = r.ok ? L(`In the session ✓ (${r.count})`, `В сессии ✓ (${r.count})`) : L('Could not save', 'Не получилось');
-        if (r.ok) toast(L('Pack ready: CV, letter and answers. Open Application session tonight.', 'Пакет готов: CV, письмо и ответы. Вечером открой «Сессию откликов».'), L('Open', 'Открыть'), () => chrome.runtime.sendMessage({ type: 'openSession' }), 6000);
-        return;
-      }
-      out.innerHTML = `<div class="sub"><span class="spin"></span> ${act === 'letter' ? L('Writing the letter…', 'Пишу письмо…') : L('Preparing answers…', 'Готовлю ответы…')}</div>`;
-      if (act === 'letter') {
-        const r = await send({ type: 'aiLetter', job });
-        if (r.error === 'no-key') { out.innerHTML = `<div class="note">${L('With an AI key the letter is written from your facts in seconds.', 'С ключом AI письмо пишется из твоих фактов за секунды.')} <a class="lk" data-act="settings">${L('Settings → AI', 'Настройки → AI')}</a>. ${L('Until then use the template on the Templates page.', 'Пока — шаблон на странице Templates.')}</div>`; bindActions(out, rec); return; }
-        if (r.error) { out.innerHTML = `<div class="box bad"><span>${esc(r.error)}</span></div>`; return; }
-        out.innerHTML = `${r.warn && r.warn.length ? `<div class="box warn"><span>${L('Check: the letter names', 'Проверь: в письме есть')} ${esc(r.warn.join(', '))} — ${L('not in your facts or skills', 'этого нет в твоих фактах и навыках')}.</span></div>` : ''}<textarea>${esc(r.text)}</textarea>`;
-        const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:6px'; row.appendChild(copyBtn(out.querySelector('textarea'))); out.appendChild(row);
-      } else {
-        const qs = (aiCache[rec.url] && aiCache[rec.url].questions) || [];
-        const r = await send({ type: 'aiAnswers', job, questions: qs });
-        if (r.error) { out.innerHTML = `<div class="box bad"><span>${esc(r.error)}</span></div>`; return; }
-        out.innerHTML = r.answers.map((a, i) => `<div class="qa"><b>${esc(a.q)}${a.src === 'ai' ? ' · AI' : ''}</b><textarea data-i="${i}" style="min-height:${a.a.length > 120 ? 96 : 40}px">${esc(a.a)}</textarea></div>`).join('') + (r.hasKey ? '' : `<div class="note">${L('Answers to the ad’s own questions need an AI key.', 'Ответы на вопросы самой вакансии — с ключом AI.')}</div>`);
-        out.querySelectorAll('textarea').forEach(ta => { ta.onfocus = () => ta.select(); });
-      }
-    }));
-  }
-  async function loadAi(box, rec) {
-    const slot = box.querySelector('[data-ai]');
-    if (!slot) return;
-    const key = rec.url + '|' + (rec.description || '').length;
-    if (!aiCache[key]) { slot.innerHTML = aiBlockHtml(null); aiCache[key] = await send({ type: 'aiJob', job: jobOf(rec) }); aiCache[rec.url] = aiCache[key]; }
-    const r = aiCache[key];
-    if (!box.isConnected) return;
-    slot.innerHTML = aiBlockHtml(r);
-    // the number in the verdict follows the AI-read requirements
-    if (r.fit && r.fit.score != null && rec.chance && rec.chance.verdict !== 'skip') { const n = box.querySelector('.num'); if (n) n.textContent = r.fit.score + '%'; const sb = box.querySelector('.verdict .sub'); if (sb) sb.textContent = r.fit.summary; rec.fitPrecise = { score: r.fit.score, summary: r.fit.summary, source: r.source }; }
-    const btn = box.querySelector('[data-act="letter"]'); if (btn) btn.textContent = r.hasKey ? L('Cover letter (AI)', 'Письмо (AI)') : L('Cover letter', 'Письмо');
-    slot.querySelectorAll('[data-act="settings"]').forEach(a => a.onclick = () => chrome.runtime.sendMessage({ type: 'openDashboard', hash: '#settings' }));
+  function analysisTab(rec, r) {
+    const c = rec.chance || {};
+    return `<div data-req>${reqListHtml(r)}</div>
+      ${r && r.chance ? `<div class="box"><h5>${L('Chance of an invitation', 'Шанс приглашения')}: ${esc(r.chance.main)}</h5><span class="sub">${esc(r.chance.sub)}${r.chance.why ? ' · ' + esc(r.chance.why) : ''}</span>${r.chance.note ? `<span class="note">${esc(r.chance.note)}</span>` : ''}</div>` : ''}
+      ${r && r.employer && r.agency ? `<div class="box warn"><span>${L('The real employer looks like', 'Похоже, настоящий работодатель —')} <b>${esc(r.employer)}</b>. ${L('Agencies have not given you a screening yet: apply on the employer’s site if you can.', 'От агентств скринингов пока нет: если можешь, откликнись у работодателя напрямую.')} <a class="lk" href="https://www.google.com/search?q=${encodeURIComponent('"' + r.employer + '" jobs')}" target="_blank" rel="noopener">${L('Search', 'Искать')}</a></span></div>` : ''}
+      <div class="box"><h5>${L('Why the skills score is', 'Почему по навыкам')} ${c.score != null ? c.score + '%' : ''}</h5>${reasonsHtml(c)}</div>
+      ${placementHtml(rec.placement)}
+      <div class="note"><a class="lk" id="wrong">${L('Wrong verdict?', 'Неверная оценка?')}</a></div>
+      <div id="fb" hidden>
+        <select id="fbV"><option value="apply">Apply</option><option value="tailor">Tailor CV</option><option value="ask">Check first</option><option value="skip">Skip</option><option value="notjob">Not a job / not IT</option></select>
+        <input id="fbN" placeholder="${L('Why (optional)', 'Почему (необязательно)')}" style="margin-top:6px">
+        <button class="s" id="fbSave" style="margin-top:6px">${L('Save', 'Сохранить')}</button>
+      </div>`;
   }
 
-  function showPanel(app, { isNew }) {
+  // ----- tab: skills -----
+  function skillsTab(rec, r) {
+    const c = rec.chance || {};
+    const gaps = r && r.fit && r.fit.gaps ? r.fit.gaps : [];
+    return `<div class="box"><h5>${L('Tools in the ad', 'Инструменты в вакансии')}</h5>
+        ${(c.tools || []).length ? toolsHtml(c) : `<span class="note">${L('None found in the description.', 'В описании не найдено.')}</span>`}
+        <span class="note"><span class="t s">${L('you know well', 'знаешь уверенно')}</span> <span class="t b">${L('basic', 'базово')}</span> <span class="t m">${L('missing', 'нет')}</span></span>
+      </div>
+      ${(c.missing || []).length ? `<div class="box warn"><h5>${L('Worth preparing before the interview', 'Подтянуть к интервью')}</h5><span>${c.missing.map(esc).join(', ')}</span></div>` : ''}
+      ${gaps.length ? `<div class="box"><h5>${L('Requirements you do not meet', 'Требования, которых у тебя нет')}</h5><ul class="ck">${gaps.map(g => `<li><i class="k3">✕</i><span>${esc(typeof g === 'string' ? g : g.text)}</span></li>`).join('')}</ul></div>` : ''}
+      ${rec.atsMatch ? `<div class="box"><h5>${L('Your CV against the ad', 'Твоё CV против вакансии')}: ${rec.atsMatch.score}%</h5>${rec.atsMatch.addable.length ? `<span>${L('You have these but the CV does not say so — add them', 'Есть у тебя, но нет в CV — добавь')}: <b>${rec.atsMatch.addable.map(esc).join(', ')}</b></span>` : ''}${rec.atsMatch.missing.length ? `<span class="note">${L('Not in your CV or skills', 'Нет ни в CV, ни в навыках')}: ${rec.atsMatch.missing.slice(0, 6).map(esc).join(', ')}</span>` : ''}</div>` : ''}
+      <button class="a" data-act="tailor">${L('Tailor the CV for this job', 'Адаптировать CV под вакансию')}</button>`;
+  }
+
+  // ----- tab: job -----
+  function postingLine(app) {
+    const p = app.posting || {}, out = [];
+    if (p.daysAgo != null) out.push((p.reposted ? L('Reposted ', 'Переопубликовано ') : L('Posted ', 'Опубликовано ')) + (p.daysAgo === 0 ? L('today', 'сегодня') : p.daysAgo + L(' days ago', ' дн. назад')));
+    if (p.applicants != null) out.push(p.applicantsText || p.applicants + L(' applicants', ' откликов'));
+    return out.join(' · ');
+  }
+  function jobTab(rec, app) {
+    const co = rec.company || '';
+    const q = encodeURIComponent(co);
+    const saved = app ? `<div class="box"><h5>${L('Saved in your tracker', 'Сохранено в трекере')} · ${esc(app.ticket || '')}</h5><span class="note">${L('Description', 'Описание')}: ${(app.description || '').length} ${L('chars', 'знаков')} · ${L('benefits', 'бенефиты')}: ${(app.benefits || []).length} · ${L('key details', 'детали')}: ${(app.details || []).length}${app.salaryText ? ' · ' + L('salary', 'зарплата') + ': ' + esc(app.salaryText) : ''}</span></div>` : `<div class="note">${L('The description, benefits and details are saved with the application when you press Apply (or “I applied” on the Application tab).', 'Описание, бенефиты и детали сохранятся вместе с откликом, когда нажмёшь Apply (или «Я откликнулся» во вкладке «Отклик»).')}</div>`;
+    return `<div class="box"><h5>${esc(rec.title || '')}</h5>
+        <span>${esc([co, rec.location, rec.platform].filter(Boolean).join(' · '))}</span>
+        <span>${rec.salaryText ? esc(rec.salaryText) : L('Pay not stated', 'Зарплата не указана')}</span>
+        ${postingLine(rec) ? `<span class="note">${esc(postingLine(rec))}</span>` : ''}
+      </div>
+      ${saved}
+      <div class="box"><h5>${L('About the employer', 'О работодателе')}</h5><div data-co><span class="note"><span class="spin"></span> ${L('Reading the ad…', 'Читаю вакансию…')}</span></div>
+        ${co ? `<span class="note"><a class="lk" target="_blank" rel="noopener" href="https://www.google.com/search?q=${q}">Google</a> · <a class="lk" target="_blank" rel="noopener" href="https://www.glassdoor.co.uk/Search/results.htm?keyword=${q}">Glassdoor</a> · <a class="lk" target="_blank" rel="noopener" href="https://find-and-update.company-information.service.gov.uk/search?q=${q}">Companies House</a> · <a class="lk" target="_blank" rel="noopener" href="https://www.linkedin.com/search/results/companies/?keywords=${q}">LinkedIn</a></span>` : ''}
+      </div>
+      ${(rec.benefits || []).length ? `<div class="box"><h5>${L('Benefits', 'Бенефиты')}</h5><ul class="det">${rec.benefits.slice(0, 10).map(d => `<li>${esc(d)}</li>`).join('')}</ul></div>` : ''}
+      ${(rec.details || []).length ? `<div class="box"><h5>${L('Key details', 'Главное из вакансии')}</h5><ul class="det">${rec.details.slice(0, 10).map(d => `<li>${esc(d)}</li>`).join('')}</ul></div>` : ''}
+      <details><summary>${L('Full description', 'Полное описание')}</summary><div class="jd">${esc(rec.description || '')}</div></details>`;
+  }
+  async function loadCompany(box, rec) {
+    const key = rec.url + '|' + (rec.description || '').length;
+    if (!coCache[key]) coCache[key] = await send({ type: 'aiCompany', job: jobOf(rec) });
+    const r = coCache[key];
+    const why = box.querySelector('#why'); if (why && !why.value && r.why) { why.value = r.why; why.dataset.ai = '1'; }
+    const slot = box.querySelector('[data-co]'); if (!slot || !slot.isConnected) return;
+    if (r.error === 'no-key') { slot.innerHTML = `<span class="note">${L('With an AI key: what the employer does and what they offer, from the ad.', 'С ключом AI: чем занимается работодатель и что предлагает — по тексту вакансии.')}</span>`; return; }
+    if (r.error) { slot.innerHTML = `<span class="note">AI: ${esc(r.error)}</span>`; return; }
+    slot.innerHTML = `${r.about.length ? `<ul class="det">${r.about.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}${r.offers.length ? `<span class="note">${L('They offer', 'Предлагают')}: ${r.offers.map(esc).join('; ')}</span>` : ''}`;
+  }
+
+  // ----- tab: application -----
+  function historyHtml(app) {
+    const h = (app.history || []).slice().reverse();
+    if (!h.length) return '';
+    const NAMES = { followUps: L('follow-up', 'фоллоуап'), outcome: L('outcome', 'итог'), closed: L('closed', 'закрыт'), nextDate: L('next step date', 'дата след. шага'), contactChannel: L('contact', 'контакт'), noChannel: L('no contact', 'некуда писать'), snoozeUntil: L('snoozed', 'отложено') };
+    return `<div class="box"><h5>${L('History', 'История')}</h5><ul class="hist">${h.slice(0, 12).map(e => {
+      const what = e.status ? (e.from ? `${esc(stLabel(e.from))} → ` : '') + `<b>${esc(stLabel(e.status))}</b>` : (e.fields || [e.type]).map(f => NAMES[f] || f).join(', ');
+      return `<li class="${e.undone ? 'undone' : ''}"><span class="note">${esc(fmtDay(e.at))}</span><span>${what}${e.by && e.by !== 'me' ? ` <span class="note">· ${esc(e.by)}</span>` : ''}</span>${!e.undone && e.prev ? `<a class="lk" data-undo="${esc(e.id)}">${L('undo', 'отменить')}</a>` : e.undone ? `<span class="note">${L('undone', 'отменено')}</span>` : '<span></span>'}</li>`;
+    }).join('')}</ul></div>`;
+  }
+  function applicationTab(rec, app, isNew) {
+    if (!app) return `<div class="box"><h5>${L('Not in your tracker yet', 'Ещё не в трекере')}</h5><span class="note">${L('It is saved by itself when you press Apply on the site. Applied another way?', 'Сохранится само, когда нажмёшь Apply на сайте. Откликнулся иначе?')}</span>
+        <button class="a go" data-act="applied">${L('I applied — save it', 'Я откликнулся — сохранить')}</button></div>
+      <button class="a" data-act="later">${L('Not now: put it in tonight’s session', 'Не сейчас: в сессию на вечер')}</button>`;
+    const opt = (list, cur) => list.map(v => `<option ${v === cur ? 'selected' : ''}>${esc(v)}</option>`).join('');
+    const platforms = S.PLATFORMS.includes(app.platform) ? S.PLATFORMS : [app.platform].concat(S.PLATFORMS);
+    const c = app.chance || {};
+    return `${isNew && c.verdict === 'skip' ? `<div class="box bad"><span>${L('This job was marked “better not to apply”. Only opened the form? Press “I did not apply”.', 'Эта вакансия помечена «лучше не подавать». Только открыл форму — нажми «Я не подавался».')}</span></div>` : ''}
+      <div class="row"><div><label>${L('Status', 'Статус')}</label><select id="status">${A.STATUSES.map(s => `<option value="${s.id}" ${s.id === app.status ? 'selected' : ''}>${esc(stLabel(s.id))}</option>`).join('')}</select></div>
+        <div><label>${L('Salary', 'Зарплата')}</label><input id="salaryText" value="${esc(app.salaryText || '')}" placeholder="${L('e.g. £24,000', 'напр. £24,000')}"></div></div>
+      ${I ? `<div class="row"><div><label>${L('How you applied', 'Как откликнулся')}</label><select id="method">${I.METHODS.map(m => `<option value="${m.id}" ${m.id === ((app.apply && app.apply.method) || 'unknown') ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select></div>
+        <div><label>${L('Cover letter', 'Письмо')}</label><select id="cover">${I.COVERS.map(m => `<option value="${m.id}" ${m.id === ((app.apply && app.apply.cover) || 'unknown') ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select></div></div>` : ''}
+      <label class="inl"><input type="checkbox" id="cvTailored" ${app.apply && app.apply.cvTailored ? 'checked' : ''}> ${L('CV tailored for this job', 'CV адаптировано под вакансию')}${app.apply && app.apply.cv ? ` <span class="note">· ${esc(app.apply.cv)}</span>` : ''}</label>
+      <label>${L('Notes', 'Заметки')}</label><textarea id="notes" rows="3" placeholder="${L('Recruiter, what to prepare…', 'Рекрутер, что подготовить…')}">${esc(app.notes || '')}</textarea>
+      <details><summary>${L('Edit job details', 'Изменить данные вакансии')}</summary>
+        <label>${L('Job title', 'Должность')}</label><input id="title" value="${esc(app.title || '')}">
+        <div class="row"><div><label>${L('Company', 'Компания')}</label><input id="company" value="${esc(app.company || '')}"></div><div><label>${L('Location', 'Место')}</label><input id="location" value="${esc(app.location || '')}"></div></div>
+        <div class="row"><div><label>${L('Source', 'Источник')}</label><select id="platform">${opt(platforms, app.platform)}</select></div><div><label>${L('Role type', 'Тип роли')}</label><select id="category">${opt(A.CATEGORY_NAMES, app.category)}</select></div></div>
+        <label>${L('Work type', 'Тип работы')}</label><div class="chips" id="wt">${A.WORK_TYPES.map(w => `<span class="chip ${(app.workTypes || []).includes(w) ? 'on' : ''}" data-v="${esc(w)}" role="checkbox" tabindex="0" aria-checked="${(app.workTypes || []).includes(w)}">${esc(w)}</span>`).join('')}</div>
+        <label>${L('Application type', 'Тип заявки')}</label><select id="track"><option value="job" ${app.track !== 'intern' ? 'selected' : ''}>Job</option><option value="intern" ${app.track === 'intern' ? 'selected' : ''}>Internship / placement</option></select>
+      </details>
+      <div class="acts"><button class="a go" id="save">${L('Save', 'Сохранить')}</button><button class="a red" id="undo">${L('I did not apply — remove', 'Я не подавался — убрать')}</button></div>
+      ${historyHtml(app)}
+      <a class="lk note" data-act="dash">${L('Open in the dashboard', 'Открыть в трекере')}</a>`;
+  }
+
+  // ----- tab: documents -----
+  function documentsTab(rec, app, r) {
+    const asks = globalThis.JT_Prompt ? JT_Prompt.wantsLetter(rec.description) : /cover(ing)? letter/i.test(rec.description || '');
+    return `<div class="note">${asks ? L('The ad asks for a cover letter.', 'Вакансия просит сопроводительное письмо.') : L('The ad does not ask for a cover letter.', 'Письмо вакансия не просит.')}</div>
+      <button class="a" data-act="tailor">${L('Tailor the CV (Word / PDF)', 'Адаптировать CV (Word / PDF)')}</button>
+      <label>${L('Why this employer (AI suggests it from the ad; change it to your words)', 'Почему этот работодатель (AI предложит из вакансии, поправь своими словами)')}</label>
+      <textarea id="why" rows="2">${esc((app && app.whyThem) || '')}</textarea>
+      <div class="acts"><button class="a go" data-act="letter">${L('Write the cover letter', 'Написать письмо')}</button><button class="a" data-act="answers">${L('Form answers', 'Ответы для анкеты')}</button></div>
+      <button class="a" data-act="later">${L('Prepare a pack for tonight’s session', 'Собрать пакет в сессию на вечер')}</button>
+      <div class="out" data-out></div>
+      ${r && !r.hasKey ? `<div class="note">${L('The letter and the answers to the ad’s own questions need a free AI key:', 'Письмо и ответы на вопросы вакансии — с бесплатным ключом AI:')} <a class="lk" data-act="settings">${L('Settings → AI', 'Настройки → AI')}</a>. ${L('Without it: the template on the Templates page.', 'Без ключа — шаблон на странице «Шаблоны».')}</div>` : ''}`;
+  }
+
+  // ----- the panel -----
+  const TABS = () => [['an', L('Analysis', 'Оценка')], ['sk', L('Skills', 'Навыки')], ['job', L('Job', 'Вакансия')], ['app', L('Application', 'Отклик')], ['doc', L('Documents', 'Документы')]];
+  // One number everywhere: requirements met (AI or the ad's sections); the skills score when there is none or the job is ruled out
+  const mainNum = (rec, r) => { const c = rec.chance || {}; const f = r && r.fit && r.fit.score != null ? r.fit.score : rec.fitPrecise && rec.fitPrecise.score != null ? rec.fitPrecise.score : null; return f != null && c.verdict !== 'skip' ? f + '%' : (A.display ? A.display(c).text : (c.score || 0) + '%'); };
+  async function showJob(rec, app, { isNew = false, elsewhere = null, tab } = {}) {
     ensureHost();
     const root = shadow.getElementById('root');
     root.querySelector('.jt') && root.querySelector('.jt').remove();
-    const c = app.chance || { score: 0, label: '—', matched: [], basic: [], missing: [] };
-    const opt = (list, cur) => list.map(v => `<option ${v === cur ? 'selected' : ''}>${esc(v)}</option>`).join('');
-    const stOpt = A.STATUSES.map(s => `<option value="${s.id}" ${s.id === app.status ? 'selected' : ''}>${esc(s.label)}</option>`).join('');
-    const platforms = S.PLATFORMS.includes(app.platform) ? S.PLATFORMS : [app.platform].concat(S.PLATFORMS);
+    try { profileCache = await S.getProfile(); } catch (e) { /* works without it */ }
+    const key = rec.url + '|' + (rec.description || '').length;
+    let r = aiCache[key] || null;
+    const c = rec.chance || {};
     const box = document.createElement('div');
     box.className = 'jt';
     box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-label', 'Application saved to Job Tracker');
+    box.setAttribute('aria-label', 'Job Tracker');
+    let cur = tab || (isNew ? 'app' : 'an');
+    const d0 = A.display ? A.display(c) : { text: (c.score || 0) + '%', label: c.label };
+    const head = app ? `<span class="tk">${esc(app.ticket || '')}</span><b>${isNew ? L('Application saved', 'Отклик сохранён') : esc(stLabel(app.status))}${elsewhere ? ' · ' + L('via ', 'через ') + esc(app.platform || '') : ''}</b>` : `<b>${L('Before you apply', 'Перед откликом')}</b>`;
     box.innerHTML = `
-      <div class="hd"><span class="lg" aria-hidden="true"></span><span class="tk">${esc(app.ticket)}</span><b>${isNew ? L('Application saved', 'Отклик сохранён') : L('Already in your tracker', 'Уже в трекере')}</b><button class="x" title="Close" aria-label="Close">×</button></div>
+      <div class="hd"><span class="lg" aria-hidden="true"></span>${head}<button class="x" aria-label="Close">×</button></div>
       <div class="bd">
-        <div><div class="job">${esc(app.title)}</div><div class="sub">${esc([app.company, app.location].filter(Boolean).join(' · '))}</div></div>
-        ${verdictHtml(c, app.fitPrecise)}
-        ${isNew && c.verdict === 'skip' ? `<div class="box bad"><span>${L('This job was marked “better not to apply”. If you only opened the form, press Undo.', 'Эта вакансия помечена «лучше не подавать». Если ты только открыл форму — нажми «Отменить».')}</span></div>` : ''}
-        ${placementHtml(app.placement, true)}
-        <div class="sub">${L('Filling in the form now? The letter and answers are ready below.', 'Заполняешь анкету? Письмо и ответы — ниже.')}</div>
-        ${actionsHtml(true)}
-        <div class="row"><div><label>${L('Status', 'Статус')}</label><select id="status">${stOpt}</select></div>
-          ${I ? `<div><label>${L('How you applied', 'Как откликнулся')}</label><select id="method">${I.METHODS.map(m => `<option value="${m.id}" ${m.id === ((app.apply && app.apply.method) || 'unknown') ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select></div>` : '<div></div>'}</div>
-        ${I ? `<div class="row"><div><label>${L('Cover letter', 'Письмо')}</label><select id="cover">${I.COVERS.map(m => `<option value="${m.id}" ${m.id === ((app.apply && app.apply.cover) || 'unknown') ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select></div>
-          <div><label>&nbsp;</label><label style="display:flex;gap:6px;align-items:center;margin:6px 0 0;color:#14201b"><input type="checkbox" id="cvTailored" style="width:auto;margin:0" ${app.apply && app.apply.cvTailored ? 'checked' : ''}> ${L('CV tailored', 'CV подогнано')}</label></div></div>` : ''}
-        <label>${L('Notes', 'Заметки')}</label><textarea id="notes" rows="3" placeholder="${L('Recruiter, what to prepare…', 'Рекрутер, что подготовить…')}">${esc(app.notes)}</textarea>
-        <details><summary>${L('Edit details', 'Изменить данные вакансии')}</summary>
-          <label>${L('Job title', 'Должность')}</label><input id="title" value="${esc(app.title)}">
-          <div class="row"><div><label>${L('Company', 'Компания')}</label><input id="company" value="${esc(app.company)}"></div><div><label>${L('Location', 'Место')}</label><input id="location" value="${esc(app.location)}"></div></div>
-          <div class="row"><div><label>${L('Source', 'Источник')}</label><select id="platform">${opt(platforms, app.platform)}</select></div><div><label>${L('Role type', 'Тип роли')}</label><select id="category">${opt(A.CATEGORY_NAMES, app.category)}</select></div></div>
-          <label>${L('Salary', 'Зарплата')}</label><input id="salaryText" value="${esc(app.salaryText)}">
-          <label>${L('Work type', 'Тип работы')}</label><div class="chips" id="wt">${A.WORK_TYPES.map(w => `<span class="chip ${app.workTypes.includes(w) ? 'on' : ''}" data-v="${esc(w)}" role="checkbox" tabindex="0" aria-checked="${app.workTypes.includes(w)}">${esc(w)}</span>`).join('')}</div>
-          <label>${L('Application type', 'Тип заявки')}</label><select id="track"><option value="job" ${app.track !== 'intern' ? 'selected' : ''}>Job</option><option value="intern" ${app.track === 'intern' ? 'selected' : ''}>Internship / placement</option></select>
-          <div class="note">${esc(postingLine(app))}</div>
-        </details>
-      </div>
-      <div class="ft"><button class="p" id="save">${L('Save', 'Сохранить')}</button><button class="s red" id="undo">${isNew ? L('Undo', 'Отменить') : L('Delete', 'Удалить')}</button></div>`;
+        <div class="top"><div><div class="job">${esc(rec.title || '')}${rec.track === 'intern' ? ' · internship' : ''}</div><div class="sub">${esc([rec.company, rec.location].filter(Boolean).join(' · '))}</div></div>
+          <div class="vbox" style="color:${vColor(c)}"><div class="num">${esc(mainNum(rec, r))}</div><div class="vl">${esc(VLABEL[c.verdict] ? L(...VLABEL[c.verdict]) : d0.label || '')}</div></div></div>
+        <div data-score>${scorecardHtml(rec, r, app, elsewhere)}</div>
+        <div class="tabs" role="tablist">${TABS().map(([id, t]) => `<button role="tab" data-tab="${id}" aria-selected="${id === cur}">${t}</button>`).join('')}</div>
+        <div class="pane" data-pane></div>
+      </div>`;
     root.appendChild(box);
-    const $ = id => box.querySelector('#' + id);
     box.querySelector('.x').onclick = () => box.remove();
-    box.querySelectorAll('.chip').forEach(ch => {
-      const toggle = () => { ch.classList.toggle('on'); ch.setAttribute('aria-checked', ch.classList.contains('on')); };
-      ch.onclick = toggle;
-      ch.onkeydown = e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); } };
-    });
-    bindActions(box, app);
-    $('save').onclick = async () => {
-      const salaryText = $('salaryText').value.trim();
-      const track = $('track').value;
-      let re = {};
-      if (track !== (app.track || 'job')) {
-        const an = A.analyze({ ...app, title: $('title').value.trim(), location: $('location').value.trim(), track, category: '' }, await S.getProfile());
-        re = { chance: an.chance, placement: an.placement, tools: an.chance.tools };
-      }
-      await S.updateApp(app.id, { track, ...re,
-        title: $('title').value.trim(), company: $('company').value.trim(), location: $('location').value.trim(),
-        platform: $('platform').value, status: $('status').value, category: $('category').value,
-        workTypes: [...box.querySelectorAll('.chip.on')].map(x => x.dataset.v),
-        salaryText, salary: A.parseSalary(salaryText) || (salaryText ? { text: salaryText } : null),
-        notes: $('notes').value,
-        ...(I ? { apply: { ...(app.apply || {}), method: $('method').value, cover: $('cover').value, cvTailored: $('cvTailored').checked } } : {}),
+    const pane = box.querySelector('[data-pane]');
+    const render = () => {
+      box.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === cur));
+      pane.innerHTML = cur === 'an' ? analysisTab(rec, r) : cur === 'sk' ? skillsTab(rec, r) : cur === 'job' ? jobTab(rec, app) : cur === 'app' ? applicationTab(rec, app, isNew) : documentsTab(rec, app, r);
+      bindPane();
+      if (cur === 'job' || cur === 'doc') loadCompany(box, rec);
+    };
+    box.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { cur = b.dataset.tab; render(); });
+
+    const bindPane = () => {
+      const $ = id => pane.querySelector('#' + id);
+      pane.querySelectorAll('[data-act]').forEach(btn => btn.addEventListener('click', e => { e.preventDefault(); act(btn.dataset.act, btn); }));
+      pane.querySelectorAll('.chip').forEach(ch => {
+        const toggle = () => { ch.classList.toggle('on'); ch.setAttribute('aria-checked', ch.classList.contains('on')); };
+        ch.onclick = toggle; ch.onkeydown = e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); } };
       });
-      box.remove();
-      toast(L('Saved', 'Сохранено'), L('Open dashboard', 'Открыть панель'), openDashboard, 3000);
+      if ($('wrong')) $('wrong').onclick = () => { const f = $('fb'); f.hidden = !f.hidden; };
+      if ($('fbSave')) $('fbSave').onclick = async () => {
+        const { verdictFeedback = [] } = await S.get('verdictFeedback');
+        verdictFeedback.push({ at: new Date().toISOString(), version: chrome.runtime.getManifest().version, url: rec.url, title: rec.title, company: rec.company, location: rec.location,
+          salaryText: rec.salaryText, verdict: c.verdict, score: c.score, expected: $('fbV').value, note: $('fbN').value.trim(), description: String(rec.description || '').slice(0, 8000) });
+        await S.set({ verdictFeedback: verdictFeedback.slice(-200) });
+        $('fb').innerHTML = `<div class="note">${L('Saved. Data → Wrong verdicts downloads the list.', 'Сохранено. Список — в «Данные → Неверные оценки».')}</div>`;
+      };
+      if ($('why') && app) $('why').onchange = async () => { app.whyThem = $('why').value.trim(); await S.updateApp(app.id, { whyThem: app.whyThem }); };
+      if ($('save')) $('save').onclick = async () => {
+        const salaryText = $('salaryText').value.trim(), track = $('track').value;
+        let re = {};
+        if (track !== (app.track || 'job')) { const an = A.analyze({ ...app, title: $('title').value.trim(), location: $('location').value.trim(), track, category: '' }, await S.getProfile()); re = { chance: an.chance, placement: an.placement, tools: an.chance.tools }; }
+        app = await S.updateApp(app.id, { track, ...re,
+          title: $('title').value.trim(), company: $('company').value.trim(), location: $('location').value.trim(),
+          platform: $('platform').value, status: $('status').value, category: $('category').value,
+          workTypes: [...pane.querySelectorAll('.chip.on')].map(x => x.dataset.v),
+          salaryText, salary: A.parseSalary(salaryText) || (salaryText ? { text: salaryText } : null), notes: $('notes').value,
+          apply: { ...(app.apply || {}), ...(I ? { method: $('method').value, cover: $('cover').value } : {}), cvTailored: $('cvTailored').checked } }) || app;
+        isNew = false; render();
+        toast(L('Saved', 'Сохранено'), null, null, 2000);
+        previewSig = ''; setTimeout(() => refreshPreview(false), 300);
+      };
+      if ($('undo')) $('undo').onclick = async () => {
+        if (!isNew && !confirm(L('Remove this application from your tracker?', 'Убрать этот отклик из трекера?'))) return;
+        await S.deleteApp(app.id);
+        app = null; isNew = false; cur = 'an';
+        box.querySelector('.hd b').textContent = L('Before you apply', 'Перед откликом');
+        const tk = box.querySelector('.hd .tk'); if (tk) tk.remove();
+        render();
+        toast(L('Removed: it is not counted as sent', 'Убрано: отклик не считается отправленным'), null, null, 3000);
+        previewSig = ''; setTimeout(() => refreshPreview(false), 300);
+      };
+      pane.querySelectorAll('[data-undo]').forEach(a => a.onclick = async () => {
+        const res = await send({ type: 'undo', appId: app.id, eventId: a.dataset.undo });
+        if (res.ok) { app = (await S.getApps()).find(x => x.id === app.id) || app; render(); previewSig = ''; setTimeout(() => refreshPreview(false), 300); }
+      });
     };
-    $('undo').onclick = async () => {
-      await S.deleteApp(app.id);
-      box.remove();
-      toast(L('Removed from your tracker', 'Удалено из трекера'), null, null, 2500);
+
+    const copyBtn = ta => { const b = document.createElement('button'); b.className = 's'; b.textContent = L('Copy', 'Копировать'); b.onclick = async () => { try { await navigator.clipboard.writeText(ta.value); b.textContent = L('Copied', 'Скопировано'); } catch (e) { ta.select(); } }; return b; };
+    const act = async (a, btn) => {
+      const job = jobOf(rec);
+      const out = pane.querySelector('[data-out]');
+      if (a === 'settings') { chrome.runtime.sendMessage({ type: 'openDashboard', hash: '#settings' }); return; }
+      if (a === 'dash') { chrome.runtime.sendMessage({ type: 'openDashboard', hash: app ? '#app=' + app.id : '' }); return; }
+      if (a === 'tailor') { chrome.runtime.sendMessage({ type: 'openTailor', job: { ...job, track: rec.track } }); return; }
+      if (a === 'applied') { box.remove(); captureApplication('manual'); return; }
+      if (a === 'later') {
+        btn.disabled = true; btn.innerHTML = `<span class="spin"></span> ${L('Preparing the pack…', 'Готовлю пакет…')}`;
+        const res = await send({ type: 'saveForSession', job });
+        btn.innerHTML = res.ok ? L(`In tonight’s session ✓ (${res.count})`, `В сессии на вечер ✓ (${res.count})`) : L('Could not save', 'Не получилось');
+        if (res.ok) toast(L('Pack ready: CV, letter and answers. Open Application session tonight.', 'Пакет готов: CV, письмо и ответы. Вечером открой «Сессию откликов».'), L('Open', 'Открыть'), () => chrome.runtime.sendMessage({ type: 'openSession' }), 6000);
+        return;
+      }
+      out.innerHTML = `<div class="sub"><span class="spin"></span> ${a === 'letter' ? L('Writing the letter…', 'Пишу письмо…') : L('Preparing answers…', 'Готовлю ответы…')}</div>`;
+      if (a === 'letter') {
+        const why = (pane.querySelector('#why') || {}).value || '';
+        const res = await send({ type: 'aiLetter', job: { ...job, why: why.trim() } });
+        if (res.error === 'no-key') { out.innerHTML = `<div class="note">${L('The letter needs a free AI key:', 'Для письма нужен бесплатный ключ AI:')} <a class="lk" data-act="settings">${L('Settings → AI', 'Настройки → AI')}</a></div>`; out.querySelector('[data-act]').onclick = () => act('settings'); return; }
+        if (res.error) { out.innerHTML = `<div class="box bad"><span>${esc(res.error)}</span></div>`; return; }
+        out.innerHTML = `${res.warn && res.warn.length ? `<div class="box warn"><span>${L('Check: the letter names', 'Проверь: в письме есть')} ${esc(res.warn.join(', '))} — ${L('not in your facts or skills', 'этого нет в твоих фактах и навыках')}.</span></div>` : ''}<textarea>${esc(res.text)}</textarea>`;
+        const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:6px'; row.appendChild(copyBtn(out.querySelector('textarea'))); out.appendChild(row);
+        if (app) { app = await S.updateApp(app.id, { apply: { ...(app.apply || {}), cover: 'tailored' } }) || app; }
+      } else {
+        const qs = (r && r.questions) || [];
+        const res = await send({ type: 'aiAnswers', job, questions: qs });
+        if (res.error) { out.innerHTML = `<div class="box bad"><span>${esc(res.error)}</span></div>`; return; }
+        out.innerHTML = res.answers.map((x, i) => `<div class="qa"><b>${esc(x.q)}${x.src === 'ai' ? ' · AI' : ''}</b><textarea data-i="${i}" style="min-height:${x.a.length > 120 ? 96 : 40}px">${esc(x.a)}</textarea></div>`).join('');
+        out.querySelectorAll('textarea').forEach(ta => { ta.onfocus = () => ta.select(); });
+      }
     };
+
+    render();
+    // AI reads the requirements once per ad; the score card and the analysis follow it
+    if (!r) {
+      r = aiCache[key] = await send({ type: 'aiJob', job: jobOf(rec) });
+      aiCache[rec.url] = r;
+      if (!box.isConnected) return;
+      box.querySelector('[data-score]').innerHTML = scorecardHtml(rec, r, app, elsewhere);
+      if (r.fit && r.fit.score != null) rec.fitPrecise = { score: r.fit.score, summary: r.fit.summary, source: r.source };
+      box.querySelector('.vbox .num').textContent = mainNum(rec, r);
+      const bp = shadow.querySelector('.badge .pc'); if (bp && previewRec && previewRec.url === rec.url) bp.textContent = mainNum(rec, r);
+      if (cur === 'an' || cur === 'sk' || cur === 'doc') { const keep = pane.querySelector('[data-out]'); if (!keep || !keep.innerHTML) render(); }
+    }
   }
+  const showPanel = (app, { isNew }) => showJob(app, app, { isNew });
+  const showPreviewPanel = (rec, existing, elsewhere) => showJob(rec, existing, { elsewhere });
 
   function openDashboard() { chrome.runtime.sendMessage({ type: 'openDashboard' }); }
-  function postingLine(app) {
-    const p = app.posting || {}, out = [];
-    if (p.daysAgo != null) out.push((p.reposted ? 'Reposted ' : 'Ad posted ') + (p.daysAgo === 0 ? 'today' : p.daysAgo + ' day' + (p.daysAgo === 1 ? '' : 's') + ' ago'));
-    if (p.applicants != null) out.push(p.applicantsText || p.applicants + ' applicants');
-    if (app.apply && app.apply.cv) out.push('CV: ' + app.apply.cv);
-    return out.length ? out.join(' · ') : 'Ad age and applicant count not shown on this page';
-  }
-
   let previewSig = '', previewRec = null, previewHidden = false;
 
   function looksLikeJobPage(rec) {
     if (!(rec && rec.title && rec.title.length > 3 && (rec.description || '').length > 300)) return false;
     const issues = (rec.chance && rec.chance.quality && rec.chance.quality.issues) || [];
     return !issues.some(i => ['junk-title', 'results-page', 'form-page', 'no-title'].includes(i.code));
-  }
-
-  // How many you sent today against the weekly A + B targets spread over your work days: a nudge, nothing is blocked
-  function todayHtml(day, profile) {
-    if (!day) return '';
-    const tg = profile && profile.targets, wd = (profile && profile.workDays && profile.workDays.length) || (profile && profile.daysPerWeek) || 5;
-    const limit = tg ? Math.max(1, Math.ceil(((Number(tg.A) || 0) + (Number(tg.B) || 0)) / wd)) : 5;
-    const over = day.n >= limit;
-    return `<div class="note" style="${over ? 'color:#c23b22;font-weight:600' : ''}">${L('Today', 'Сегодня')}: ${day.n} / ${limit}${over ? ' · ' + L('target reached: follow up on older ones instead', 'цель дня выполнена: займись follow-up') : ''}</div>`;
-  }
-
-  const fmtDay = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
-  const WHY = { ref: 'same job reference', text: 'same ad text', title: 'same title and company' };
-  async function showPreviewPanel(rec, existing, elsewhere) {
-    ensureHost();
-    const root = shadow.getElementById('root');
-    root.querySelector('.jt') && root.querySelector('.jt').remove();
-    const c = rec.chance;
-    let day = null, profile = null;
-    try { profile = await S.getProfile(); if (!existing && I) day = I.today(await S.getApps()); } catch (e) { /* the panel works without it */ }
-    const box = document.createElement('div');
-    box.className = 'jt';
-    box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-label', 'Fit for this job');
-    box.innerHTML = `
-      <div class="hd"><span class="lg" aria-hidden="true"></span>${existing ? `<span class="tk">${esc(existing.ticket)}</span>` : ''}<b>${existing ? L('In your tracker', 'В трекере') + ' · ' + esc(A.statusLabel(existing.status)) : L('Before you apply', 'Перед откликом')}</b><button class="x" aria-label="Close">×</button></div>
-      <div class="bd">
-        ${elsewhere ? `<div class="box warn"><h5>${L('You already applied for this job', 'Ты уже откликался на эту вакансию')}</h5><span class="sub">${esc(existing.ticket)} · ${esc(existing.platform || '')}${existing.appliedAt ? ' · ' + esc(fmtDay(existing.appliedAt)) : ''} · ${esc(WHY[elsewhere.why])}</span></div>` : ''}
-        <div><div class="job">${esc(rec.title)}${rec.track === 'intern' ? ' · internship' : ''}</div><div class="sub">${esc(rec.company || '')}</div></div>
-        ${verdictHtml(c, rec.fitPrecise)}
-        ${marketTags(rec)}
-        <div data-ai></div>
-        ${actionsHtml(true)}
-        ${placementHtml(rec.placement)}
-        ${atsHtml(rec.atsMatch)}
-        ${todayHtml(day, profile)}
-        <details><summary>${L('Details', 'Подробнее')}</summary>
-          ${reasonsHtml(c)}
-          ${(rec.details || []).length ? `<ul class="det">${rec.details.slice(0, 7).map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
-          ${(rec.benefits || []).length ? `<ul class="det">${rec.benefits.slice(0, 6).map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
-          <div class="note" style="margin-top:6px">${L('Saved automatically when you press Apply.', 'Сохранится само, когда нажмёшь Apply.')} <a class="lk" id="wrong">${L('Wrong verdict?', 'Неверный вердикт?')}</a></div>
-          <div id="fb" hidden style="margin-top:6px">
-            <select id="fbV"><option value="apply">Apply</option><option value="tailor">Tailor CV</option><option value="ask">Check first</option><option value="skip">Skip</option><option value="notjob">Not a job / not IT</option></select>
-            <input id="fbN" placeholder="${L('Why (optional)', 'Почему (необязательно)')}" style="margin-top:6px">
-            <button class="s" id="fbSave" style="margin-top:6px">${L('Save', 'Сохранить')}</button>
-          </div>
-        </details>
-      </div>
-      <div class="ft"><button class="s" id="close">${L('Close', 'Закрыть')}</button><button class="s" id="hide">${L('Hide on this page', 'Скрыть на странице')}</button></div>`;
-    root.appendChild(box);
-    box.querySelector('.x').onclick = () => box.remove();
-    box.querySelector('#close').onclick = () => box.remove();
-    box.querySelector('#hide').onclick = () => { previewHidden = true; box.remove(); removeBadge(); };
-    bindActions(box, rec);
-    loadAi(box, rec);
-    // A wrong verdict is kept with the ad text, so it can become a test for the next version
-    box.querySelector('#wrong').onclick = () => { const f = box.querySelector('#fb'); f.hidden = !f.hidden; };
-    box.querySelector('#fbSave').onclick = async () => {
-      const { verdictFeedback = [] } = await S.get('verdictFeedback');
-      verdictFeedback.push({
-        at: new Date().toISOString(), version: chrome.runtime.getManifest().version, url: rec.url, title: rec.title, company: rec.company, location: rec.location,
-        salaryText: rec.salaryText, verdict: c.verdict, score: c.score, expected: box.querySelector('#fbV').value, note: box.querySelector('#fbN').value.trim(),
-        description: String(rec.description || '').slice(0, 8000),
-      });
-      await S.set({ verdictFeedback: verdictFeedback.slice(-200) });
-      box.querySelector('#fb').innerHTML = `<div class="note">${L('Saved. Data → Wrong verdicts downloads the list.', 'Сохранено. Список — в Data → Wrong verdicts.')}</div>`;
-    };
   }
 
   function removeBadge() { if (shadow) { const b = shadow.getElementById('root').querySelector('.badge'); if (b) b.remove(); } }
@@ -661,13 +750,18 @@
       b.setAttribute('tabindex', '0');
       b.title = L('Open the analysis', 'Открыть разбор');
       const d = A.display(c);
-      const num = rec.fitPrecise && rec.fitPrecise.score != null && c.verdict !== 'skip' ? rec.fitPrecise.score + '%' : d.text;
+      const num = mainNum(rec, aiCache[rec.url + '|' + (rec.description || '').length]);
       const lab = VLABEL[c.verdict] ? L(...VLABEL[c.verdict]) : d.label;
       b.innerHTML = `<span class="pc" style="background:${vColor(c)}">${esc(num)}</span><span>${existing ? (elsewhere ? L('Already applied via ', 'Уже откликался через ') + esc(existing.platform || '') : esc(A.statusLabel(existing.status))) : esc(lab) + (rec.track === 'intern' ? ' · internship' : '') + plMark(rec.placement)}</span><button class="hide" aria-label="Hide">×</button>`;
       b.onclick = e => { if (e.target.closest('.hide')) { previewHidden = true; b.remove(); return; } showPreviewPanel(previewRec, existing, elsewhere); };
       b.onkeydown = e => { if (e.key === 'Enter') showPreviewPanel(previewRec, existing, elsewhere); };
       root.appendChild(b);
       if (force) showPreviewPanel(rec, existing, elsewhere);
+      else {
+        // AI reads the requirements right away (once per ad, cached), so the badge shows the same number as the panel
+        const k = rec.url + '|' + (rec.description || '').length;
+        if (!aiCache[k]) send({ type: 'aiJob', job: jobOf(rec) }).then(r => { if (!aiCache[k]) { aiCache[k] = r; aiCache[rec.url] = r; } const pc = b.querySelector('.pc'); if (pc && b.isConnected) pc.textContent = mainNum(rec, aiCache[k]); });
+      }
     } catch (e) {
       if (!String(e).includes('Extension context invalidated')) console.warn('[Job Tracker]', e);
     }
