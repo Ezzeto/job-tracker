@@ -104,6 +104,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   // ---------- AI on the job page (3.11) ----------
   if (msg && msg.type === 'aiJob') { aiJob(msg.job).then(reply, e => reply({ error: String(e.message || e) })); return true; }
   if (msg && msg.type === 'aiLetter') { aiLetter(msg.job).then(reply, e => reply({ error: String(e.message || e) })); return true; }
+  if (msg && msg.type === 'aiCompany') { aiCompany(msg.job).then(reply, e => reply({ error: String(e.message || e) })); return true; }
   if (msg && msg.type === 'aiAnswers') { aiAnswers(msg.job, msg.questions).then(reply, e => reply({ error: String(e.message || e) })); return true; }
   if (msg && msg.type === 'saveForSession') { saveForSession(msg.job).then(reply, e => reply({ error: String(e.message || e) })); return true; }
   if (msg && msg.type === 'autofillData') { autofillData(msg, _sender).then(reply); return true; }
@@ -230,7 +231,11 @@ async function aiLetter(job) {
   const mk = JT_Market.marketOf(job);
   const avail = mk === 'B' ? `${JT_Market.daysText(p.workDays) || (p.daysPerWeek || 4) + ' days a week'}${p.hoursPerWeek ? ', up to ' + p.hoursPerWeek + ' hours a week' : ''}, alongside my Computing degree; can start immediately` : 'full-time, can start immediately';
   const sig = [p.signName, [p.signPhone, p.signLinkedIn].filter(Boolean).join(' · ')].filter(Boolean).join('\n');
-  return JT_LLM.coverLetter(cfg, { job, facts, profile: p, availability: avail, signature: sig });
+  return JT_LLM.coverLetter(cfg, { job, facts, profile: p, availability: avail, why: job.why || '', signature: sig });
+}
+async function aiCompany(job) {
+  const cfg = await llmCfg(); if (!cfg) return { error: 'no-key' };
+  return JT_LLM.companyFromAd(cfg, job);
 }
 async function aiAnswers(job, questions) {
   const p = await JT_Store.getProfile();
