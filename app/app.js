@@ -166,6 +166,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       if (!quiet) toast('Данные обновлены');
       if (st.scriptVersion >= 17) loadInbox(false);
       if (st.scriptVersion >= 21) pullEmployers();
+      if (st.scriptVersion >= 24) pullLater();
     } catch (e) {
       setOnline(navigator.onLine && !/fetch|network/i.test(String(e.message)));
       if (!quiet) toast(String(e.message || e));
@@ -319,12 +320,15 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     st.result = null; st.input = ''; st.letter = ''; LS.set('draft', ''); save();
     location.hash = '#today';
   }
+  let laterTimer = null;
+  function pushLater() { if (!st.cfg || st.scriptVersion < 24) return; clearTimeout(laterTimer); laterTimer = setTimeout(() => { laterTimer = null; api('POST', null, { later: st.local.later }).catch(() => {}); }, 800); }
+  async function pullLater() { try { const d = await api('GET', { action: 'later' }); if (Array.isArray(d.later) && !laterTimer) { const local = new Map(st.local.later.map(x => [x.id, x])); st.local.later = d.later.map(x => ({ ...(local.get(x.id) || {}), ...x })); save(); } } catch (e) { /* older script */ } }
   function saveLater() {
     const r = st.result; if (!r) return;
     if (!st.local.later.some(x => r.job.url && x.url === r.job.url)) {
       st.local.later.unshift({ id: 'l' + Date.now().toString(36), at: todayIso(), title: r.job.title, company: r.job.company || '', url: r.job.url || '', location: r.job.location || '', description: String(r.job.description || '').slice(0, 15000), platform: r.job.platform || '', market: r.market, verdict: r.c.verdict, score: r.c.score });
     }
-    save(); toast('Сохранено в «Откликнуться с ПК» на экране «Сегодня»');
+    save(); pushLater(); toast('Сохранено в «Откликнуться с ПК»: расширение подготовит пакет отклика');
   }
 
   // ---------- AI (Groq) and the Claude prompt ----------
@@ -1418,12 +1422,12 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       save(); flush().then(updateBadges); render();
       toast(`${list.length} отмечено «Нет ответа»`, 'Отменить', () => { before.forEach(([r, s]) => { const i = st.queue.findIndex(x => items.includes(x) && x.id === r.id); if (i >= 0) st.queue.splice(i, 1); else st.queue.push({ type: 'patch', id: r.id, patch: { status: s }, at: Date.now() }); r.status = s; }); save(); flush(); render(); });
     };
-    $$('[data-later-drop]', v).forEach(b => b.onclick = () => { st.local.later = st.local.later.filter(x => x.id !== b.dataset.laterDrop); save(); render(); });
+    $$('[data-later-drop]', v).forEach(b => b.onclick = () => { st.local.later = st.local.later.filter(x => x.id !== b.dataset.laterDrop); save(); pushLater(); render(); });
     $$('[data-later-check]', v).forEach(b => b.onclick = () => { const x = st.local.later.find(y => y.id === b.dataset.laterCheck); if (!x) return; st.result = analyzeJob(x); st.letter = ''; location.hash = '#check'; });
     $$('[data-later-apply]', v).forEach(b => b.onclick = () => {
       const x = st.local.later.find(y => y.id === b.dataset.laterApply); if (!x) return;
       const r = analyzeJob(x); addRow(rowFromJob(r.job, r.an, r.c, 'applied', r));
-      st.local.later = st.local.later.filter(y => y.id !== x.id); save(); render();
+      st.local.later = st.local.later.filter(y => y.id !== x.id); save(); pushLater(); render();
     });
     // Check
     const inp = $('#jobInput', v);

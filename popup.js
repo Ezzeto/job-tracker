@@ -32,6 +32,18 @@
   });
 
   $('dash').onclick = () => chrome.runtime.sendMessage({ type: 'openDashboard' });
+  $('session').onclick = () => chrome.runtime.sendMessage({ type: 'openSession' });
+  // Fills the form on this page (any site): the extension is allowed into this tab because you clicked
+  $('fill').onclick = async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !/^https?:/.test(tab.url || '')) { $('msg').textContent = 'Open the application form first.'; return; }
+    if (/linkedin\.com/.test(tab.url)) { $('msg').textContent = 'LinkedIn Easy Apply is not filled automatically: it is against LinkedIn rules.'; return; }
+    try {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: () => { window.__jtAutofillRun = true; } });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['lib/autofill.js', 'autofill.js'] });
+      window.close();
+    } catch (e) { $('msg').textContent = 'This page cannot be filled: ' + e.message; }
+  };
 
   $('check').onclick = async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

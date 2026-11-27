@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Job Tracker",
-  "version": "3.9.0",
+  "version": "3.10.0",
   "description": "Records the jobs you apply for on UK job boards, scores how well each one fits your skills and tracks every application to an offer.",
   "permissions": [
     "storage",
@@ -12,7 +12,10 @@
   ],
   "host_permissions": [
     "https://script.google.com/*",
-    "https://script.googleusercontent.com/*"
+    "https://script.googleusercontent.com/*",
+    "https://api.groq.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://openrouter.ai/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -85,6 +88,38 @@
         "listscan.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.greenhouse.io/*",
+        "*://*.lever.co/*",
+        "*://*.ashbyhq.com/*",
+        "*://*.myworkdayjobs.com/*",
+        "*://*.myworkdaysite.com/*",
+        "*://*.smartrecruiters.com/*",
+        "*://*.teamtailor.com/*",
+        "*://*.workable.com/*",
+        "*://*.jobs.nhs.uk/*",
+        "*://*.trac.jobs/*",
+        "*://*.tes.com/*",
+        "*://*.eteach.com/*",
+        "*://*.bamboohr.com/*",
+        "*://*.recruitee.com/*",
+        "*://*.applytojob.com/*",
+        "*://*.jobvite.com/*",
+        "*://*.icims.com/*",
+        "*://*.successfactors.com/*",
+        "*://*.successfactors.eu/*",
+        "*://*.taleo.net/*",
+        "*://*.pinpointhq.com/*",
+        "*://*.jobtrain.co.uk/*"
+      ],
+      "js": [
+        "lib/autofill.js",
+        "autofill.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ]
 }

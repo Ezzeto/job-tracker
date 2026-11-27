@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Job Tracker — сессия откликов</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="dashboard.css">
+  <style>
+    body { display: block; }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 32px 24px 64px; }
+    .tabs { display: flex; gap: 6px; margin: 14px 0 20px; }
+    .tabs a { padding: 8px 14px; border-radius: 10px; text-decoration: none; color: var(--muted); font-weight: 600; }
+    .tabs a.on { background: var(--blue-soft); color: var(--ink); }
+    .item { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; padding: 14px 0; border-top: 1px solid #e4e8e1; }
+    .item:first-child { border-top: 0; }
+    .item .t { font-weight: 650; }
+    .item .s { color: var(--muted); font-size: 13px; }
+    .tag { display: inline-block; font-size: 12px; font-weight: 650; padding: 2px 8px; border-radius: 7px; background: var(--soft); margin-right: 4px; }
+    .tag.B { background: #dcebe3; color: #1d6b4f; } .tag.A { background: #f6e7cf; color: #a85f00; } .tag.ok { background: #dcebe3; color: #1d6b4f; } .tag.bad { background: #f7ddd6; color: #c23b22; }
+    .pack { grid-column: 1 / -1; background: var(--soft); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .pack textarea { min-height: 220px; font: 14px/1.5 var(--font); }
+    .qa { border-top: 1px solid #e4e8e1; padding-top: 8px; } .qa b { display: block; font-size: 13px; color: var(--muted); font-weight: 600; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; } .grid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+    .note { background: #f6e7cf; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; } .note.info { background: #dde8f2; } .note.ok { background: #dcebe3; }
+    .big { font-size: 15px; padding: 11px 18px; }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row-between"><div><h1>Сессия откликов</h1><p class="hint" style="margin:6px 0 0">Пакет для каждой вакансии готовится заранее: CV под вакансию, письмо, ответы на вопросы. Потом трекер открывает вакансии по очереди и заполняет анкеты — ты проверяешь и нажимаешь Submit.</p></div><a class="btn" href="dashboard.html">← Панель</a></div>
+    <nav class="tabs"><a href="#queue" data-tab="queue">Очередь</a><a href="#me" data-tab="me">Данные для анкет и AI</a></nav>
+    <main id="view"></main>
+  </div>
+  <script src="lib/quality.js"></script>
+  <script src="lib/analyzer.js"></script>
+  <script src="lib/store.js"></script>
+  <script src="lib/extract.js"></script>
+  <script src="lib/market.js"></script>
+  <script src="lib/templates.js"></script>
+  <script src="lib/tailor.js"></script>
+  <script src="lib/docx.js"></script>
+  <script src="lib/fit.js"></script>
+  <script src="lib/llm.js"></script>
+  <script src="lib/packs.js"></script>
+  <script src="session.js"></script>
+</body>
+</html>

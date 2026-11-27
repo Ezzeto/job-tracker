@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 23; // 23 = AI conclusions of the week from the phone in the Sunday email; 22 = jobs from alert emails, forgotten applications added from confirmations, free calendar slots, Telegram; 21 = employers you contacted (synced with the phone), their replies and vacancy pages watched; 20 = calendar events from voice notes on the phone; 19 = home lab tasks finished on the phone (learned skills); 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 24; // 24 = the 'apply from the PC' list shared by the phone and the extension's application session; 23 = AI conclusions of the week from the phone in the Sunday email; 22 = jobs from alert emails, forgotten applications added from confirmations, free calendar slots, Telegram; 21 = employers you contacted (synced with the phone), their replies and vacancy pages watched; 20 = calendar events from voice notes on the phone; 19 = home lab tasks finished on the phone (learned skills); 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -422,6 +422,7 @@ function doGet(e) {
   if (p.action === 'profile') return json_({ ok: true, profile: readProfile_(), learned: readLearned_() });
   if (p.action === 'inbox') return json_(inbox_(p.force === '1'));
   if (p.action === 'employers') return json_({ ok: true, employers: readEmployers_() });
+  if (p.action === 'later') return json_({ ok: true, later: readLater_() });
   if (p.action === 'slots') return json_(busy_(Math.min(21, Number(p.days) || 10)));
 
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
@@ -801,6 +802,8 @@ function doPost(e) {
     if (body.learned && typeof body.learned === 'object') saveLearned_(body.learned);
     const events = Array.isArray(body.events) ? addEvents_(body.events.slice(0, 5)) : [];
     if (Array.isArray(body.employers)) saveEmployers_(body.employers);
+    if (Array.isArray(body.later)) saveLater_(body.later.slice(0, 60));
+    if (Array.isArray(body.laterDone) && body.laterDone.length) saveLater_(readLater_().filter(x => !body.laterDone.includes(x.url) && !body.laterDone.includes(x.id)));
     if (typeof body.weeklyNote === 'string') PropertiesService.getScriptProperties().setProperty('WEEKLY_NOTE', JSON.stringify({ text: body.weeklyNote.slice(0, 6000), at: Date.now() }));
 
     const del = (body.deletes || []).map(id => rowOf[id]).filter(Boolean).sort((x, y) => y - x);
@@ -1160,4 +1163,24 @@ function telegramEvening() {
   if (!ev.length) return;
   const tz = Session.getScriptTimeZone();
   tg_('<b>Завтра</b>\n' + ev.map(x => `• ${Utilities.formatDate(x.getStartTime(), tz, 'HH:mm')} — ${tgEsc_(x.getTitle())}`).join('\n') + '\n\nПроверь адрес или ссылку на звонок, подготовь 2–3 истории STAR и вопросы работодателю.', [['Открыть трекер', appUrl_() + '#apps']]);
+}
+
+
+// ---------- Apply from the PC (24) ----------
+// Jobs saved on the phone with "For later": the extension's application session prepares a pack for each
+// (CV, letter, answers) and opens them one by one. Applied ones are removed. Hidden _later sheet.
+const LATER_SHEET = '_later';
+function readLater_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(LATER_SHEET);
+  if (!sh) return [];
+  try { return JSON.parse(sh.getRange(1, 1).getValue() || '[]'); } catch (e) { return []; }
+}
+function saveLater_(list) {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(LATER_SHEET);
+  if (!sh) { sh = ss.insertSheet(LATER_SHEET); sh.hideSheet(); }
+  const keep = list.filter(x => x && (x.url || x.title)).map(x => ({ id: String(x.id || '').slice(0, 40), at: String(x.at || '').slice(0, 10), title: String(x.title || '').slice(0, 200), company: String(x.company || '').slice(0, 120), url: String(x.url || '').slice(0, 500), location: String(x.location || '').slice(0, 120), platform: String(x.platform || '').slice(0, 40), market: x.market === 'A' ? 'A' : 'B', score: Number(x.score) || '', description: String(x.description || '').slice(0, 6000) }));
+  let json = JSON.stringify(keep);
+  while (json.length > 49000 && keep.length) { keep.pop(); json = JSON.stringify(keep); }
+  sh.getRange(1, 1).setValue(json);
 }
