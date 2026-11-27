@@ -424,7 +424,7 @@
     const fitN = r && r.fit && r.fit.score != null ? r.fit.score : c.score || 0;
     out.push(scoreRow(fitN >= 70 ? '✓' : fitN >= 50 ? '~' : '✕', fitN >= 70 ? 'k1' : fitN >= 50 ? 'k2' : 'k3', L('Do I fit?', 'Подхожу?'), [alg, req].filter(Boolean).join(' · ')));
     // 2. Will they answer? From your own history of applications
-    if (r && r.chance) out.push(scoreRow('%', 'k4', L('Will they answer?', 'Ответят?'), `${esc(r.chance.main)} <span class="note">${esc(r.chance.sub)}</span>`));
+    if (r && r.chance) { const up = /выше/.test(r.chance.main + (r.chance.pct ? r.chance.sub : '')), down = /ниже/.test(r.chance.main + (r.chance.pct ? r.chance.sub : '')); out.push(scoreRow(up ? '↑' : down ? '↓' : '=', up ? 'k1' : down ? 'k3' : 'k4', L('Will they answer?', 'Ответят?'), `${esc(r.chance.main)}${r.chance.sub ? ` <span class="note">· ${esc(r.chance.sub)}</span>` : ''}`)); }
     else out.push(scoreRow('%', 'k4', L('Will they answer?', 'Ответят?'), '<span class="spin"></span>'));
     // 3. Does it suit me? Market A/B, office days, pay, placement rules, hard blocks
     const suit = [], mk = M ? M.marketOf(rec) : 'B';
@@ -446,7 +446,9 @@
     // 4. Risks: agency, ad age, applicants, data quality, applied before
     const risk = [], p = rec.posting || {};
     if (elsewhere) risk.push(L(`already applied via ${esc(app.platform || 'another site')}`, `уже откликался через ${esc(app.platform || 'другой сайт')}`));
-    if (r && r.agency) risk.push(L('agency', 'агентство') + (r.employer ? ` → ${esc(r.employer)}` : ''));
+    const br = (r && r.broker) || (M && M.broker ? M.broker(rec.company, rec.description) : null);
+    if (br === 'board') risk.push(L(`intermediary (${esc(rec.company)}): the employer is hidden`, `посредник (${esc(rec.company)}): работодатель неизвестен`) + (r && r.employer ? ` → ${esc(r.employer)}` : ''));
+    else if (br === 'agency' || (r && r.agency)) risk.push(L('agency', 'агентство') + (r && r.employer ? ` → ${esc(r.employer)}` : ''));
     if (p.daysAgo != null && p.daysAgo > 21) risk.push(L(`ad ${p.daysAgo} days old`, `объявлению ${p.daysAgo} дн.`));
     if (p.applicants != null && p.applicants > 100) risk.push(L(`${p.applicants} applicants`, `${p.applicants} откликов`));
     const q = c.quality && !c.quality.ok ? c.quality.issues.filter(i => i.hard) : [];
@@ -473,7 +475,7 @@
     const c = rec.chance || {};
     return `<div data-req>${reqListHtml(r)}</div>
       ${r && r.chance ? `<div class="box"><h5>${L('Chance of an invitation', 'Шанс приглашения')}: ${esc(r.chance.main)}</h5><span class="sub">${esc(r.chance.sub)}${r.chance.why ? ' · ' + esc(r.chance.why) : ''}</span>${r.chance.note ? `<span class="note">${esc(r.chance.note)}</span>` : ''}</div>` : ''}
-      ${r && r.employer && r.agency ? `<div class="box warn"><span>${L('The real employer looks like', 'Похоже, настоящий работодатель —')} <b>${esc(r.employer)}</b>. ${L('Agencies have not given you a screening yet: apply on the employer’s site if you can.', 'От агентств скринингов пока нет: если можешь, откликнись у работодателя напрямую.')} <a class="lk" href="https://www.google.com/search?q=${encodeURIComponent('"' + r.employer + '" jobs')}" target="_blank" rel="noopener">${L('Search', 'Искать')}</a></span></div>` : ''}
+      ${r && r.employer && (r.agency || r.broker) ? `<div class="box warn"><span>${L('The real employer looks like', 'Похоже, настоящий работодатель —')} <b>${esc(r.employer)}</b>. ${L('Agencies have not given you a screening yet: apply on the employer’s site if you can.', 'От агентств скринингов пока нет: если можешь, откликнись у работодателя напрямую.')} <a class="lk" href="https://www.google.com/search?q=${encodeURIComponent('"' + r.employer + '" jobs')}" target="_blank" rel="noopener">${L('Search', 'Искать')}</a></span></div>` : ''}
       <div class="box"><h5>${L('Why the skills score is', 'Почему по навыкам')} ${c.score != null ? c.score + '%' : ''}</h5>${reasonsHtml(c)}</div>
       ${placementHtml(rec.placement)}
       <div class="note"><a class="lk" id="wrong">${L('Wrong verdict?', 'Неверная оценка?')}</a></div>

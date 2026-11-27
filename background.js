@@ -199,10 +199,9 @@ async function llmCfg() {
   if (!c || !c.key) return null;
   return { ...c, cache: { get: k => llmCache[k], set: async (k, v) => { llmCache[k] = v; const ks = Object.keys(llmCache); if (ks.length > 300) ks.slice(0, ks.length - 300).forEach(x => delete llmCache[x]); await chrome.storage.local.set({ llmCache }); } } };
 }
-const AGENCY_RE = /recruit|resourcing|staffing|talent|personnel|associates|consult(ing|ants)|selection|hays|randstad|adecco|harvey nash|robert (half|walters)|michael page|spencer ogden|nigel frank|computer futures|zachary daniels/i;
 function appFacts(a) {
   return { status: a.status, history: a.history, appliedAt: a.appliedAt, title: a.title, company: a.company, location: a.location,
-    agency: AGENCY_RE.test(a.company || '') || /\bour client\b/i.test(a.description || ''), method: (a.apply || {}).method, adAge: (a.posting || {}).daysAgo, applicants: (a.posting || {}).applicants,
+    agency: !!JT_Market.broker(a.company, a.description), method: (a.apply || {}).method, adAge: (a.posting || {}).daysAgo, applicants: (a.posting || {}).applicants,
     fit: a.fitPrecise && a.fitPrecise.score != null ? a.fitPrecise.score : (a.chance || {}).score, market: JT_Market.marketOf(a),
     tailored: (a.apply || {}).cvTailored == null ? null : !!a.apply.cvTailored, cover: (a.apply || {}).cover ? !/none|unknown/.test(a.apply.cover) : null };
 }
@@ -217,12 +216,12 @@ async function aiJob(job) {
   let reqs = JT_Fit.fromAd(job.description, job.company), ai = null, error = '';
   if (cfg) { try { ai = await JT_LLM.extract(cfg, job); if (ai.essential.length + ai.desirable.length >= 3) reqs = ai; } catch (e) { error = String(e.message || e); } }
   const fit = JT_Fit.compute(reqs, p, job);
-  const facts = { ...appFacts({ ...job, apply: {} }), agency: ai && ai.agency != null ? ai.agency : AGENCY_RE.test(job.company || ''), fit: fit.score, market: JT_Market.marketOf(job), cover: null, tailored: null };
+  const facts = { ...appFacts({ ...job, apply: {} }), agency: !!JT_Market.broker(job.company, job.description) || !!(ai && ai.agency), fit: fit.score, market: JT_Market.marketOf(job), cover: null, tailored: null };
   const pr = JT_Chance.predict(facts, JT_Chance.stats((await JT_Store.getApps()).map(appFacts)));
   const strip = r => ({ text: r.text, level: r.level, note: r.note, check: r.check, w: r.w });
   return { hasKey: !!cfg, error, source: ai && reqs === ai ? 'ai' : reqs.source,
     fit: { score: fit.score, summary: fit.summary, essOk: fit.essOk, desOk: fit.desOk, essential: fit.essential.map(strip), desirable: fit.desirable.map(strip), lowData: fit.lowData, gaps: fit.gaps.slice(0, 6) },
-    chance: JT_Chance.describe(pr), employer: ai && ai.employer, agency: ai && ai.agency, officeDays: ai ? ai.officeDays : null, questions: ai ? ai.questions : [], dropped: ai ? ai.dropped : 0 };
+    chance: JT_Chance.describe(pr), employer: ai && ai.employer, agency: !!(ai && ai.agency) || JT_Market.broker(job.company, job.description) === 'agency', broker: JT_Market.broker(job.company, job.description) || (ai && ai.agency ? 'agency' : null), officeDays: ai ? ai.officeDays : null, questions: ai ? ai.questions : [], dropped: ai ? ai.dropped : 0 };
 }
 async function aiLetter(job) {
   const cfg = await llmCfg(); if (!cfg) return { error: 'no-key' };
