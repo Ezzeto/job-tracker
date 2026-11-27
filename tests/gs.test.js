@@ -8,7 +8,7 @@ const vm = require('node:vm');
 
 const code = fs.readFileSync(path.join(__dirname, '..', 'google-sheets', 'Code.gs'), 'utf8');
 const ctx = vm.createContext({});
-vm.runInContext(code + '\n;this.G = { parseAlertHtml_, parseConfirmation_, tgShouldSend_, jobKey_ };', ctx);
+vm.runInContext(code + '\n;this.G = { parseAlertHtml_, parseConfirmation_, tgShouldSend_, jobKey_, inboxKind_, tgIntent_, tgStats_, tgChartData_, tgMarket_ };', ctx);
 const G0 = ctx.G;
 // Arrays and objects from the sandbox have its own prototypes: compare plain copies
 const G = new Proxy({}, { get: (o, k) => (...a) => JSON.parse(JSON.stringify(G0[k](...a))) });
@@ -46,4 +46,41 @@ test('Telegram: quiet at night, only invitations and offers during Thursday and 
   assert.equal(G.tgShouldSend_({ kind: 'employer' }, 18, 4), true);
   assert.equal(G.tgShouldSend_({ kind: 'rejected', human: true }, 12, 1), false);
   assert.equal(G.tgShouldSend_({ kind: 'vacancy' }, 9, 6), true);
+});
+
+test('inbox: newsletters and digests are not application emails; real ones are kept', () => {
+  assert.equal(G.inboxKind_('Your weekly recommendations are ready', 'Take our skills assessment and prepare for your next interview', 'Scribd <hello@scribd.com>', false), null);
+  assert.equal(G.inboxKind_('New jobs for you: IT Support', 'Interview tips inside', 'LinkedIn <jobs-noreply@linkedin.com>', false), null);
+  assert.equal(G.inboxKind_('Hello from Acme', 'Book your free assessment today', 'Acme <news@acme.com>', false), null);
+  assert.deepEqual(G.inboxKind_('Interview invitation: IT Support Technician', 'We would like to invite you', 'Jane Smith <jane@harlowcollege.ac.uk>', false), { kind: 'interview', human: true });
+  assert.deepEqual(G.inboxKind_('Your application', 'Unfortunately we have decided not to progress', 'Harlow College <no-reply@workday.com>', true), { kind: 'rejected', human: false });
+});
+
+test('telegram: what a message asks for', () => {
+  assert.deepEqual(G.tgIntent_('/stats'), { cmd: 'stats' });
+  assert.deepEqual(G.tgIntent_('Что мне сделать сегодня?'), { cmd: 'today' });
+  assert.deepEqual(G.tgIntent_('Покажи график по неделям'), { cmd: 'chart', kind: 'weeks' });
+  assert.deepEqual(G.tgIntent_('график источников'), { cmd: 'chart', kind: 'sources' });
+  assert.deepEqual(G.tgIntent_('/chart воронка'), { cmd: 'chart', kind: 'funnel' });
+  assert.deepEqual(G.tgIntent_('Какую зарплату мне называть?'), { cmd: 'ask' });
+});
+
+test('telegram: stats and chart data are counted from the sheet rows', () => {
+  const now = Date.parse('2026-11-27T12:00:00Z'), d = n => new Date(now - n * 864e5);
+  const rows = [
+    { appliedAt: d(1), status: 'Applied', workTypes: 'Part-time', title: 'IT Support', platform: 'LinkedIn', method: 'Easy Apply', salary: '£24,000' },
+    { appliedAt: d(2), status: 'Screening', workTypes: 'Full-time', title: 'Service Desk', platform: 'Indeed', method: 'Company website', salary: '£30,000' },
+    { appliedAt: d(40), status: 'Rejected', workTypes: '', title: 'IT Technician', platform: 'Reed', method: '', salary: '£12.50 per hour' },
+  ];
+  const s = G.tgStats_(rows, now);
+  assert.match(s, /30 дней:<\/b> 2 откликов, ответили 1, скрининг\+ 1/);
+  assert.match(s, /Всего:<\/b> 3 откликов, скринингов 1, отказов 1, ждут ответа 1/);
+  assert.equal(G.tgMarket_(rows[1]), 'A');
+  const f = G.tgChartData_(rows, 'funnel', now);
+  assert.deepEqual(f.rows.slice(0, 3), [['Отклики', 3], ['Ответили', 2], ['Скрининг+', 1]]);
+  const w = G.tgChartData_(rows, 'weeks', now);
+  assert.equal(w.rows.length, 10);
+  assert.equal(w.rows.reduce((t, r) => t + r[1], 0), 3);
+  const sal = G.tgChartData_(rows, 'salary', now);
+  assert.deepEqual(sal.rows.map(r => r[0]), ['£20k', '£30k']);
 });

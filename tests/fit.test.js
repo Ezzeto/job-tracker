@@ -72,7 +72,13 @@ test('chance: smoothing keeps "1 of 3" far from 33%, the result stays within 0.2
   assert.ok(pr.lowData);
   const d = Ch.describe(pr);
   assert.match(d.main, /выше твоей средней/);
-  assert.match(d.note, /мало данных/);
+  assert.equal(d.pct, false);
+  assert.doesNotMatch(d.main + d.sub, /%/);
+  assert.match(d.note, /пока 4 скрининга/);
+  // From 5 screenings the percentage is shown, still marked as rough until 15
+  const d5 = Ch.describe({ ...pr, successes: 6, lowData: true });
+  assert.match(d5.main, /≈ \d/);
+  assert.match(d5.note, /мало данных: 6 скринингов/);
 });
 
 test('chance: waiting applications are left out, 21 days of silence counts as no', () => {

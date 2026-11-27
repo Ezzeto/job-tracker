@@ -36,3 +36,13 @@ test('answers fill availability from work days and quote the advertised salary',
   assert.equal(get('Will you now'), 'No');
   assert.match(get('Why are you'), /Harlow College's IT Technician/);
 });
+
+test('broker: job boards posting under their own name and agencies hide the employer', () => {
+  assert.equal(Mk.broker('DICE'), 'board');
+  assert.equal(Mk.broker('CV-Library'), 'board');
+  assert.equal(Mk.broker('Totaljobs'), 'board');
+  assert.equal(Mk.broker('Hays Technology'), 'agency');
+  assert.equal(Mk.broker('Acme Ltd', 'We are recruiting on behalf of our client, a school in Essex.'), 'agency');
+  assert.equal(Mk.broker('Harlow College', 'Join our IT team.'), null);
+  assert.equal(Mk.broker('Dicey Games Ltd'), null);
+});
