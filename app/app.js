@@ -694,11 +694,12 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     return `<div><h1>CV</h1><p class="lead">Две версии под две цели. Файл читается на этом устройстве и хранится зашифрованным, никуда не загружается.</p></div>
       ${slot('B', 'Версия Б — работа с учёбой', 'В шапке: «available 3–4 days a week incl. weekends», учёба заметно. Для университетского helpdesk, школ, колледжей, part-time.')}
       ${slot('A', 'Версия А — full-time', 'Учёба внизу, акцент на готовность к full-time. Только для вакансий, ради которых стоит взять академ.')}
-      <div class="note info small">В «Разборе» трекер сам берёт версию по рынку вакансии и подгоняет её. Отметка «подогнано» идёт в таблицу — в статистике будет видно, помогает ли подгонка${apps.length ? ` (уже отмечено заявок: ${apps.length})` : ''}.</div>`;
+      <div class="note info small">В «Разборе» трекер сам берёт версию по рынку вакансии и подгоняет её. Отметка «подогнано» идёт в таблицу — в статистике будет видно, помогает ли подгонка${apps.length ? ` (уже отмечено заявок: ${apps.length})` : ''}.</div>
+      ${viewLearn(true)}`;
   }
 
   // ---------- Learning plan from the gaps ----------
-  function viewLearn() {
+  function viewLearn(inCv) {
     const apps = st.rows.map(r => { const a = toApp(r); return { missing: a.chance.missing, market: a.market, appliedAt: a.appliedAt }; });
     const base = st.profile ? { ...st.profile } : profile();
     const list = LRN.gaps(apps, base, st.local.learned || {});
@@ -707,7 +708,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       <p class="small">${esc(custom || g.task)}</p>
       <textarea class="input" data-lnote="${esc(g.name)}" style="min-height:60px;font-size:14px" placeholder="Что сделал — пара строк. Пригодится для CV и портфолио">${esc((st.local.learnNotes || {})[g.name] || '')}</textarea>
       <div class="row"><button class="btn go sm" data-ldone="${esc(g.name)}">Сделал</button>${st.local.ai.key ? `<button class="btn quiet sm" data-lai="${esc(g.name)}">Другое задание (AI)</button>` : ''}</div></div>`; };
-    return `<div><h1>План обучения</h1><p class="lead">Чего чаще всего не хватает в твоих вакансиях — в виде заданий для домашней лаборатории. Сделал — навык считается «лабораторией» (0,6 в Fit), и после синхронизации появится в расширении.</p></div>
+    return `<div class="sec-h" id="gaps"><h2>Чего не хватает чаще всего</h2></div><p class="small muted">Инструменты, которых у тебя нет в твоих вакансиях, — с заданием для домашней лаборатории (~1 час). Сделал — навык считается «лабораторией»: Fit по таким вакансиям растёт, и навык можно честно указать в CV. В расширении появится после синхронизации.</p>
       ${list.length ? `<div class="group">${list.slice(0, 6).map(card).join('')}</div>` : `<div class="empty"><b>${st.rows.length ? 'Пробелов не найдено' : 'Пока нет данных'}</b>${st.rows.length ? 'В твоих вакансиях нет инструмента, которого не хватало бы хотя бы дважды.' : 'План появится после первых откликов.'}</div>`}
       ${done.length ? `<div class="sec-h"><h2>Уже сделано <span class="n">${done.length}</span></h2></div><div class="group">${done.map(([n, d]) => `<div class="item"><div class="top"><span class="k ok" style="width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-weight:800">✓</span><div class="grow"><div class="t">${esc(n)}</div><div class="s">${esc(d)}${(st.local.learnNotes || {})[n] ? ' · ' + esc(st.local.learnNotes[n].slice(0, 120)) : ''}</div></div><button class="btn quiet sm" data-lundo="${esc(n)}">Отменить</button></div></div>`).join('')}</div>` : ''}
       <p class="tiny muted">Двойной вес у вакансий рынка Б и у откликов за последние 90 дней.</p>`;
@@ -1245,8 +1246,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       ${link('#employers', '<path d="M4 20V9l8-5 8 5v11M9 20v-6h6v6" />', 'Работодатели рядом', 'школы, колледжи, MSP — холодные письма')}
       ${link('#review', '<path d="M4 5h16v14H4zM4 9h16M9 13h6M9 16h4" />', 'Неделя', 'итоги, стоимость скрининга, план от AI')}
       ${link('#offer', '<path d="M12 3v18M16 7H10a3 3 0 0 0 0 6h4a3 3 0 0 1 0 6H7" />', 'Оффер и зарплата', 'сравнение с дорогой, переговоры')}
-      ${link('#cv', '<path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5" />', 'CV', 'версии А и Б, подгонка под вакансию')}
-      ${link('#learn', '<path d="M3 8l9-4 9 4-9 4zM7 10v5c3 2 7 2 10 0v-5" />', 'План обучения', 'задания для лаборатории из пробелов')}
+      ${link('#cv', '<path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5" />', 'CV и навыки', 'версии А и Б, чего не хватает и задания')}
       ${link('#templates', '<path d="M4 6l8 6 8-6M4 6h16v12H4z" />', 'Шаблоны писем', 'cover letter, письмо работодателю, ответы')}
       ${link('#setup', '<circle cx="12" cy="12" r="3" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3" />', 'Настройки', 'таблица, цели, почта, AI, PIN')}</div>
       <div class="paper tight"><h3>Тема</h3><div class="seg" role="group" aria-label="Тема">${[['auto', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([k, l]) => `<button data-theme-set="${k}" aria-pressed="${(LS.get('theme', 'auto') || 'auto') === k}">${l}</button>`).join('')}</div></div>`;
@@ -1373,7 +1373,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
   });
 
   // ---------- Router ----------
-  const ROUTES = { today: viewToday, check: viewCheck, apps: viewApps, stats: viewStats, templates: viewTemplates, employers: viewEmployers, cv: viewCv, learn: viewLearn, review: viewReview, brief: viewBrief, offer: viewOffer, more: viewMore, setup: viewSetup };
+  const ROUTES = { today: viewToday, check: viewCheck, apps: viewApps, stats: viewStats, templates: viewTemplates, employers: viewEmployers, cv: viewCv, learn: viewCv, review: viewReview, brief: viewBrief, offer: viewOffer, more: viewMore, setup: viewSetup };
   const route = () => { const r = location.hash.replace('#', '').split('=')[0]; return ROUTES[r] ? r : (r === 'add' ? 'check' : r === 'list' ? 'apps' : 'today'); };
   function updateBadges() {
     if (st.lock) return;

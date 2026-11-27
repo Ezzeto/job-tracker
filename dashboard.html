@@ -11,11 +11,10 @@
 <body>
   <nav class="side" aria-label="Sections">
     <div class="brand"><span class="logo" aria-hidden="true"></span><span>Job Tracker</span></div>
-    <a href="#overview" data-view="overview">Overview</a>
+    <a href="#overview" data-view="overview">Progress</a>
     <a href="#apps" data-view="apps">Applications <span class="count" id="navCount"></span></a>
     <a href="session.html">Application session</a>
     <a href="#followups" data-view="followups">Follow-ups <span class="count" id="navFu"></span></a>
-    <a href="#plan" data-view="plan">Weekly plan</a>
     <a href="#cv" data-view="cv">CV &amp; skills</a>
     <a href="#templates" data-view="templates">Templates</a>
     <a href="#offers" data-view="offers">Offers <span class="count" id="navOffers"></span></a>
@@ -29,19 +28,31 @@
   <main>
     <!-- OVERVIEW -->
     <section id="view-overview" class="view" hidden>
-      <header class="top"><h1>Overview</h1><div class="btns"><div class="track-seg" id="ovTrack" role="group" aria-label="Application type"><button data-t="all">All</button><button data-t="job">Jobs</button><button data-t="intern">Internships</button></div><button class="btn primary" data-new>New application</button></div></header>
-      <div class="pipeline" id="pipeline"></div>
-      <div class="kpis" id="kpis"></div>
+      <header class="top"><h1>Progress</h1><div class="btns"><div class="track-seg" id="ovTrack" role="group" aria-label="Application type"><button data-t="all">All</button><button data-t="job">Jobs</button><button data-t="intern">Internships</button></div><button class="btn primary" data-new>New application</button></div></header>
       <div class="grid2">
-        <div class="panel"><h2>Applications per week</h2><div id="weekly"></div></div>
-        <div class="panel"><h2>Sources and response rate</h2><div id="platforms"></div></div>
+        <div class="panel"><h2 id="pgWeekH">This week</h2><div id="pgWeek"></div></div>
+        <div class="panel"><div class="row-between"><h2>Do now</h2><a href="#followups" class="btn small">All follow-ups</a></div><div id="attention"></div></div>
+      </div>
+      <div class="panel" id="pgChatPanel"></div>
+      <div class="grid2">
+        <div class="panel"><h2 id="pgFunnelH">Last 30 days</h2><div id="pgFunnel"></div></div>
+        <div class="panel"><h2 id="pgWorksH">What works</h2><div id="pgWorks"></div></div>
       </div>
       <div class="grid2">
+        <div class="panel"><div class="row-between"><h2 id="pgPlanH">Plan for the week</h2><a href="#plan" class="btn small" id="pgPlanAll">Full plan</a></div><div id="pgPlan"></div></div>
+        <div class="panel"><div class="row-between"><h2 id="pgRecentH">Latest applications</h2><a href="#apps" class="btn small" id="pgAppsAll">All</a></div><div id="pgRecent"></div></div>
+      </div>
+      <details class="panel more-stats"><summary><h2 style="display:inline">Detailed statistics</h2></summary>
+        <div class="pipeline" id="pipeline" style="margin-top:12px"></div>
+        <div class="kpis" id="kpis"></div>
+        <div class="grid2">
+          <div class="panel"><h2>Applications per week</h2><div id="weekly"></div></div>
+          <div class="panel"><h2>Sources and response rate</h2><div id="platforms"></div></div>
+        </div>
         <div class="panel"><h2>What employers ask for most</h2><p class="hint">Colour shows your level: green confident, amber basic, red none.</p><div id="toolsTop"></div></div>
-        <div class="panel"><div class="row-between"><h2>Needs attention</h2><a href="#followups" class="btn small">All follow-ups</a></div><div id="attention"></div></div>
-      </div>
-      <div class="panel"><h2>Why no interviews?</h2><p class="hint">Reply and interview rate split by how you applied, the CV and letter you sent, how old the ad was, how many had applied before you and what the ad demanded.</p><div id="why"></div></div>
-      <div class="panel"><h2>Does the verdict work?</h2><p class="hint">Reply and interview rate for each verdict.</p><div id="calibration"></div></div>
+        <div class="panel"><h2>Why no interviews?</h2><p class="hint">Reply and interview rate split by how you applied, the CV and letter you sent, how old the ad was, how many had applied before you and what the ad demanded.</p><div id="why"></div></div>
+        <div class="panel"><h2>Does the verdict work?</h2><p class="hint">Reply and interview rate for each verdict.</p><div id="calibration"></div></div>
+      </details>
     </section>
 
     <!-- APPLICATIONS -->
@@ -169,6 +180,7 @@
         <p class="hint">The fit score compares the tools named in a job ad with this list, then adjusts for seniority, years of experience, driving licence, clearance and hours. It is a guide, not a prediction.</p>
         <div id="skillsGrid"></div>
       </div>
+      <div class="panel" id="gapsPanel"></div>
     </section>
 
     <section id="view-offers" class="view" hidden>
@@ -344,6 +356,9 @@
   <script src="lib/prompt.js"></script>
   <script src="lib/market.js"></script>
   <script src="lib/llm.js"></script>
+  <script src="lib/learn.js"></script>
+  <script src="lib/chance.js"></script>
+  <script src="lib/review.js"></script>
   <script src="lib/cv.js"></script>
   <script src="lib/vendor/mammoth.browser.min.js"></script>
   <script type="module" src="lib/cvread.mjs"></script>

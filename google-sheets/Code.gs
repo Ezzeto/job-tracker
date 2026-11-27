@@ -5,7 +5,7 @@
  * generates and keeps in Script Properties (Job Tracker menu → Show sync token).
  */
 
-const SCRIPT_VERSION = 24; // 24 = the 'apply from the PC' list shared by the phone and the extension's application session; 23 = AI conclusions of the week from the phone in the Sunday email; 22 = jobs from alert emails, forgotten applications added from confirmations, free calendar slots, Telegram; 21 = employers you contacted (synced with the phone), their replies and vacancy pages watched; 20 = calendar events from voice notes on the phone; 19 = home lab tasks finished on the phone (learned skills); 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
+const SCRIPT_VERSION = 25; // 25 = ask the tracker in Telegram (questions, /stats, charts as pictures), newsletters no longer read as job emails; 24 = the 'apply from the PC' list shared by the phone and the extension's application session; 23 = AI conclusions of the week from the phone in the Sunday email; 22 = jobs from alert emails, forgotten applications added from confirmations, free calendar slots, Telegram; 21 = employers you contacted (synced with the phone), their replies and vacancy pages watched; 20 = calendar events from voice notes on the phone; 19 = home lab tasks finished on the phone (learned skills); 18 = Precise Fit, Interview chance, CV type and Minutes columns; 17 = phone app: follow-ups recorded from the phone, status hints from Gmail (action=inbox); 16 = job links: other addresses and a pause when a site answers 429, 6-hour cache; 15 = weekly summary email on Sundays; 14 = a compact copy in Drive (JobTracker/job-tracker-latest.json) for the weekly summary; 13 = phone app: reads job ads by link, keeps your profile, quick status changes, Job ad column; 12 = 12 = how you applied, ad age, applicants, why rejected; 11 = Verdict column, bad 'Next step' dates ignored; 10 = merges a leftover pre-2.0 sheet; 9 = Type and Placement rules columns
 const SHEET = 'Applications';
 const SUMMARY = 'Summary';
 const COLS = [
@@ -80,6 +80,7 @@ function onOpen() {
     .addItem('Weekly email: turn off', 'stopWeeklyEmail')
     .addItem('Check job emails now (phone app hints)', 'scanInbox')
     .addItem('Telegram: connect', 'setupTelegram')
+    .addItem('Telegram: AI key for questions', 'setupTelegramAi')
     .addItem('Telegram: turn off', 'stopTelegram')
     .addItem('Create a new sync token', 'resetToken')
     .addSeparator()
@@ -828,6 +829,22 @@ const INBOX_KIND = [
   ['assessment', /\bassessment\b|\bonline test\b|\btechnical test\b|\bcoding challenge\b|\bhirevue\b|\bpre-recorded\b/i],
 ];
 const GENERIC_CO = /^(it|ltd|limited|group|the|uk|plc|services|solutions|support|recruitment|careers|jobs|talent|people|hr)$/i;
+// Newsletters, digests and job alerts mention 'interview' or 'assessment' too: they are not about your applications
+const DIGEST_RE = /\b(weekly|daily|monthly)\b.{0,30}\b(recommendations?|digest|picks|update|newsletter|jobs)\b|\brecommendations? (are|is) ready\b|\brecommended (for you|jobs)\b|\bjobs? (for|matching) you\b|\bjob alert\b|\bnew jobs\b|\bnewsletter\b|\btop picks\b|\bwebinar\b|\bcourse\b|\bsale\b|\b% off\b|\bsubscription\b|\btrial\b/i;
+const BULK_FROM = /no-?reply|donotreply|notifications?@|jobs-noreply|talent@|careers@|recruit(ment|ing)@|hello@|hi@|info@|news(letter)?@|marketing@|updates?@|team@|digest@|mail@|support@|workday|greenhouse|lever|smartrecruiters|ashby|teamtailor|indeed|linkedin|reed\.co\.uk|totaljobs|glassdoor|scribd|medium|substack|coursera|udemy/i;
+/**
+ * What a job email is about, or null when it is not about an application. Pure.
+ * A newsletter is skipped; an email that matches no application is kept only when the subject itself
+ * says rejection / interview / assessment / offer (marketing mails say it only in the body).
+ */
+function inboxKind_(subject, body, from, matched) {
+  const subj = String(subject || ''), text = subj + '\n' + String(body || '');
+  if (DIGEST_RE.test(subj) || (!matched && DIGEST_RE.test(text.slice(0, 600)))) return null;
+  const kind = (INBOX_KIND.find(([, re]) => re.test(text)) || [null])[0];
+  if (!kind) return null;
+  if (!matched && !INBOX_KIND.some(([k, re]) => k === kind && re.test(subj))) return null;
+  return { kind, human: !BULK_FROM.test(String(from || '')) };
+}
 
 function readInbox_() {
   const sh = SpreadsheetApp.getActive().getSheetByName(INBOX_SHEET);
@@ -869,16 +886,15 @@ function inbox_(force) {
     const subject = th.getFirstMessageSubject() || '';
     const from = String(m.getFrom() || '');
     const body = String(m.getPlainBody() || '').slice(0, 4000);
-    const text = subject + '\n' + body;
-    const kind = (INBOX_KIND.find(([, re]) => re.test(text)) || [null])[0];
-    if (!kind) return;
     const hay = ' ' + norm(from + ' ' + subject + ' ' + body.slice(0, 1500)) + ' ';
     const hits = companies.filter(x => hay.includes(' ' + x.c + ' '));
     // The most recent application to that company that is still open
     const open = ['Applied', 'Screening', 'Test task', 'Interview 1', 'Interview 2', 'Interview 3', 'No response'];
     hits.sort((a, b) => (open.includes(String(b.r.status)) - open.includes(String(a.r.status))) || (new Date(b.r.appliedAt) - new Date(a.r.appliedAt)));
     const row = hits[0] && hits[0].r;
-    const human = !/no-?reply|donotreply|notifications?@|jobs-noreply|talent@|careers@|recruit(ment|ing)@|workday|greenhouse|lever|smartrecruiters|ashby|teamtailor|indeed|linkedin|reed\.co\.uk|totaljobs/i.test(from);
+    const k = inboxKind_(subject, body, from, !!row);
+    if (!k) return;
+    const kind = k.kind, human = k.human;
     items.push({
       id, kind, subject: subject.slice(0, 200), from: from.replace(/<.*>/, '').replace(/"/g, '').trim().slice(0, 80),
       date: th.getLastMessageDate().toISOString(), snippet: body.replace(/\s+/g, ' ').slice(0, 280),
@@ -1101,10 +1117,11 @@ function setupTelegram() {
   ScriptApp.getProjectTriggers().filter(t => /^telegram/.test(t.getHandlerFunction())).forEach(t => ScriptApp.deleteTrigger(t));
   const tz = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
   ScriptApp.newTrigger('telegramTick').timeBased().everyMinutes(15).create();
+  ScriptApp.newTrigger('telegramChat').timeBased().everyMinutes(1).create();
   ScriptApp.newTrigger('telegramMorning').timeBased().atHour(8).nearMinute(30).everyDays(1).inTimezone(tz).create();
   ScriptApp.newTrigger('telegramEvening').timeBased().atHour(18).nearMinute(0).everyDays(1).inTimezone(tz).create();
   tg_('<b>Job Tracker подключён.</b>\nСюда будут приходить ответы живых людей, приглашения, офферы, ответы работодателей и новые вакансии на страницах, за которыми ты следишь. Утром в 8:30 — сводка, в 18:00 — напоминание об интервью на завтра. Ночью тихо.', [['Открыть трекер', appUrl_()]]);
-  ui.alert('Done: a test message was sent to Telegram.');
+  ui.alert('Done: a test message was sent to Telegram. Write /help to the bot to see what it can do.');
 }
 function stopTelegram() {
   ScriptApp.getProjectTriggers().filter(t => /^telegram/.test(t.getHandlerFunction())).forEach(t => ScriptApp.deleteTrigger(t));
@@ -1121,6 +1138,7 @@ function tgShouldSend_(it, hour, dow) {
 function telegramTick() {
   const props = PropertiesService.getScriptProperties();
   if (!props.getProperty('TG_CHAT')) return;
+  if (!ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'telegramChat')) ScriptApp.newTrigger('telegramChat').timeBased().everyMinutes(1).create();
   const now = new Date(), hour = Number(Utilities.formatDate(now, Session.getScriptTimeZone(), 'H')), dow = Number(Utilities.formatDate(now, Session.getScriptTimeZone(), 'u')) % 7;
   if (hour >= 22 || hour < 8) return;
   const r = inbox_(true);
@@ -1165,6 +1183,152 @@ function telegramEvening() {
   tg_('<b>Завтра</b>\n' + ev.map(x => `• ${Utilities.formatDate(x.getStartTime(), tz, 'HH:mm')} — ${tgEsc_(x.getTitle())}`).join('\n') + '\n\nПроверь адрес или ссылку на звонок, подготовь 2–3 истории STAR и вопросы работодателю.', [['Открыть трекер', appUrl_() + '#apps']]);
 }
 
+
+// ---------- Telegram: ask the tracker (25) ----------
+// Write to the bot: /today, /stats, /chart (weeks, sources, funnel), or any question in your own words.
+// Numbers are counted here, by code; with an AI key (Job Tracker → Telegram: AI key for questions) the
+// answer is written by AI from those numbers only. Only messages from your own chat are answered.
+// Checked every minute (a time trigger reads new messages; nothing is exposed on the web).
+const TG_OPEN = ['Applied', 'Screening', 'Test task', 'Interview 1', 'Interview 2', 'Interview 3', 'Offer'];
+const TG_POS = ['Screening', 'Test task', 'Interview 1', 'Interview 2', 'Interview 3', 'Offer', 'Offer accepted', 'Offer declined'];
+function tgRows_() {
+  const sh = ensureSheet_();
+  const vals = sh.getLastRow() >= 2 ? sh.getRange(2, 1, sh.getLastRow() - 1, COLS.length).getValues() : [];
+  return vals.filter(r => r[C.id - 1]).map(r => { const o = {}; COLS.forEach(([k], j) => { o[k] = r[j]; }); return o; });
+}
+const tgIso_ = v => { const d = v instanceof Date ? v : new Date(v); return isNaN(d) ? '' : d.toISOString(); };
+/** Market B (alongside study) or A (full-time), from the work type and the ad. Pure. */
+function tgMarket_(r) {
+  const t = [r.title, r.workTypes, r.salary, String(r.description || '').slice(0, 3000)].join('\n');
+  const part = /\bpart[- ]time\b|\bweekends?\b|\bterm[- ]time\b|\bzero[- ]hours?\b|\b(16|20|24|25|28|30)\s*hours\b|\b[1-4] days a week\b|\bpro[- ]rata\b|\bcasual\b|\btemp(orary)?\b/i.test(t);
+  const full = /\bfull[- ]time\b|\bmonday to friday\b|\b37\.5\s*hours\b|\b40\s*hours\b/i.test(t);
+  return part && !(full && !/\bpart[- ]time\b/i.test(t)) ? 'B' : full ? 'A' : 'B';
+}
+const tgReached_ = r => TG_POS.indexOf(String(r.status)) >= 0;
+const tgReplied_ = r => tgReached_(r) || String(r.status) === 'Rejected';
+const tgChannel_ = r => { const m = String(r.method || '').toLowerCase(); return /agency|recruit/.test(m) ? 'Агентство' : /easy|quick/.test(m) ? 'Easy Apply' : /email|cold|speculative/.test(m) ? 'Письмо' : /company|website|careers/.test(m) ? 'Сайт компании' : String(r.platform || 'Другое'); };
+/** What a message asks for. Pure. */
+function tgIntent_(text) {
+  const t = String(text || '').trim();
+  if (/^\/(start|help)\b/i.test(t)) return { cmd: 'help' };
+  if (/^\/today\b|^сегодня\b|что (мне )?(делать|сделать) сегодня/i.test(t)) return { cmd: 'today' };
+  if (/^\/stats?\b|^статистик/i.test(t)) return { cmd: 'stats' };
+  const chart = /^\/chart\b|график|диаграмм|картинк|покажи.*(по неделям|воронк|источник|канал)/i.test(t);
+  if (chart) return { cmd: 'chart', kind: /воронк|funnel|статус/i.test(t) ? 'funnel' : /источник|канал|сайт|source|channel/i.test(t) ? 'sources' : /зарплат|salary/i.test(t) ? 'salary' : 'weeks' };
+  return { cmd: 'ask' };
+}
+/** The numbers, in words. Pure: rows from the sheet, now in ms. */
+function tgStats_(rows, now, targets) {
+  const DAY = 864e5, t = targets || { B: 7, A: 5, C: 3 };
+  const mon = new Date(now); mon.setHours(0, 0, 0, 0); mon.setDate(mon.getDate() - (mon.getDay() + 6) % 7);
+  const at = r => Date.parse(tgIso_(r.appliedAt)) || 0;
+  const wk = rows.filter(r => at(r) >= mon.getTime());
+  const win = (a, b) => { const l = rows.filter(r => at(r) >= a && at(r) < b); return { n: l.length, r: l.filter(tgReplied_).length, s: l.filter(tgReached_).length }; };
+  const c = win(now - 30 * DAY, now + DAY), p = win(now - 60 * DAY, now - 30 * DAY);
+  const ch = {};
+  rows.forEach(r => { const k = tgChannel_(r); const x = ch[k] = ch[k] || { n: 0, r: 0 }; x.n++; if (tgReplied_(r)) x.r++; });
+  const best = Object.keys(ch).filter(k => ch[k].n >= 5).sort((a, b) => ch[b].r / ch[b].n - ch[a].r / ch[a].n);
+  return [
+    `<b>Неделя:</b> рынок Б ${wk.filter(r => tgMarket_(r) === 'B').length}/${t.B}, рынок А ${wk.filter(r => tgMarket_(r) === 'A').length}/${t.A}`,
+    `<b>30 дней:</b> ${c.n} откликов, ответили ${c.r}, скрининг+ ${c.s} (до этого: ${p.n} / ${p.r} / ${p.s})`,
+    `<b>Всего:</b> ${rows.length} откликов, скринингов ${rows.filter(tgReached_).length}, отказов ${rows.filter(r => String(r.status) === 'Rejected').length}, ждут ответа ${rows.filter(r => String(r.status) === 'Applied').length}`,
+    best.length ? `<b>Чаще отвечают:</b> ${best.slice(0, 3).map(k => `${k} ${Math.round(ch[k].r / ch[k].n * 100)}% (${ch[k].n})`).join(', ')}` : '',
+  ].filter(Boolean).join('\n');
+}
+/** Data for a chart. Pure: { title, cols: [label, series…], rows: [[…]] } */
+function tgChartData_(rows, kind, now) {
+  const DAY = 864e5, at = r => Date.parse(tgIso_(r.appliedAt)) || 0;
+  if (kind === 'funnel') {
+    const n = rows.length, rep = rows.filter(tgReplied_).length, s = rows.filter(tgReached_).length;
+    const i = rows.filter(r => /^Interview|^Offer/.test(String(r.status))).length, o = rows.filter(r => /^Offer/.test(String(r.status))).length;
+    return { title: 'Воронка: все отклики', cols: ['Этап', 'Откликов'], rows: [['Отклики', n], ['Ответили', rep], ['Скрининг+', s], ['Интервью+', i], ['Оффер', o]] };
+  }
+  if (kind === 'sources') {
+    const g = {};
+    rows.forEach(r => { const k = tgChannel_(r); const x = g[k] = g[k] || [k, 0, 0]; x[1]++; if (tgReplied_(r)) x[2]++; });
+    return { title: 'Источники: отклики и ответы', cols: ['Источник', 'Откликов', 'Ответили'], rows: Object.keys(g).map(k => g[k]).sort((a, b) => b[1] - a[1]).slice(0, 8) };
+  }
+  if (kind === 'salary') {
+    const b = {};
+    rows.forEach(r => { const m = String(r.salary || '').replace(/,/g, '').match(/£\s?(\d+(?:\.\d+)?)\s?(k)?/i); if (!m) return; let v = Number(m[1]) * (m[2] ? 1000 : 1); if (v < 100) v = v * 37.5 * 52; if (v < 12000 || v > 120000) return; const k = '£' + Math.floor(v / 5000) * 5 + 'k'; b[k] = (b[k] || 0) + 1; });
+    return { title: 'Зарплаты в твоих вакансиях (в год)', cols: ['Зарплата', 'Вакансий'], rows: Object.keys(b).sort((x, y) => parseInt(x.slice(1), 10) - parseInt(y.slice(1), 10)).map(k => [k, b[k]]) };
+  }
+  const mon = new Date(now); mon.setHours(0, 0, 0, 0); mon.setDate(mon.getDate() - (mon.getDay() + 6) % 7);
+  const out = [];
+  for (let w = 9; w >= 0; w--) {
+    const s = mon.getTime() - w * 7 * DAY, e = s + 7 * DAY, l = rows.filter(r => at(r) >= s && at(r) < e);
+    const d = new Date(s);
+    out.push([d.getDate() + '.' + (d.getMonth() + 1), l.length, l.filter(tgReplied_).length]);
+  }
+  return { title: 'Отклики по неделям', cols: ['Неделя', 'Откликов', 'Ответили'], rows: out };
+}
+function tgPhoto_(blob, caption) {
+  const props = PropertiesService.getScriptProperties(), token = props.getProperty('TG_TOKEN'), chat = props.getProperty('TG_CHAT');
+  if (!token || !chat) return;
+  UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendPhoto', { method: 'post', payload: { chat_id: chat, photo: blob, caption: String(caption || '').slice(0, 1000) }, muteHttpExceptions: true });
+}
+function tgChart_(rows, kind) {
+  const d = tgChartData_(rows, kind, Date.now());
+  if (!d.rows.length) { tg_('Для этого графика пока нет данных.'); return; }
+  let dt = Charts.newDataTable().addColumn(Charts.ColumnType.STRING, d.cols[0]);
+  d.cols.slice(1).forEach(c => { dt = dt.addColumn(Charts.ColumnType.NUMBER, c); });
+  d.rows.forEach(r => { dt = dt.addRow(r); });
+  const chart = (kind === 'funnel' || kind === 'sources' ? Charts.newBarChart() : Charts.newColumnChart())
+    .setDataTable(dt.build()).setTitle(d.title).setColors(['#1d6b4f', '#e0a43a']).setDimensions(900, 520).setLegendPosition(Charts.Position.BOTTOM).build();
+  tgPhoto_(chart.getAs('image/png').setName('chart.png'), d.title);
+}
+/** AI from a key stored in this script (Groq, Gemini or OpenRouter, by the key's prefix). */
+function tgAi_(system, user) {
+  const key = PropertiesService.getScriptProperties().getProperty('AI_KEY');
+  if (!key) return null;
+  const pv = /^AIza/.test(key) ? ['https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', 'gemini-2.5-flash'] : /^sk-or-/.test(key) ? ['https://openrouter.ai/api/v1/chat/completions', 'openai/gpt-oss-120b:free'] : ['https://api.groq.com/openai/v1/chat/completions', 'openai/gpt-oss-120b'];
+  const r = UrlFetchApp.fetch(pv[0], { method: 'post', contentType: 'application/json', headers: { Authorization: 'Bearer ' + key }, muteHttpExceptions: true,
+    payload: JSON.stringify({ model: pv[1], temperature: 0.3, max_tokens: 700, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }) });
+  try { const d = JSON.parse(r.getContentText()); return d.choices && d.choices[0] ? String(d.choices[0].message.content || '').trim() : 'AI: ' + (d.error && d.error.message || r.getResponseCode()); } catch (e) { return 'AI не ответил (' + r.getResponseCode() + ')'; }
+}
+function tgAsk_(rows, question) {
+  const now = Date.now();
+  const recent = rows.slice().sort((a, b) => tgIso_(b.appliedAt).localeCompare(tgIso_(a.appliedAt))).slice(0, 40)
+    .map(r => `${tgIso_(r.appliedAt).slice(0, 10)} | ${r.title} | ${r.company} | ${r.status} | ${tgChannel_(r)} | рынок ${tgMarket_(r)} | ${String(r.salary || '').slice(0, 30)}`).join('\n');
+  const data = tgStats_(rows, now).replace(/<\/?b>/g, '') + '\nЖдут follow-up (6+ дней без ответа): ' + rows.filter(r => String(r.status) === 'Applied' && (now - Date.parse(tgIso_(r.appliedAt))) / 864e5 >= 6 && !r.followup).length + '\nПоследние 40 откликов (дата | должность | компания | статус | канал | рынок | зарплата):\n' + recent;
+  const sys = 'Ты — помощник по поиску работы внутри трекера кандидата (студент Computing в Великобритании, ищет начальную IT support работу; рынок Б — подработка с учёбой, главный; рынок А — full-time, только если стоит академа). Отвечай ТОЛЬКО по данным ниже, ничего не выдумывай; если данных нет — так и скажи. По-русски, коротко (до 120 слов), конкретно, с действиями. Для зарплаты опирайся на зарплаты в данных.';
+  const ans = tgAi_(sys, 'ДАННЫЕ:\n' + data + '\n\nВОПРОС: ' + question);
+  return ans || 'Чтобы я отвечал на вопросы своими словами, добавь ключ AI: в таблице меню Job Tracker → «Telegram: AI key for questions». Пока могу: /today, /stats, /chart (недели, источники, воронка, зарплаты).';
+}
+function telegramChat() {
+  const props = PropertiesService.getScriptProperties(), chat = props.getProperty('TG_CHAT');
+  if (!chat) return;
+  const lock = LockService.getScriptLock(); if (!lock.tryLock(1000)) return;
+  try {
+    const off = Number(props.getProperty('TG_OFFSET') || 0);
+    const up = tgApi_('getUpdates', { offset: off ? off + 1 : undefined, limit: 10, timeout: 0 });
+    if (!up || !up.ok || !up.result.length) return;
+    props.setProperty('TG_OFFSET', String(up.result[up.result.length - 1].update_id));
+    const msgs = up.result.map(u => u.message).filter(m => m && m.text && String(m.chat.id) === String(chat));
+    if (!msgs.length) return;
+    const rows = tgRows_();
+    msgs.forEach(m => {
+      const it = tgIntent_(m.text);
+      try {
+        if (it.cmd === 'help') tg_('<b>Что я умею</b>\n/today — план на сегодня\n/stats — цифры за неделю и 30 дней\n/chart — график: «график по неделям», «график источников», «воронка», «зарплаты»\nИли просто спроси своими словами: «какую зарплату называть?», «что делать на этой неделе?», «кто не ответил больше 2 недель?»');
+        else if (it.cmd === 'today') telegramMorning();
+        else if (it.cmd === 'stats') tg_(tgStats_(rows, Date.now()), [['Открыть трекер', appUrl_() + '#stats']]);
+        else if (it.cmd === 'chart') tgChart_(rows, it.kind);
+        else { tgApi_('sendChatAction', { chat_id: chat, action: 'typing' }); tg_(tgEsc_(tgAsk_(rows, m.text))); }
+      } catch (e) { tg_('Не получилось: ' + tgEsc_(String(e.message || e)).slice(0, 300)); }
+    });
+  } finally { lock.releaseLock(); }
+}
+function setupTelegramAi() {
+  const ui = SpreadsheetApp.getUi(), props = PropertiesService.getScriptProperties();
+  const a = ui.prompt('Telegram: AI key for questions', 'The bot answers questions in your own words with an AI key (Groq gsk_…, Gemini AIza… or OpenRouter sk-or-…). It is kept in this script\'s properties, visible only from your Google account. Empty to remove:', ui.ButtonSet.OK_CANCEL);
+  if (a.getSelectedButton() !== ui.Button.OK) return;
+  const k = a.getResponseText().trim();
+  if (!k) { props.deleteProperty('AI_KEY'); ui.alert('AI key removed: the bot answers /today, /stats and /chart only.'); return; }
+  props.setProperty('AI_KEY', k);
+  const t = tgAi_('Answer with one word.', 'Say OK');
+  ui.alert(t && !/^AI/.test(t) ? 'Done: the bot answers questions with AI.' : 'The key did not work: ' + t);
+}
 
 // ---------- Apply from the PC (24) ----------
 // Jobs saved on the phone with "For later": the extension's application session prepares a pack for each

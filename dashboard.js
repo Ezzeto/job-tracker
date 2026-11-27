@@ -100,9 +100,10 @@
     $('#navOffers').textContent = apps.filter(a => S.everReached(a, A.OFFER)).length || '';
     $('#navIntern').textContent = apps.filter(a => trackOf(a) === 'intern').length || '';
     $('#navFu').textContent = JT_Follow.queue(ovApps()).due.filter(x => !x.late).length || '';
-    ({ intern: renderIntern, cv: () => { renderCV(); renderSettings(); }, overview: renderOverview, apps: renderApps, followups: renderFollowups, plan: renderPlan, templates: renderTemplates, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
+    ({ intern: renderIntern, cv: () => { renderCV(); renderSettings(); renderGaps(); }, overview: renderOverview, apps: renderApps, followups: renderFollowups, plan: renderPlan, templates: renderTemplates, offers: renderOffers, settings: renderSettings, data: () => {} })[v]();
   }
 
+  const LL = (en, ru) => (globalThis.JT_I18n && JT_I18n.lang === 'ru' ? ru : en);
   // ---------- OVERVIEW ----------
   const ovApps = () => !profile.showInternships ? apps.filter(a => trackOf(a) === 'job') : ovTrack === 'all' ? apps : apps.filter(a => trackOf(a) === ovTrack);
   $$('#ovTrack button').forEach(b => b.onclick = () => { ovTrack = b.dataset.t; renderOverview(); });
@@ -143,6 +144,106 @@
     renderPlatforms();
     renderToolsTop();
     renderAttention();
+    renderProgress();
+  }
+
+  // ---------- PROGRESS (3.13): the week, what to do now, 30 days, what works, the plan, the assistant ----------
+  const mkOf = a => (window.JT_Market ? JT_Market.marketOf(a) : 'B');
+  const POSS = ['screening', 'test', 'interview1', 'interview2', 'interview3', 'offer', 'accepted', 'declined'];
+  const INTS = ['interview1', 'interview2', 'interview3', 'offer', 'accepted', 'declined'];
+  function plainOf(a) {
+    const agency = window.JT_Market ? !!JT_Market.broker(a.company, a.description) : false;
+    return { status: a.status, appliedAt: a.appliedAt, company: a.company, title: a.title, platform: a.platform, market: mkOf(a), agency, method: (a.apply || {}).method, cvKind: (a.apply || {}).cvTailored ? 'Tailored' : 'Standard', cover: (a.apply || {}).cover, minutes: a.minutes,
+      fit: a.fitPrecise && a.fitPrecise.score != null ? a.fitPrecise.score : (a.chance || {}).score, missing: (a.chance || {}).missing || [], tools: (a.chance || {}).tools || [], salaryText: a.salaryText, id: a.id, ticket: a.ticket,
+      reached: S.everReached(a, POSS), replied: S.everReached(a, A.RESPONDED) };
+  }
+  function renderProgress() {
+    const list = ovApps(), now = Date.now(), DAYMS = 864e5;
+    // This week against the targets
+    const mon = new Date(); mon.setHours(0, 0, 0, 0); mon.setDate(mon.getDate() - (mon.getDay() + 6) % 7);
+    const wk = list.filter(a => Date.parse(a.appliedAt) >= mon.getTime());
+    const tg = profile.targets || { B: 7, A: 5, C: 3 };
+    const nB = wk.filter(a => mkOf(a) === 'B').length, nA = wk.filter(a => mkOf(a) === 'A').length;
+    const bar = (n, t, c, lab, sub) => `<div class="pg-t"><div><b>${n}</b> / ${t}</div><div class="pg-bar"><i style="width:${Math.min(100, t ? n / t * 100 : 0)}%;background:${c}"></i></div><div class="hint" style="margin:0">${lab}<br>${sub}</div></div>`;
+    const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); const n = wk.filter(a => new Date(a.appliedAt).toDateString() === d.toDateString()).length; return `<div class="pg-d ${d.toDateString() === new Date().toDateString() ? 'today' : ''}"><i style="height:${Math.min(100, n * 25)}%"></i><span>${d.toLocaleDateString(lang() === 'ru' ? 'ru-RU' : 'en-GB', { weekday: 'short' })}</span><b>${n || ''}</b></div>`; }).join('');
+    const left = Math.max(0, tg.B - nB);
+    $('#pgWeek').innerHTML = `<div class="pg-days">${days}</div><div class="pg-ts">${bar(nB, tg.B, 'var(--good)', LL('market B', 'рынок Б'), LL('alongside study', 'с учёбой'))}${bar(nA, tg.A, 'var(--mid)', LL('market A', 'рынок А'), LL('worth a study break', 'стоит академа'))}</div>
+      <p class="hint" style="margin:8px 0 0">${left ? LL(`${left} more for market B this week.`, `До цели по рынку Б не хватает ${left}.`) : LL('Market B target reached: follow up on older applications.', 'Цель по рынку Б выполнена: займись follow-up.')} ${LL('Cold emails are counted on the phone (Employers nearby).', 'Холодные письма считаются на телефоне («Работодатели рядом»).')}</p>`;
+    // Last 30 days against the 30 before
+    const win = (from, to) => { const l = list.filter(a => { const t = Date.parse(a.appliedAt); return t >= from && t < to; }); return { n: l.length, r: l.filter(a => S.everReached(a, A.RESPONDED)).length, s: l.filter(a => S.everReached(a, POSS)).length, i: l.filter(a => S.everReached(a, INTS)).length }; };
+    const c = win(now - 30 * DAYMS, now + DAYMS), p = win(now - 60 * DAYMS, now - 30 * DAYMS);
+    const row = (lab, x, y) => `<div class="pg-f"><span>${lab}</span><b>${x}</b><span class="hint" style="margin:0">${y === x ? '=' : x > y ? '↑' : '↓'} ${LL('before', 'было')} ${y}</span></div>`;
+    $('#pgFunnel').innerHTML = row(LL('Applications', 'Откликов'), c.n, p.n) + row(LL('Any answer', 'Ответили'), c.r, p.r) + row(LL('Screening or further', 'Скрининг и дальше'), c.s, p.s) + row(LL('Interviews', 'Интервью'), c.i, p.i)
+      + `<p class="hint" style="margin:8px 0 0">${LL('Compared with the 30 days before. Answers come 1–3 weeks after applying, so the last days look worse than they will.', 'Сравнение с предыдущими 30 днями. Ответы приходят через 1–3 недели, поэтому последние дни выглядят хуже, чем будут.')}</p>`;
+    // What works: response rates by channel and CV, only where there is enough data
+    const pl = list.map(plainOf), lines = [];
+    const rate = l => (l.length ? Math.round(l.filter(x => x.replied).length / l.length * 100) : 0);
+    if (window.JT_Review) {
+      const g = {}; pl.forEach(x => { const k = JT_Review.channelOf(x); (g[k] = g[k] || []).push(x); });
+      const ch = Object.entries(g).filter(([, l]) => l.length >= 5).map(([k, l]) => ({ k, n: l.length, r: rate(l), s: l.filter(x => x.reached).length })).sort((a, b) => b.r - a.r);
+      ch.slice(0, 4).forEach(x => lines.push(`<div class="pg-f"><span>${esc(x.k)}</span><b>${x.r}%</b><span class="hint" style="margin:0">${LL('answered', 'ответили')} · ${x.n} ${LL('apps', 'откл.')}${x.s ? ` · ${LL('screenings', 'скрин.')} ${x.s}` : ''}</span></div>`));
+    }
+    const tl = pl.filter(x => x.cvKind === 'Tailored'), st = pl.filter(x => x.cvKind !== 'Tailored');
+    if (tl.length >= 5 && st.length >= 5) lines.push(`<div class="pg-f"><span>${LL('Tailored CV', 'Подогнанное CV')}</span><b>${rate(tl)}%</b><span class="hint" style="margin:0">${LL('standard', 'обычное')} ${rate(st)}%</span></div>`);
+    $('#pgWorks').innerHTML = lines.length ? lines.join('') + `<p class="hint" style="margin:8px 0 0">${LL('Share of applications with any answer. Shown from 5 applications per line.', 'Доля откликов с любым ответом. Строка появляется от 5 откликов.')}</p>` : `<p class="empty">${LL('After 5 applications through one channel this shows where answers come from.', 'После 5 откликов через один канал здесь будет видно, откуда приходят ответы.')}</p>`;
+    // The plan for the week: the automatic tasks, ticked here
+    renderPgPlan(list);
+    // Latest applications
+    const recent = list.slice().sort((a, b) => String(b.appliedAt).localeCompare(String(a.appliedAt))).slice(0, 6);
+    $('#pgRecent').innerHTML = recent.length ? recent.map(a => `<button class="pg-r" data-open="${esc(a.id)}"><span class="st" style="background:${(A.STATUSES.find(s => s.id === a.status) || {}).color || '#999'}"></span><span class="t">${esc(a.title || '')}<i>${esc(a.company || '')}</i></span><span class="hint" style="margin:0">${esc(A.statusLabel(a.status))} · ${esc(fmtDate(a.appliedAt))}</span></button>`).join('') : `<p class="empty">${LL('Press Apply on a job site and the application appears here.', 'Нажми Apply на сайте вакансии — отклик появится здесь.')}</p>`;
+    $$('#pgRecent [data-open]').forEach(b => b.onclick = () => openDrawer(list.find(a => a.id === b.dataset.open)));
+    ['pgWeekH', 'This week', 'Эта неделя', 'pgFunnelH', 'Last 30 days', 'Последние 30 дней', 'pgWorksH', 'What works', 'Что работает', 'pgPlanH', 'Plan for the week', 'План на неделю', 'pgRecentH', 'Latest applications', 'Последние отклики'].reduce((acc, x, i, arr) => { if (i % 3 === 0 && $('#' + x)) $('#' + x).textContent = LL(arr[i + 1], arr[i + 2]); return acc; }, 0);
+    renderChat();
+  }
+  async function renderPgPlan(list) {
+    const box = $('#pgPlan'); if (!box || !window.JT_Plan) return;
+    const key = JT_Plan.weekKey();
+    const { items } = JT_Plan.autoPlan(list, profile, null, lang());
+    const { w } = await getWeekPlan(key);
+    const ai = JT_Plan.parsePlan(w.ai).filter(x => x.text);
+    // The assistant's plan first (when there is one), then the tasks the tracker counts itself
+    const all = JT_Plan.parsePlan(w.ai);
+    const aiHtml = ai.length ? `<h3 class="sub3">${LL('From the assistant', 'От ассистента')}</h3>` + all.map((x, k) => x.text ? `<label class="pl-task${w.aiDone[k] ? ' done' : ''}"><input type="checkbox" data-pgi="${k}" ${w.aiDone[k] ? 'checked' : ''}><span>${esc(x.text)}</span></label>` : '').join('') + `<h3 class="sub3">${LL('Counted by the tracker', 'Посчитал трекер')}</h3>` : '';
+    box.innerHTML = aiHtml + items.slice(0, ai.length ? 3 : 5).map(i => `<label class="pl-task${w.done[i.id] ? ' done' : ''}"><input type="checkbox" data-pga="${esc(i.id)}" ${w.done[i.id] ? 'checked' : ''}><span>${esc(i.text)}${i.why ? `<i>${esc(i.why)}</i>` : ''}</span></label>`).join('')
+      + (ai.length ? '' : `<p class="hint" style="margin:8px 0 0">${LL('Ask the assistant below: “Make a plan for the week”.', 'Попроси ассистента ниже: «Составь план на неделю».')}</p>`);
+    $$('#pgPlan [data-pga]').forEach(cb => cb.onchange = async () => { w.done[cb.dataset.pga] = cb.checked; await saveWeekPlan(key, w); renderPgPlan(list); });
+    $$('#pgPlan [data-pgi]').forEach(cb => cb.onchange = async () => { w.aiDone[cb.dataset.pgi] = cb.checked; await saveWeekPlan(key, w); renderPgPlan(list); });
+  }
+
+  // ---------- The assistant: what I did, what to do next, questions about your applications ----------
+  // Numbers are computed by code (background: aiChat); AI answers only from them. The talk is kept for the day.
+  async function renderChat() {
+    const box = $('#pgChatPanel'); if (!box) return;
+    const { llmCfg, chatLog = { day: '', msgs: [] } } = await S.get(['llmCfg', 'chatLog']);
+    const today = new Date().toISOString().slice(0, 10);
+    const msgs = chatLog.day === today ? chatLog.msgs : [];
+    const has = !!(llmCfg && llmCfg.key);
+    const sugg = [LL('What should I do today?', 'Что мне сделать сегодня?'), LL('How did this week go?', 'Как прошла неделя?'), LL('Make a plan for the week', 'Составь план на неделю'), LL('Which channel gives answers?', 'Какой канал даёт ответы?'), LL('How many did I send to schools this month?', 'Сколько я подал в школы в этом месяце?')];
+    box.innerHTML = `<div class="row-between"><h2>${LL('Assistant', 'Ассистент')}</h2>${msgs.length ? `<button class="btn small" id="chatClear">${LL('New chat', 'Новый разговор')}</button>` : ''}</div>
+      <p class="hint">${LL('Ask what to do next, how it is going, or anything about your applications. It answers from your numbers, which the tracker counts itself.', 'Спроси, что делать дальше, как идут дела, или что угодно о твоих откликах. Ответ — по твоим цифрам, их считает сам трекер.')}</p>
+      ${has ? `<div class="chat" id="chatLog">${msgs.map(m => `<div class="msg-${m.role}">${esc(m.content).replace(/\n/g, '<br>')}</div>`).join('')}</div>
+        <div class="chips-row">${sugg.map(q => `<button class="btn small" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+        <div class="chat-in"><input id="chatQ" placeholder="${LL('Your question…', 'Твой вопрос…')}" aria-label="Question"><button class="btn primary" id="chatGo">${LL('Ask', 'Спросить')}</button></div>`
+        : `<p>${LL('Needs a free AI key:', 'Нужен бесплатный ключ AI:')} <a href="#settings">${LL('Settings → AI', 'Настройки → AI')}</a></p>`}`;
+    if (!has) return;
+    const log = $('#chatLog'); log.scrollTop = log.scrollHeight;
+    const ask = async q => {
+      q = String(q || '').trim(); if (!q) return;
+      msgs.push({ role: 'user', content: q });
+      log.insertAdjacentHTML('beforeend', `<div class="msg-user">${esc(q)}</div><div class="msg-assistant" id="chatWait"><span class="hint" style="margin:0">${LL('Thinking…', 'Думаю…')}</span></div>`); log.scrollTop = log.scrollHeight;
+      $('#chatQ').value = '';
+      const r = await new Promise(res => chrome.runtime.sendMessage({ type: 'aiChat', msgs: msgs.slice(-10) }, x => res(x || {})));
+      const text = r.error ? '⚠ ' + r.error : r.text;
+      msgs.push({ role: 'assistant', content: text });
+      await S.set({ chatLog: { day: today, msgs: msgs.slice(-30) } });
+      // A plan written by the assistant becomes the week's AI plan
+      if (r.plan && window.JT_Plan) { const key = JT_Plan.weekKey(); const { w } = await getWeekPlan(key); w.ai = r.plan; w.aiDone = {}; await saveWeekPlan(key, w); renderPgPlan(ovApps()); }
+      renderChat();
+    };
+    $('#chatGo').onclick = () => ask($('#chatQ').value);
+    $('#chatQ').onkeydown = e => { if (e.key === 'Enter') ask($('#chatQ').value); };
+    $$('#pgChatPanel [data-q]').forEach(b => b.onclick = () => ask(b.dataset.q));
+    if ($('#chatClear')) $('#chatClear').onclick = async () => { await S.set({ chatLog: { day: today, msgs: [] } }); renderChat(); };
   }
 
   function renderWeekly() {
@@ -1346,6 +1447,30 @@
     const changes = A.TOOLS.map(t => t.name).filter(n => (before[n] || 'none') !== (next[n] || 'none')).map(n => ({ n, from: before[n] || 'none', to: next[n] || 'none' }));
     return { before, changes };
   }
+  // ---------- What is missing most (the learning plan, inside CV & skills) ----------
+  // Tools you lack in the jobs you go for, each with a home lab task. Done = the skill counts as home lab (0.6 in Fit).
+  async function renderGaps() {
+    const box = $('#gapsPanel'); if (!box || !window.JT_Learn) return;
+    const { learnedApplied = {} } = await S.get('learnedApplied');
+    const list = JT_Learn.gaps(apps.map(a => ({ missing: (a.chance && a.chance.missing) || [], market: window.JT_Market ? JT_Market.marketOf(a) : 'B', appliedAt: a.appliedAt })), profile, learnedApplied).slice(0, 6);
+    const done = Object.entries(learnedApplied).sort((a, b) => String(b[1]).localeCompare(String(a[1])));
+    box.innerHTML = `<h2>${LL('What you lack most often', 'Чего не хватает чаще всего')}</h2>
+      <p class="hint">${LL('Tools your jobs ask for that you do not have, each with a home lab task of about an hour. Done: the skill counts as home lab, so Fit for those jobs goes up and you can put it in your CV honestly.', 'Инструменты из твоих вакансий, которых у тебя нет, — с заданием для домашней лаборатории примерно на час. Сделал — навык считается «лабораторией»: Fit по таким вакансиям растёт, и навык можно честно указать в CV.')}</p>
+      ${list.length ? list.map((g, i) => `<div class="gap"><div class="row-between"><b>${esc(g.name)}</b><span class="hint" style="margin:0">${LL(`missing in ${g.count} jobs`, `нет в ${g.count} вакансиях`)}${i < 2 ? LL(' · first', ' · в первую очередь') : ''} · ~${g.minutes} ${LL('min', 'мин')}</span></div><p style="margin:6px 0">${esc(g.task)}</p><button class="btn small primary" data-gdone="${esc(g.name)}">${LL('Done', 'Сделал')}</button></div>`).join('')
+        : `<p class="empty">${apps.length ? LL('No tool is missing in two or more of your jobs.', 'Нет инструмента, которого не хватало бы хотя бы в двух вакансиях.') : LL('This fills in after your first applications.', 'Появится после первых откликов.')}</p>`}
+      ${done.length ? `<p class="hint" style="margin-top:10px">${LL('Done', 'Сделано')}: ${done.map(([n, d]) => `${esc(n)} (${esc(String(d).slice(0, 10))})`).join(', ')}</p>` : ''}`;
+    box.querySelectorAll('[data-gdone]').forEach(b => b.onclick = async () => {
+      const n = b.dataset.gdone;
+      profile.skills = profile.skills || {}; profile.evidence = profile.evidence || {};
+      if (!profile.skills[n] || profile.skills[n] === 'none') profile.skills[n] = 'basic';
+      if (profile.evidence[n] !== 'work') profile.evidence[n] = 'lab';
+      await S.saveProfile(profile);
+      const { learnedApplied: la = {} } = await S.get('learnedApplied');
+      la[n] = new Date().toISOString().slice(0, 10); await S.set({ learnedApplied: la });
+      renderSettings(); renderGaps();
+    });
+  }
+
   async function renderCV() {
     const cvs = await getCvs();
     const card = (t, title, hint) => {

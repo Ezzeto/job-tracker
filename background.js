@@ -1,5 +1,5 @@
 /* Job Tracker — background service worker */
-importScripts('lib/quality.js', 'lib/analyzer.js', 'lib/store.js', 'lib/legacy.js', 'lib/insights.js', 'lib/sync.js', 'lib/recheck.js', 'lib/migrate.js', 'lib/market.js', 'lib/fit.js', 'lib/llm.js', 'lib/templates.js', 'lib/chance.js', 'lib/tailor.js', 'lib/docx.js', 'lib/packs.js');
+importScripts('lib/quality.js', 'lib/analyzer.js', 'lib/store.js', 'lib/legacy.js', 'lib/insights.js', 'lib/sync.js', 'lib/recheck.js', 'lib/migrate.js', 'lib/market.js', 'lib/fit.js', 'lib/llm.js', 'lib/templates.js', 'lib/chance.js', 'lib/tailor.js', 'lib/docx.js', 'lib/packs.js', 'lib/review.js', 'lib/assistant.js');
 
 // Schema migration: a full copy of the data is kept in 'backups' (last 3) before anything changes,
 // and Data → Backups downloads it. Runs once per schema version, on install, update or start.
@@ -105,6 +105,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg && msg.type === 'aiJob') { aiJob(msg.job).then(reply, e => reply({ error: String(e.message || e) })); return true; }
   if (msg && msg.type === 'aiLetter') { aiLetter(msg.job).then(reply, e => reply({ error: String(e.message || e) })); return true; }
   if (msg && msg.type === 'aiCompany') { aiCompany(msg.job).then(reply, e => reply({ error: String(e.message || e) })); return true; }
+  if (msg && msg.type === 'aiChat') { aiChat(msg.msgs || []).then(reply, e => reply({ error: String(e.message || e) })); return true; }
   if (msg && msg.type === 'aiAnswers') { aiAnswers(msg.job, msg.questions).then(reply, e => reply({ error: String(e.message || e) })); return true; }
   if (msg && msg.type === 'saveForSession') { saveForSession(msg.job).then(reply, e => reply({ error: String(e.message || e) })); return true; }
   if (msg && msg.type === 'autofillData') { autofillData(msg, _sender).then(reply); return true; }
@@ -259,4 +260,38 @@ async function saveForSession(job) {
   const pack = await JT_Packs.build(job, { profile: await JT_Store.getProfile(), cvText: cvs.job && cvs.job.text, templates, me: autofillMe, llm: await llmCfg() });
   packs[pack.key] = pack; await chrome.storage.local.set({ packs });
   return { ok: true, key, count: sessionItems.length, cv: !!pack.cv, letterAi: !!pack.letterAi };
+}
+
+
+// ---------- The assistant on the Progress page (3.13) ----------
+// Code counts (lib/assistant.js, lib/review.js); AI talks about the numbers. A data question runs a query first.
+async function aiChat(msgs) {
+  const cfg = await llmCfg(); if (!cfg) return { error: 'no-key' };
+  const p = await JT_Store.getProfile();
+  const apps = (await JT_Store.getApps()).filter(a => a.track !== 'intern' || p.showInternships);
+  const plain = apps.map(a => {
+    const agency = !!JT_Market.broker(a.company, a.description);
+    const x = { status: a.status, appliedAt: a.appliedAt, company: a.company || '', title: a.title || '', platform: a.platform, market: JT_Market.marketOf(a), agency,
+      method: (a.apply || {}).method, cvKind: (a.apply || {}).cvTailored ? 'Tailored' : 'Standard', cover: (a.apply || {}).cover, minutes: a.minutes,
+      missing: (a.chance || {}).missing || [], tools: (a.chance || {}).tools || [], salaryText: a.salaryText, id: a.id,
+      replied: JT_Store.everReached(a, JT_Analyzer.RESPONDED), reached: JT_Store.everReached(a, JT_Review.POS), nextDate: a.nextDate,
+      followUps: (a.followUps || []).length, workingDays: JT_Insights.workingDaysSince ? JT_Insights.workingDaysSince(a.appliedAt) : 0 };
+    x.channel = JT_Review.channelOf(x);
+    return x;
+  });
+  const last = String((msgs[msgs.length - 1] || {}).content || '');
+  let query = '';
+  if (JT_Assistant.wantsQuery(last)) {
+    try {
+      const companies = [...new Set(plain.map(a => a.company).filter(Boolean))];
+      const raw = await JT_LLM.chat(cfg, JT_Review.askPrompt(last, new Date().toISOString().slice(0, 10), companies), { json: true, temperature: 0, cacheKey: false });
+      query = JT_Assistant.queryText(JT_Review.runQuery(plain, JT_Review.cleanQuery(raw)));
+    } catch (e) { /* answer from the summary */ }
+  }
+  const { sessionItems = [] } = await chrome.storage.local.get('sessionItems');
+  const plan = JT_Assistant.wantsPlan(last);
+  const data = JT_Assistant.context(plain, { targets: p.targets, studyDays: p.studyDays, session: sessionItems.length, query });
+  const history = msgs.slice(-8).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '').slice(0, 1500) }));
+  const text = await JT_LLM.chat(cfg, [{ role: 'system', content: JT_Assistant.system(plan) + '\n\nDATA:\n' + data }].concat(history), { temperature: 0.3, cacheKey: false, maxTokens: plan ? 900 : 500 });
+  return { text: String(text).trim(), plan: plan && /^\s*-\s+/m.test(text) ? String(text).trim() : '' };
 }
