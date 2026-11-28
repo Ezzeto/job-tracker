@@ -480,7 +480,7 @@
     if (r && r.chance) { const up = /выше/.test(r.chance.main + (r.chance.pct ? r.chance.sub : '')), down = /ниже/.test(r.chance.main + (r.chance.pct ? r.chance.sub : '')); out.push(scoreRow(up ? '↑' : down ? '↓' : '=', up ? 'k1' : down ? 'k3' : 'k4', L('Will they answer?', 'Ответят?'), `${esc(r.chance.main)}${r.chance.sub ? ` <span class="note">· ${esc(r.chance.sub)}</span>` : ''}`)); }
     else out.push(scoreRow('%', 'k4', L('Will they answer?', 'Ответят?'), '<span class="spin"></span>'));
     // 3. Does it suit me? Market A/B, office days, pay, placement rules, hard blocks
-    const suit = [], mk = M ? M.marketOf(rec) : 'B';
+    const suit = [], mk = r && r.market ? r.market : M ? M.marketOf(rec) : 'B';
     let sc = 'k1';
     suit.push(mk === 'A' ? L('market A (full-time)', 'рынок А (full-time)') : L('market B (with study)', 'рынок Б (с учёбой)'));
     const od = officeOf(rec, r);

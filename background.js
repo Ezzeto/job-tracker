@@ -217,12 +217,13 @@ async function aiJob(job) {
   let reqs = JT_Fit.fromAd(job.description, job.company), ai = null, error = '';
   if (cfg) { try { ai = await JT_LLM.extract(cfg, job); if (ai.essential.length + ai.desirable.length >= 3) reqs = ai; } catch (e) { error = String(e.message || e); } }
   const fit = JT_Fit.compute(reqs, p, job);
-  const facts = { ...appFacts({ ...job, apply: {} }), agency: !!JT_Market.broker(job.company, job.description) || !!(ai && ai.agency), fit: fit.score, market: JT_Market.marketOf(job), cover: null, tailored: null };
+  const market = JT_Market.marketOf({ ...job, workType: ai && ai.workType });
+  const facts = { ...appFacts({ ...job, apply: {} }), agency: !!JT_Market.broker(job.company, job.description) || !!(ai && ai.agency), fit: fit.score, market, cover: null, tailored: null };
   const pr = JT_Chance.predict(facts, JT_Chance.stats((await JT_Store.getApps()).map(appFacts)));
   const strip = r => ({ text: r.text, level: r.level, note: r.note, check: r.check, w: r.w });
   return { hasKey: !!cfg, error, source: ai && reqs === ai ? 'ai' : reqs.source,
     fit: { score: fit.score, summary: fit.summary, essOk: fit.essOk, desOk: fit.desOk, essential: fit.essential.map(strip), desirable: fit.desirable.map(strip), lowData: fit.lowData, gaps: fit.gaps.slice(0, 6) },
-    chance: JT_Chance.describe(pr), employer: ai && ai.employer, agency: !!(ai && ai.agency) || JT_Market.broker(job.company, job.description) === 'agency', broker: JT_Market.broker(job.company, job.description) || (ai && ai.agency ? 'agency' : null), officeDays: ai ? ai.officeDays : null, questions: ai ? ai.questions : [], dropped: ai ? ai.dropped : 0 };
+    chance: JT_Chance.describe(pr), employer: ai && ai.employer, agency: !!(ai && ai.agency) || JT_Market.broker(job.company, job.description) === 'agency', broker: JT_Market.broker(job.company, job.description) || (ai && ai.agency ? 'agency' : null), officeDays: ai ? ai.officeDays : null, workType: ai ? ai.workType : null, market, questions: ai ? ai.questions : [], dropped: ai ? ai.dropped : 0 };
 }
 async function aiLetter(job) {
   const cfg = await llmCfg(); if (!cfg) return { error: 'no-key' };

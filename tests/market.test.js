@@ -57,3 +57,11 @@ test('a role profile laid out as a form: title, company and the requirements lis
   assert.deepEqual(r.desirable, ['Knowledge of relational databases is desirable.']);
   assert.ok(!r.essential.some(x => /^(The Core Values|Role Profile)$|comprising:$/.test(x)));
 });
+
+test('marketOf: an ad that never says part-time is full-time (A); your choice and the AI work type come first', () => {
+  assert.equal(Mk.marketOf({ title: 'Junior System Developer', description: 'Support college systems through maintenance and development of information systems.' }), 'A');
+  assert.equal(Mk.marketOf({ title: 'IT Technician', description: 'Part-time, 20 hours a week' }), 'B');
+  assert.equal(Mk.marketOf({ title: 'IT Technician', description: 'Part-time, 20 hours a week', market: 'A' }), 'A');
+  assert.equal(Mk.marketOf({ title: 'Junior System Developer', description: 'Support college systems.', workType: 'part-time' }), 'B');
+  assert.equal(Mk.marketOf({ title: 'IT Technician', description: 'Term-time, 30 hours', workType: 'full-time' }), 'A');
+});
