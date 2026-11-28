@@ -365,14 +365,34 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     res.chanceP = CH.predict(res.facts, CH.stats(st.rows.map(rowFacts)));
     res.chanceD = CH.describe(res.chanceP);
   }
+  // Market A or B for this job: answers, the letter and the chance follow it
+  function setMarket(res, mk) {
+    res.market = mk;
+    const p = profile(), full = { ...res.job, salary: res.an.salary, workTypes: res.an.workTypes, market: mk };
+    res.worth = mk === 'A' ? Mk.worthLeave(full, p) : null;
+    res.answers = Mk.answers(full, p, res.an);
+  }
   async function aiExtract(res) {
     if (!st.local.ai.key || res.aiBusy || res.ai) return;
     res.aiBusy = true; render();
-    try { res.ai = await LLM.extract(aiCfg(), res.job); if (res.ai.officeDays != null && res.office == null) res.office = res.ai.officeDays; scoreFit(res); }
+    try { res.ai = await LLM.extract(aiCfg(), res.job); if (res.ai.officeDays != null && res.office == null) res.office = res.ai.officeDays; if (res.ai.workType && !res.marketSet) setMarket(res, res.ai.workType === 'part-time' ? 'B' : 'A'); scoreFit(res); }
     catch (e) { res.aiError = String(e.message || e); }
     res.aiBusy = false; if (st.result === res) render();
   }
 
+  // Questions about one job: the ad, your facts and the tracker's analysis go to AI; it answers only from them
+  async function askJob(res, q) {
+    q = String(q || '').trim(); if (!q || res.chatBusy) return;
+    res.chat = (res.chat || []).concat([{ role: 'user', content: q }]); res.chatBusy = true; render();
+    const f = res.fit || {};
+    const analysis = [`Market: ${res.market === 'B' ? 'B, part-time alongside study' : 'A, full-time (only worth it if it is worth a study break)'}${res.worth ? `; worth a study break: ${res.worth.ok ? 'yes' : 'no'}` : ''}.`,
+      f.essential ? `Requirements met: ${f.essOk}/${f.essential.length} essential, ${f.desOk}/${(f.desirable || []).length} desirable. Missing: ${(f.gaps || []).map(g => g.text || g).slice(0, 6).join('; ') || 'none'}.` : '',
+      res.chanceD ? `Chance of an invitation: ${res.chanceD.main} (${res.chanceD.sub}).` : '', `Verdict: ${res.c.verdict}.`].filter(Boolean).join('\n');
+    const sys = 'You help a candidate decide about and prepare for ONE job. Answer in the language of the question, briefly (up to 120 words) and concretely. Use ONLY the JOB AD, the candidate FACTS and the ANALYSIS below; never invent facts about the candidate or the employer; if something is not there, say so.\n\nJOB: ' + (res.job.title || '') + ' at ' + (res.job.company || 'the employer') + '\nJOB AD:\n<<<\n' + String(res.job.description || '').slice(0, 6000) + '\n>>>\nFACTS:\n<<<\n' + factsText() + '\n>>>\nANALYSIS:\n' + analysis;
+    try { const ans = await LLM.chat(aiCfg(), [{ role: 'system', content: sys }].concat(res.chat.slice(-8)), { temperature: 0.3, cacheKey: false, maxTokens: 500 }); res.chat.push({ role: 'assistant', content: String(ans).trim() }); }
+    catch (e) { res.chat.push({ role: 'assistant', content: '⚠ ' + (e.message || e) }); }
+    res.chatBusy = false; if (st.result === res) render();
+  }
   function skillsLine() {
     const sk = profile().skills || {};
     const of = lvl => Object.keys(sk).filter(k => sk[k] === lvl);
@@ -387,7 +407,8 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       'Use ONLY the facts given in FACTS and SKILLS. Never invent employers, dates, numbers, certificates, tools or achievements. If the ad asks for something not in the facts, do not claim it.',
       'British English, plain concrete sentences, 150–200 words, three or four short paragraphs. No buzzwords (passionate, dynamic, results-driven), no "I am writing to express my interest".',
       'Start with "Dear Hiring Manager," unless the ad names a contact person. End with the last paragraph: do NOT add a sign-off or a name.',
-      why ? 'Use WHY THIS EMPLOYER in the first paragraph, keeping the meaning and wording close to the original.' : 'Where a reason for choosing this employer belongs, write exactly: [One sentence on why this employer].',
+      why ? 'Use WHY THIS EMPLOYER in the first paragraph, keeping the meaning and wording close to the original.' : 'In the first paragraph give one concrete reason for wanting this job, taken from what the JOB AD says about the employer, its users or the role. Never invent facts about the employer.',
+      'The letter must be complete and ready to send: no placeholders, no square brackets, nothing to fill in.',
       'Return only the letter text.',
     ].join('\n');
     const user = [
@@ -399,6 +420,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     ].filter(Boolean).join('\n');
     let text = await groq([{ role: 'system', content: sys }, { role: 'user', content: user }]);
     text = text.replace(/\n+(kind regards|best regards|yours (sincerely|faithfully)|regards)[\s\S]*$/i, '').trim();
+    text = text.split('\n').map(l => l.replace(/\s*\[[^\]\n]{2,80}\]\s*/g, ' ').replace(/ {2,}/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
     const sig = [p.signName, [p.signPhone, p.signLinkedIn].filter(Boolean).join(' · ')].filter(Boolean).join('\n');
     // Tools the letter names that are neither in the facts nor in the skills profile
     const known = new Set([...sk.strong, ...sk.basic, ...A.extractTools(factsText())]);
@@ -559,7 +581,8 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       <div><h1>Стоит подавать?</h1><p class="lead">Ссылка на вакансию или её текст. Разбор займёт пару секунд.</p></div>
       <div class="paper">
         <textarea id="jobInput" class="input" placeholder="https://www.linkedin.com/jobs/view/… или текст объявления" aria-label="Ссылка или текст вакансии" autocomplete="off">${esc(st.input)}</textarea>
-        <div class="row"><button class="btn" id="paste">Вставить</button><button class="btn go grow" id="go" ${st.busy ? 'disabled' : ''}>${st.busy ? '<span class="spinner"></span> Читаю вакансию' : 'Разобрать'}</button></div>
+        <div class="row"><button class="btn" id="paste">Вставить</button><label class="btn" style="cursor:pointer">PDF / Word<input type="file" id="jobFile" accept=".pdf,.docx,.txt" hidden></label><button class="btn go grow" id="go" ${st.busy ? 'disabled' : ''}>${st.busy ? '<span class="spinner"></span> Читаю вакансию' : 'Разобрать'}</button></div>
+        <p class="tiny muted">Описание вакансии в PDF (role profile, job description) читается по колонкам — так требования не перемешиваются.</p>
         ${!st.cfg ? '<p class="small muted">Ссылки читает твой скрипт в Google Таблице — подключи её в настройках. Текст вакансии разбирается и без неё.</p>' : ''}
       </div>
       ${st.error ? `<div class="note bad">${esc(st.error)}</div>` : ''}
@@ -571,7 +594,7 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     const blocks = (c.gates && c.gates.blocks) || [], asks = (c.gates && c.gates.asks) || [];
     const officeBad = r.market === 'B' && r.office != null && r.office >= 4;
     const tags = [
-      r.market === 'B' ? '<span class="tag B">Рынок Б · с учёбой</span>' : `<span class="tag A">Рынок А · full-time${r.worth ? (r.worth.ok ? ' · стоит академа' : ' · не цель') : ''}</span>`,
+      `<button class="tag ${r.market}" id="mkFlip" title="Поменять рынок" style="border:0;cursor:pointer">${r.market === 'B' ? 'Рынок Б · с учёбой' : `Рынок А · full-time${r.worth ? (r.worth.ok ? ' · стоит академа' : ' · не цель') : ''}`} ⇄</button>`,
       r.agency ? '<span class="tag warn">агентство</span>' : '',
       r.office != null ? `<span class="tag ${officeBad ? 'bad' : r.office <= 2 ? 'ok' : ''}">${r.office === 0 ? 'удалённо' : `офис ${r.office} ${plural(r.office, 'день', 'дня', 'дней')} в неделю`}</span>` : '',
       r.an.salary && r.an.salary.text ? `<span class="tag">${esc(r.an.salary.text)}</span>` : '',
@@ -592,6 +615,12 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
         ${fitHtml(r)}
         ${(c.tools || []).length ? `<div class="stack"><h3>Навыки из вакансии</h3><div class="tags">${(c.matched || []).map(t => `<span class="tag ok">${esc(t)}</span>`).join('')}${(c.basic || []).map(t => `<span class="tag warn">${esc(t)}</span>`).join('')}${(c.missing || []).map(t => `<span class="tag bad">${esc(t)}</span>`).join('')}</div><p class="tiny muted">зелёный — уверенно, жёлтый — базово, красный — нет</p></div>` : ''}
         ${!st.profile ? '<div class="note small">Профиль навыков ещё не пришёл с компьютера, поэтому навыки могут быть красными. В расширении: Skills &amp; settings → Google Sheet → Sync now.</div>' : ''}
+      </section>
+      <section class="paper tight" id="jobChat"><h2>Спроси про вакансию</h2>
+        ${st.local.ai.key ? `<div class="chatlog">${(r.chat || []).map(m => `<div class="msg ${m.role}">${esc(m.content)}</div>`).join('')}${r.chatBusy ? '<div class="msg assistant"><span class="spinner"></span></div>' : ''}</div>
+          <div class="tags" style="margin:6px 0">${['Стоит ли мне подавать?', 'Чего мне не хватает и как это закрыть?', 'Какие вопросы будут на интервью?', 'Что написать в письме?'].map(q => `<button class="tag" data-jq="${esc(q)}" style="border:0;cursor:pointer">${esc(q)}</button>`).join('')}</div>
+          <div class="row"><input class="input grow" id="jobQ" placeholder="Твой вопрос про эту вакансию" aria-label="Вопрос"><button class="btn go" id="jobAsk">Спросить</button></div>`
+        : '<p class="small muted">Нужен бесплатный ключ AI на этом устройстве: <a href="#setup">Настройки → AI</a>.</p>'}
       </section>
       <div class="row"><button class="btn go grow" id="applied">Я откликнулся</button><button class="btn line" id="later">На потом</button>${r.job.url ? `<a class="btn line" href="${esc(r.job.url)}" target="_blank" rel="noopener">Вакансия</a>` : ''}</div>
       <details class="paper fold" open><summary><h2>Ответы для анкеты</h2></summary>
@@ -682,10 +711,10 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     await loadScript('lib/vendor/jspdf.umd.min.js'); await loadScript('lib/cvpdf.js');
     return window.JT_CvPdf.build(cv);
   }
-  async function readCvFile(file) {
+  async function readCvFile(file, opts) {
     if (/\.docx$/i.test(file.name)) await loadScript('lib/vendor/mammoth.browser.min.js');
     await import('./lib/cvread.mjs');
-    return window.JT_ReadCV(file);
+    return window.JT_ReadCV(file, opts);
   }
   function viewCv() {
     const c = st.local.cvs || {};
@@ -1450,12 +1479,23 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     if (inp) {
       inp.oninput = () => { st.input = inp.value; LS.set('draft', st.input); };
       $('#go', v).onclick = () => analyze(inp.value);
+      // A job description as a file: PDFs are read column by column (role profiles laid out in a table)
+      const jf = $('#jobFile', v);
+      if (jf) jf.onchange = async () => {
+        const f = jf.files[0]; if (!f) return;
+        toast('Читаю файл…');
+        try { const r = await readCvFile(f, { columns: true }); const t = String(r.text || '').trim(); if (t.length < 150) { toast('В файле почти нет текста (скан?). Вставь текст вручную.'); return; } inp.value = t; st.input = t; LS.set('draft', t); analyze(t); }
+        catch (e) { toast(String(e.message || e)); }
+      };
       $('#paste', v).onclick = async () => {
         try { const t = await navigator.clipboard.readText(); inp.value = t; st.input = t; LS.set('draft', t); if (t.trim()) analyze(t); }
         catch (e) { inp.focus(); toast('Нажми и удерживай поле, чтобы вставить'); }
       };
     }
     $$('[data-copy-answer]', v).forEach(b => b.onclick = () => copy(st.result.answers[+b.dataset.copyAnswer].a, b));
+    const mkf = $('#mkFlip', v); if (mkf) mkf.onclick = () => { const r = st.result; r.marketSet = true; setMarket(r, r.market === 'B' ? 'A' : 'B'); scoreFit(r); render(); };
+    const ja = $('#jobAsk', v); if (ja) { ja.onclick = () => askJob(st.result, $('#jobQ', v).value); $('#jobQ', v).onkeydown = e => { if (e.key === 'Enter') ja.click(); }; }
+    $$('[data-jq]', v).forEach(b => b.onclick = () => askJob(st.result, b.dataset.jq));
     const ap = $('#applied', v); if (ap) ap.onclick = addFromResult;
     const lt = $('#later', v); if (lt) lt.onclick = saveLater;
     const cl = $('#clear', v); if (cl) cl.onclick = () => { st.result = null; st.input = ''; st.letter = ''; LS.set('draft', ''); render(); window.scrollTo(0, 0); $('#jobInput').focus(); };

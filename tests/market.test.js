@@ -34,7 +34,8 @@ test('answers fill availability from work days and quote the advertised salary',
   assert.equal(get('What is your availability'), 'Monday to Wednesday and Saturday, up to 32 hours a week, alongside my Computing degree');
   assert.match(get('What are your salary'), /£24,000–£26,000 pro rata/);
   assert.equal(get('Will you now'), 'No');
-  assert.match(get('Why are you'), /Harlow College's IT Technician/);
+  assert.match(get('Why are you'), /The IT Technician role at Harlow College is the work I already do/);
+  assert.doesNotMatch(get('Why are you'), /\[/);
 });
 
 test('broker: job boards posting under their own name and agencies hide the employer', () => {
@@ -45,4 +46,22 @@ test('broker: job boards posting under their own name and agencies hide the empl
   assert.equal(Mk.broker('Acme Ltd', 'We are recruiting on behalf of our client, a school in Essex.'), 'agency');
   assert.equal(Mk.broker('Harlow College', 'Join our IT team.'), null);
   assert.equal(Mk.broker('Dicey Games Ltd'), null);
+});
+
+test('a role profile laid out as a form: title, company and the requirements list are read, not the broken lines', () => {
+  const Q = require('../lib/quality.js'), F = require('../lib/fit.js');
+  const pasted = 'Title\nLevel\nReports to\nJunior System Developer\nNT4\nDirector of Information\nBusiness: Harlow College\nLocation: Harlow, Essex\n\nBe the Expert (technical knowledge, qualifications,\nexperience, occupational competence & requirements, etc)\n1.\nLevel 2 Maths and English\n2.\nCompetent ICT at Level 3 or equivalent\n3.\nKnowledge of most up to date ILR data\nand funding rules/guidance.\n4.\nKnowledge of relational databases is\ndesirable.\n5.\nSound knowledge of Microsoft office.\n\nCritical Success Factors\n4. Achievement of annual Performance\nDevelopment Agreement (PDA), comprising:\n• The Core Values\n• Role Profile';
+  assert.deepEqual(Q.recoverHeader(pasted), { company: 'Harlow College', location: 'Harlow, Essex', title: 'Junior System Developer' });
+  const r = F.fromAd(pasted, 'Harlow College');
+  assert.deepEqual(r.essential.slice(0, 4), ['Level 2 Maths and English', 'Competent ICT at Level 3 or equivalent', 'Knowledge of most up to date ILR data and funding rules/guidance.', 'Sound knowledge of Microsoft office.']);
+  assert.deepEqual(r.desirable, ['Knowledge of relational databases is desirable.']);
+  assert.ok(!r.essential.some(x => /^(The Core Values|Role Profile)$|comprising:$/.test(x)));
+});
+
+test('marketOf: an ad that never says part-time is full-time (A); your choice and the AI work type come first', () => {
+  assert.equal(Mk.marketOf({ title: 'Junior System Developer', description: 'Support college systems through maintenance and development of information systems.' }), 'A');
+  assert.equal(Mk.marketOf({ title: 'IT Technician', description: 'Part-time, 20 hours a week' }), 'B');
+  assert.equal(Mk.marketOf({ title: 'IT Technician', description: 'Part-time, 20 hours a week', market: 'A' }), 'A');
+  assert.equal(Mk.marketOf({ title: 'Junior System Developer', description: 'Support college systems.', workType: 'part-time' }), 'B');
+  assert.equal(Mk.marketOf({ title: 'IT Technician', description: 'Term-time, 30 hours', workType: 'full-time' }), 'A');
 });

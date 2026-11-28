@@ -275,3 +275,9 @@ body.locked .view { margin: 0 auto; padding-bottom: 28px; }
 .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; max-width: 300px; margin-bottom: 6px; }
 .keypad button { aspect-ratio: 1.4; border: 0; border-radius: 16px; background: var(--paper); font-size: 24px; font-weight: 600; cursor: pointer; color: var(--ink); border: 1px solid var(--line-2); }
 .keypad button:active { background: var(--paper-2); }
+/* chat about one job */
+.chatlog { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.chatlog:empty { display: none; }
+.chatlog .msg { padding: 9px 12px; border-radius: 14px; max-width: 88%; white-space: pre-wrap; font-size: 14px; line-height: 1.45; }
+.chatlog .msg.user { align-self: flex-end; background: var(--ink); color: var(--paper); }
+.chatlog .msg.assistant { align-self: flex-start; background: var(--paper-2); }
