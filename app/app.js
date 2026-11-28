@@ -559,7 +559,8 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
       <div><h1>Стоит подавать?</h1><p class="lead">Ссылка на вакансию или её текст. Разбор займёт пару секунд.</p></div>
       <div class="paper">
         <textarea id="jobInput" class="input" placeholder="https://www.linkedin.com/jobs/view/… или текст объявления" aria-label="Ссылка или текст вакансии" autocomplete="off">${esc(st.input)}</textarea>
-        <div class="row"><button class="btn" id="paste">Вставить</button><button class="btn go grow" id="go" ${st.busy ? 'disabled' : ''}>${st.busy ? '<span class="spinner"></span> Читаю вакансию' : 'Разобрать'}</button></div>
+        <div class="row"><button class="btn" id="paste">Вставить</button><label class="btn" style="cursor:pointer">PDF / Word<input type="file" id="jobFile" accept=".pdf,.docx,.txt" hidden></label><button class="btn go grow" id="go" ${st.busy ? 'disabled' : ''}>${st.busy ? '<span class="spinner"></span> Читаю вакансию' : 'Разобрать'}</button></div>
+        <p class="tiny muted">Описание вакансии в PDF (role profile, job description) читается по колонкам — так требования не перемешиваются.</p>
         ${!st.cfg ? '<p class="small muted">Ссылки читает твой скрипт в Google Таблице — подключи её в настройках. Текст вакансии разбирается и без неё.</p>' : ''}
       </div>
       ${st.error ? `<div class="note bad">${esc(st.error)}</div>` : ''}
@@ -682,10 +683,10 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     await loadScript('lib/vendor/jspdf.umd.min.js'); await loadScript('lib/cvpdf.js');
     return window.JT_CvPdf.build(cv);
   }
-  async function readCvFile(file) {
+  async function readCvFile(file, opts) {
     if (/\.docx$/i.test(file.name)) await loadScript('lib/vendor/mammoth.browser.min.js');
     await import('./lib/cvread.mjs');
-    return window.JT_ReadCV(file);
+    return window.JT_ReadCV(file, opts);
   }
   function viewCv() {
     const c = st.local.cvs || {};
@@ -1450,6 +1451,14 @@ Right to work in the UK, no sponsorship needed. Lives in Bishop's Stortford.`;
     if (inp) {
       inp.oninput = () => { st.input = inp.value; LS.set('draft', st.input); };
       $('#go', v).onclick = () => analyze(inp.value);
+      // A job description as a file: PDFs are read column by column (role profiles laid out in a table)
+      const jf = $('#jobFile', v);
+      if (jf) jf.onchange = async () => {
+        const f = jf.files[0]; if (!f) return;
+        toast('Читаю файл…');
+        try { const r = await readCvFile(f, { columns: true }); const t = String(r.text || '').trim(); if (t.length < 150) { toast('В файле почти нет текста (скан?). Вставь текст вручную.'); return; } inp.value = t; st.input = t; LS.set('draft', t); analyze(t); }
+        catch (e) { toast(String(e.message || e)); }
+      };
       $('#paste', v).onclick = async () => {
         try { const t = await navigator.clipboard.readText(); inp.value = t; st.input = t; LS.set('draft', t); if (t.trim()) analyze(t); }
         catch (e) { inp.focus(); toast('Нажми и удерживай поле, чтобы вставить'); }
